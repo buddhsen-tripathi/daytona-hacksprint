@@ -2,7 +2,9 @@
 
 **See something. Send it. Track it.**
 
-311Relay is a Telegram agent that turns a photo or message about a city problem into a reviewable, trackable NYC311 service request.
+311Relay is a Telegram agent that turns a photo or message about a city problem into a reviewable, trackable NYC311 service request, or, for subway delays, an MTA complaint.
+
+Categories: **street pothole** and **street repair defect** (NYC311 / DOT; replica portal for demos) and **subway delay** (filed for real on the MTA Customer Feedback form, `contact.mta.info`).
 
 1. Send a photo, a description, or a voice note to the bot.
 2. Share the location (pin or address).
@@ -61,6 +63,22 @@ pnpm --filter @311relay/bot evals    # the 9 evaluation scenarios, results pushe
 ## Why the demo portal
 
 The official DOT pothole form (`a841-dotvweb01.nyc.gov/potholeform`) has reCAPTCHA on its first step. We do not bypass CAPTCHAs. With `FILING_TARGET=real` the worker fills only user-provided details, stops at the CAPTCHA, and hands you the Anchor live-view link to finish in the same browser. For repeatable demos, `FILING_TARGET=demo` (default) runs a faithful two-step replica of that form inside the sandbox, with `/mode normal|captcha|flaky|reject` to exercise the confirmed, hand-off, unknown, and failed outcomes.
+
+## Subway delays: real filing, dry run by default
+
+NYC311 doesn't take subway complaints; they go to the MTA. Tell the bot something like "The A train sat at 14 St for 25 minutes this morning, downtown". It pulls out the line, direction, station and time from your words (it asks once if the line or direction is missing, and never asks for a street address), checks the live MTA alerts feed for that line, and shows a card with "Where it's filed: MTA Customer Feedback — Subways › Complaint › Service and schedule › Delay".
+
+- There is no replica for this form, so subway delays always use the official site, whatever `FILING_TARGET` is set to.
+- `ALLOW_REAL_SUBMIT` is unset by default, which makes it a **dry run**: the worker fills the whole MTA form, stops before "Submit your feedback", and sends you a screenshot. Set `ALLOW_REAL_SUBMIT=1` to really submit. The final click also needs your approval of that exact draft version.
+- **Honesty rule:** only file a delay that actually happened to you. The approval card says "This files a real complaint with the MTA. Only approve if this actually happened to you." Contact details are optional on the MTA form. `/name` and `/email` are only sent if you set them.
+- `/status <reference>` answers from the stored confirmation. The MTA replies by email and has no public status lookup.
+
+```bash
+pnpm demo -- --scenario subway --no-filing   # intake → transit → live MTA alert → draft card + payload preview
+pnpm demo -- --scenario subway               # dry run against the real MTA form (needs Daytona + Anchor)
+```
+
+After every filing attempt, the bot sends you the Anchor session recording on Telegram, so you can see exactly what the browser did for you.
 
 ## How a filing attempt runs (about 25 seconds on Daytona + Anchor)
 
