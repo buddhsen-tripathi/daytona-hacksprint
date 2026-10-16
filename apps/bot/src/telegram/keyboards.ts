@@ -34,6 +34,15 @@ export function duplicateButtons(d: ComplaintDraft, reviewUrl: string): Outbound
   return [[review], [{ text: "➡️ Continue with new report", data: encodeCallback("dup_continue", d.id, d.draftVersion) }]];
 }
 
+/** #5: the same issue was already raised by another resident. */
+export function sameIssueButtons(d: ComplaintDraft): OutboundButton[][] {
+  return [
+    [{ text: "➕ Add me to the existing report", data: encodeCallback("dup_join", d.id, d.draftVersion) }],
+    [{ text: "🆕 It's different — file a new one", data: encodeCallback("dup_continue", d.id, d.draftVersion) }],
+    [{ text: "❌ Cancel", data: encodeCallback("cancel", d.id, d.draftVersion) }],
+  ];
+}
+
 export function trackingButtons(d: ComplaintDraft, receiptUrl: string | null): OutboundButton[][] {
   const view: OutboundButton = isButtonSafeUrl(receiptUrl)
     ? { text: "🧾 View official request", url: receiptUrl }

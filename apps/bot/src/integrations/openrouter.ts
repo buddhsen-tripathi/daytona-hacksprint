@@ -9,7 +9,12 @@
  *  3. invalid JSON / Zod failure ⇒ retry once, feeding the error back
  *  4. still bad ⇒ throw OpenRouterError{kind:"schema"} (orchestrator asks a
  *     generic clarifying question)
+ *
+ * Also `embed(texts)` (POST /api/v1/embeddings) for agent memory (#4).
  */
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { z } from "zod";
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -238,4 +243,135 @@ export async function chatJson<T>(schema: z.ZodType<T>, messages: ChatMessage[],
     if (!v.ok) throw new OpenRouterError("schema", v.error, { body: retry.content });
   }
   return { data: v.data, model: call.model, usage, attempts, mode, raw: call.content };
+}
+
+// ---------------------------------------------------------------------------
+// Embeddings (agent memory, #4): POST /api/v1/embeddings, batched, cached by text hash.
+// ---------------------------------------------------------------------------
+export const OPENROUTER_EMBED_URL = "https://openrouter.ai/api/v1/embeddings";
+export const DEFAULT_EMBED_MODEL = "openai/text-embedding-3-small";
+export const EMBED_BATCH = 64;
+const EMBED_TIMEOUT_MS = 20_000;
+const EMBED_CACHE_MAX = 5000;
+
+export type EmbedOptions = {
+  /** Default env OPENROUTER_EMBED_MODEL, else openai/text-embedding-3-small (1536 dims). */
+  model?: string;
+  apiKey?: string;
+  timeoutMs?: number;
+  /** ≤ 64 texts per request. */
+  batchSize?: number;
+  /** On-disk cache directory (one JSON file per text hash); null/undefined ⇒ in-memory cache only. */
+  cacheDir?: string | null;
+};
+
+/** In-process cache: sha256(model, text) → vector (insertion-ordered; oldest evicted). */
+const embedCache = new Map<string, number[]>();
+
+export function embedCacheKey(model: string, text: string): string {
+  return createHash("sha256").update(model).update("\u0000").update(text).digest("hex");
+}
+
+/** Tests: drop the in-process cache. */
+export function __clearEmbedCacheForTests() {
+  embedCache.clear();
+}
+
+function cachePut(key: string, v: number[]) {
+  if (embedCache.size >= EMBED_CACHE_MAX) embedCache.delete(embedCache.keys().next().value as string);
+  embedCache.set(key, v);
+}
+
+async function diskGet(dir: string, key: string): Promise<number[] | null> {
+  try {
+    const v = JSON.parse(await readFile(join(dir, `${key}.json`), "utf8"));
+    return Array.isArray(v) && v.every((x) => typeof x === "number") ? v : null;
+  } catch {
+    return null;
+  }
+}
+async function diskPut(dir: string, key: string, v: number[]) {
+  try {
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, `${key}.json`), JSON.stringify(v));
+  } catch {
+    /* the cache is an optimisation only */
+  }
+}
+
+async function embedBatch(texts: string[], model: string, apiKey: string, timeoutMs: number): Promise<number[][]> {
+  let res: Response;
+  try {
+    res = await fetch(OPENROUTER_EMBED_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://github.com/311relay", "X-Title": "311Relay" },
+      body: JSON.stringify({ model, input: texts }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    const name = (err as Error)?.name;
+    if (name === "TimeoutError" || name === "AbortError") throw new OpenRouterError("timeout", `OpenRouter embeddings timed out after ${timeoutMs}ms`, { cause: err });
+    throw new OpenRouterError("http", `OpenRouter embeddings request failed: ${(err as Error)?.message ?? String(err)}`, { cause: err });
+  }
+  const text = await res.text();
+  if (!res.ok) throw new OpenRouterError("http", `OpenRouter embeddings HTTP ${res.status}: ${text.slice(0, 300)}`, { status: res.status, body: text });
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch (err) {
+    throw new OpenRouterError("http", "OpenRouter embeddings returned a non-JSON body", { status: res.status, body: text, cause: err });
+  }
+  if (json?.error) throw new OpenRouterError("http", `OpenRouter embeddings error: ${json.error.message ?? "unknown"}`, { status: res.status, body: text });
+  const rows: { embedding?: unknown; index?: number }[] = Array.isArray(json?.data) ? json.data : [];
+  const out: number[][] = new Array(texts.length);
+  rows.forEach((r, i) => {
+    const idx = typeof r.index === "number" ? r.index : i;
+    if (Array.isArray(r.embedding)) out[idx] = r.embedding as number[];
+  });
+  for (let i = 0; i < texts.length; i++) {
+    if (!out[i]?.length) throw new OpenRouterError("schema", `OpenRouter embeddings: missing vector ${i} of ${texts.length}`, { body: text.slice(0, 300) });
+  }
+  return out;
+}
+
+/**
+ * Embed texts with OpenRouter. Order-preserving; cached by sha256(model, text) in memory and, with `cacheDir`,
+ * on disk. Throws OpenRouterError (callers fall back to the local hashed embedder).
+ */
+export async function embed(texts: string[], opts: EmbedOptions = {}): Promise<number[][]> {
+  if (!texts.length) return [];
+  const model = opts.model ?? (process.env.OPENROUTER_EMBED_MODEL || DEFAULT_EMBED_MODEL);
+  const apiKey = opts.apiKey ?? process.env.OPENROUTER_API_KEY ?? "";
+  const timeoutMs = opts.timeoutMs ?? EMBED_TIMEOUT_MS;
+  const batchSize = Math.min(EMBED_BATCH, Math.max(1, opts.batchSize ?? EMBED_BATCH));
+  const out: (number[] | undefined)[] = new Array(texts.length);
+  const missing = new Map<string, { text: string; key: string; idx: number[] }>();
+  for (let i = 0; i < texts.length; i++) {
+    const t = texts[i]!;
+    const key = embedCacheKey(model, t);
+    const hit = embedCache.get(key) ?? (opts.cacheDir ? await diskGet(opts.cacheDir, key) : null);
+    if (hit) {
+      cachePut(key, hit);
+      out[i] = hit;
+      continue;
+    }
+    const m = missing.get(key);
+    if (m) m.idx.push(i);
+    else missing.set(key, { text: t, key, idx: [i] });
+  }
+  if (missing.size) {
+    if (!apiKey) throw new OpenRouterError("missing_key", "OPENROUTER_API_KEY is not set");
+    const todo = [...missing.values()];
+    for (let s = 0; s < todo.length; s += batchSize) {
+      const chunk = todo.slice(s, s + batchSize);
+      const vectors = await embedBatch(chunk.map((c) => c.text), model, apiKey, timeoutMs);
+      chunk.forEach((c, j) => {
+        const v = vectors[j]!;
+        cachePut(c.key, v);
+        for (const i of c.idx) out[i] = v;
+        if (opts.cacheDir) void diskPut(opts.cacheDir, c.key, v);
+      });
+    }
+  }
+  return out as number[][];
 }

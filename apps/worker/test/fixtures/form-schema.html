@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>captureFormSchema fixture</title></head>
+  <body>
+    <header><button type="button">Log in</button><button type="button">Site search tips</button></header>
+    <main>
+      <h2>Tell us about it</h2>
+
+      <!-- Choice buttons (wizard answers) + a disabled Continue => required button-choice -->
+      <div class="choices">
+        <button type="button" aria-label="Bus"></button>
+        <button type="button" aria-label="Subway"></button>
+        <button type="button" aria-label="Ferry"></button>
+      </div>
+
+      <label for="first">First name (optional)</label>
+      <input id="first" type="text" value="Ada" />
+
+      <label for="email">Email</label>
+      <input id="email" type="email" aria-required="true" value="secret@example.com" />
+
+      <label for="phone">Phone *</label>
+      <input id="phone" type="tel" maxlength="14" value="212-555-0100" />
+
+      <!-- Label rendered as a sibling div (no <label>), length from a visible counter -->
+      <div class="field">
+        <div class="lbl">Describe the problem (Required)</div>
+        <div class="ctl">
+          <textarea id="desc">My bus never came and the driver was rude</textarea>
+          <div class="counter">42/4000</div>
+        </div>
+      </div>
+
+      <label for="boro">Borough</label>
+      <select id="boro" required>
+        <option>Manhattan</option>
+        <option selected>Brooklyn</option>
+        <option>Queens</option>
+      </select>
+
+      <fieldset>
+        <legend>How often?</legend>
+        <label><input type="radio" name="freq" value="once" /> Once</label>
+        <label><input type="radio" name="freq" value="daily" checked /> Daily</label>
+      </fieldset>
+
+      <label><input type="checkbox" checked /> Send me updates</label>
+
+      <div class="when">
+        <div>When did this happen?</div>
+        <input type="text" placeholder="M/D/YYYY" value="10/16/2026" />
+      </div>
+
+      <div class="drop-zone" role="button" aria-label="File upload zone">
+        <input type="file" style="display: none" /><span>Drop files here</span>
+      </div>
+
+      <!-- Web component with an input in an open shadow root -->
+      <x-ref-field></x-ref-field>
+
+      <input type="hidden" name="token" value="hidden-token-123" />
+      <input type="text" style="display: none" aria-label="Invisible field" value="invisible" />
+
+      <button type="button">Back</button>
+      <button type="button" disabled>Continue</button>
+    </main>
+    <footer><button type="button">Contact us</button></footer>
+    <script>
+      customElements.define(
+        "x-ref-field",
+        class extends HTMLElement {
+          connectedCallback() {
+            const root = this.attachShadow({ mode: "open" });
+            root.innerHTML = '<label for="ref">Reference code</label><input id="ref" type="text" maxlength="12" value="REF-998877" />';
+          }
+        },
+      );
+    </script>
+  </body>
+</html>

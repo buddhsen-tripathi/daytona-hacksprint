@@ -1,0 +1,21 @@
+{
+  "name": "same line, opposite direction",
+  "original": {
+    "line": "A",
+    "direction": "Uptown (Inwood-207 St)",
+    "station": "14 St",
+    "description": "The A train was held at 14 St for about 25 minutes with no announcements.",
+    "incidentMinutesAgo": 30,
+    "reportedMinutesAgo": 25
+  },
+  "incoming": {
+    "line": "A",
+    "direction": "downtown",
+    "station": "14 St",
+    "description": "The A train was held at 14 St for about 25 minutes with no announcements.",
+    "incidentMinutesAgo": 20
+  },
+  "expect": "none",
+  "reason": "direction",
+  "category": "subway-delay"
+}

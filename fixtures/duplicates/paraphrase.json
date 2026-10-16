@@ -1,0 +1,21 @@
+{
+  "name": "paraphrase of the same delay",
+  "original": {
+    "line": "A",
+    "direction": "Downtown & Queens",
+    "station": "14 St",
+    "description": "Downtown A train sat at 14 St for 25 minutes; riders got no announcements.",
+    "incidentMinutesAgo": 45,
+    "reportedMinutesAgo": 40
+  },
+  "incoming": {
+    "line": "A",
+    "direction": "downtown",
+    "station": "14 St",
+    "description": "The A train was held at 14 St for about 25 minutes with no announcements.",
+    "incidentMinutesAgo": 30
+  },
+  "expect": "match",
+  "reason": null,
+  "category": "subway-delay"
+}

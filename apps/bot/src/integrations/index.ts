@@ -18,6 +18,8 @@ import {
   createUnavailableFilingService,
 } from "./fallbacks.js";
 import { createMemoryStore } from "./memory-store.js";
+import { createEmbedder } from "./embedder.js";
+import { type AgentMemoryService, createAgentMemory, seedCategoryMemory } from "../services/agent-memory.js";
 
 export type { FilingService, StatusService } from "./fallbacks.js";
 
@@ -78,6 +80,18 @@ export const getStore = once(async (): Promise<Store> => {
   }
   report.store = "memory (fallback)";
   return createMemoryStore();
+});
+
+/** Agent memory (#4): one instance for the orchestrator + filing service. Seeds the category registry in the background. */
+export const getAgentMemory = once(async (): Promise<AgentMemoryService> => {
+  const embedder = createEmbedder();
+  const memory = createAgentMemory({ store: await getStore(), embedder, tracer: await getTracer() });
+  report.memory = `agent memory (${embedder.model})`;
+  void seedCategoryMemory(memory)
+    .catch((err) => console.warn("[providers] category memory seed failed:", (err as Error).message))
+    // #22: rows embedded with the fallback (outage / no key at the time) get real vectors once OpenRouter answers
+    .then(() => memory.reembedFallbackItems());
+  return memory;
 });
 
 export const getTracer = once(async (): Promise<Tracer> => {
@@ -183,6 +197,7 @@ export const getFilingService = once(async (): Promise<FilingService> => {
       const s = (await f({
         store: await getStore(),
         tracer: await getTracer(),
+        memory: await getAgentMemory(),
         sandbox: await getSandboxProvider(),
         browser: await getBrowserProvider(),
       })) as FilingService;
@@ -215,6 +230,7 @@ export const getStatusService = once(async (): Promise<StatusService> => {
 export async function resolveProviders() {
   const tracer = await getTracer(); // first: registers the OTel provider
   const store = await getStore();
+  const memory = await getAgentMemory();
   await Promise.all([getSandboxProvider(), getBrowserProvider()]);
   const [classifier, location, duplicates, filing, status] = await Promise.all([
     getClassifier(),
@@ -223,5 +239,5 @@ export async function resolveProviders() {
     getFilingService(),
     getStatusService(),
   ]);
-  return { store, tracer, classifier, location, duplicates, filing, status };
+  return { store, tracer, memory, classifier, location, duplicates, filing, status };
 }
