@@ -1,7 +1,13 @@
 /**
  * Read-mostly JSON API for the dashboard (+ scripted event endpoint POST /api/event and the
  * optional Telegram webhook). node:http, CORS *.
+ *
+ * Auth (#23): with OPERATOR_API_TOKEN set, GET /api/* needs `Authorization: Bearer <token>`; with it unset,
+ * only loopback callers are trusted (local dev). /api/health is always open. An untrusted caller may still
+ * read GET /api/memory?complaintId=… (the complaint id acts as a capability), with chat ids / contact fields
+ * redacted. Everything else ⇒ 401 JSON. POST /api/event and /telegram/webhook are unchanged.
  */
+import { timingSafeEqual } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
@@ -24,6 +30,31 @@ export type ApiDeps = {
   /** Set when Telegram runs in webhook mode. Read lazily so the bot can start after the server. */
   getWebhook?: () => WebhookHandler | null;
 };
+
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+/** Bearer token match when OPERATOR_API_TOKEN is set; otherwise a loopback caller counts as the operator. */
+export function isOperator(req: IncomingMessage, token = env.OPERATOR_API_TOKEN): boolean {
+  if (!token) return LOOPBACK.has(req.socket.remoteAddress ?? "");
+  const m = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "");
+  if (!m) return false;
+  const a = Buffer.from(m[1].trim());
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+const SENSITIVE_KEYS = new Set(["telegramChatId", "chatId", "residentId", "contactName", "contactEmail", "contactPhone"]);
+
+/** Deep-copy with chat ids and contact fields replaced, for responses to unauthenticated callers. */
+export function redactSensitive<T>(v: T): T {
+  if (Array.isArray(v)) return v.map(redactSensitive) as T;
+  if (v && typeof v === "object") {
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [k, SENSITIVE_KEYS.has(k) ? (x == null ? x : "(redacted)") : redactSensitive(x)]),
+    ) as T;
+  }
+  return v;
+}
 
 function json(res: ServerResponse, status: number, body: unknown) {
   const s = JSON.stringify(body);
@@ -50,7 +81,7 @@ export function createApiServer(deps: ApiDeps): Server {
   return createServer(async (req, res) => {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-    res.setHeader("access-control-allow-headers", "content-type");
+    res.setHeader("access-control-allow-headers", "content-type, authorization");
     if (req.method === "OPTIONS") {
       res.writeHead(204).end();
       return;
@@ -70,6 +101,11 @@ export function createApiServer(deps: ApiDeps): Server {
       if (seg[0] !== "api") return json(res, 404, { error: "not found" });
 
       if (req.method === "GET") {
+        const authed = isOperator(req);
+        const capabilityRead = seg[1] === "memory" && !seg[2] && url.searchParams.has("complaintId");
+        if (!authed && seg[1] !== "health" && !capabilityRead) {
+          return json(res, 401, { error: "unauthorized", message: "Authorization: Bearer <OPERATOR_API_TOKEN> required" });
+        }
         switch (seg[1]) {
           case "health":
             return json(res, 200, { ok: true, startedAt: started, store: store.backend, telegram: hasTelegram(), providers: providerReport() });
@@ -130,7 +166,8 @@ export function createApiServer(deps: ApiDeps): Server {
               if (!c) return json(res, 404, { error: "complaint not found" });
               // cached: true ⇒ answered from the recall run right after the approval card was sent (#22)
               const { query, items, cached } = await recallForComplaintCached(memory, c, limit);
-              return json(res, 200, { complaintId: c.id, query, items, cached });
+              const body = { complaintId: c.id, query, items, cached };
+              return json(res, 200, authed ? body : redactSensitive(body));
             }
             const kind = MemoryKind.safeParse(url.searchParams.get("kind"));
             const items = await memory.recall({ text: url.searchParams.get("q") ?? undefined, kind: kind.success ? kind.data : undefined, limit });
