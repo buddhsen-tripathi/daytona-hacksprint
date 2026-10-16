@@ -101,6 +101,9 @@ type EventResponse = {
 
 class ApiDown extends Error {}
 
+/** POST /api/event needs the operator token when the bot has one (#23); loopback works without it. */
+const operatorAuth: Record<string, string> = process.env.OPERATOR_API_TOKEN ? { authorization: `Bearer ${process.env.OPERATOR_API_TOKEN}` } : {};
+
 async function http<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   let res: Response;
   try {
@@ -118,7 +121,7 @@ async function http<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIM
 async function send(chatId: string, ev: EventBody, timeoutMs?: number): Promise<EventResponse> {
   const r = await http<EventResponse>(
     "/api/event",
-    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chatId, username: "eval_bot", ...ev }) },
+    { method: "POST", headers: { "content-type": "application/json", ...operatorAuth }, body: JSON.stringify({ chatId, username: "eval_bot", ...ev }) },
     timeoutMs,
   );
   return { ...r, messages: r.messages ?? [] };

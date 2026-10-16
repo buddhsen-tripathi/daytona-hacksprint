@@ -1,0 +1,89 @@
+# Render Blueprint: the bot (Telegram long polling + JSON API) and a self-hosted Arize Phoenix.
+# The dashboard deploys separately on Vercel (apps/dashboard); see README "Deploy".
+# Values marked `sync: false` are entered in the Render dashboard on first deploy and never live in git.
+services:
+  - type: web
+    name: relay-bot
+    runtime: node
+    plan: starter # paid: free web services sleep and can't mount disks
+    region: virginia # next to SurrealDB Cloud (aws-use1)
+    branch: main
+    # pnpm via npx (pinned to packageManager) so the build doesn't depend on a writable global corepack shim.
+    buildCommand: npx --yes pnpm@11.25.0 install --frozen-lockfile && npx --yes pnpm@11.25.0 --filter @311relay/worker build
+    # tsx directly (not through pnpm) so SIGTERM reaches the bot and it stops polling cleanly on redeploy.
+    startCommand: cd apps/bot && ./node_modules/.bin/tsx src/index.ts
+    healthCheckPath: /api/health
+    # One instance only: Telegram allows a single poller per token. A disk also makes Render stop the old
+    # instance before starting the new one, so deploys never run two pollers at once.
+    disk:
+      name: runs
+      mountPath: /opt/render/project/src/.runs # evidence, recordings, embedding cache (RUNS_DIR)
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PORT_API
+        value: "10000"
+      - key: SANDBOX_PROVIDER
+        value: daytona
+      - key: BROWSER_PROVIDER
+        value: anchor
+      - key: DAYTONA_SNAPSHOT
+        value: daytona-medium
+      - key: OPENROUTER_MODEL
+        value: anthropic/claude-sonnet-5.5
+      - key: SURREALDB_NAMESPACE
+        value: relay311
+      - key: SURREALDB_DATABASE
+        value: main
+      - key: PHOENIX_PROJECT
+        value: 311relay
+      # Shared with the Vercel dashboard (same value there); required for every /api/* read and POST /api/event.
+      - key: OPERATOR_API_TOKEN
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: DAYTONA_API_KEY
+        sync: false
+      - key: ANCHOR_API_KEY
+        sync: false
+      - key: SURREALDB_URL
+        sync: false
+      - key: SURREALDB_USERNAME
+        sync: false
+      - key: SURREALDB_PASSWORD
+        sync: false
+      # relay-phoenix's public URL (https://….onrender.com) and a system API key created in its UI.
+      - key: PHOENIX_COLLECTOR_ENDPOINT
+        sync: false
+      - key: PHOENIX_API_KEY
+        sync: false
+      # "1" lets the MTA adapter click the final Submit after the resident approves. Unset ⇒ dry run.
+      - key: ALLOW_REAL_SUBMIT
+        sync: false
+
+  - type: web
+    name: relay-phoenix
+    runtime: image
+    image:
+      url: docker.io/arizephoenix/phoenix:latest
+    plan: starter
+    region: virginia
+    disk:
+      name: phoenix-data
+      mountPath: /mnt/data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: "6006"
+      - key: PHOENIX_WORKING_DIR
+        value: /mnt/data
+      # Public URL ⇒ login required; the bot sends traces with a system API key.
+      - key: PHOENIX_ENABLE_AUTH
+        value: "true"
+      - key: PHOENIX_SECRET
+        generateValue: true
+      - key: PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD
+        sync: false
