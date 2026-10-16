@@ -666,6 +666,10 @@ export interface Store {
   linkSimilarComplaints?(complaintId: string, similarIds: string[]): Promise<void>;
   /** For the dashboard: nodes + edges of the complaint graph. */
   graph(args?: { complaintId?: string }): Promise<{ nodes: { id: string; kind: string; label: string }[]; edges: { from: string; to: string; rel: string }[] }>;
+  /** Post-mortem repair proposals (#13). Optional so existing stores/test doubles keep compiling. */
+  saveRepairProposal?(p: RepairProposal): Promise<RepairProposal>;
+  getRepairProposal?(id: string): Promise<RepairProposal | null>;
+  listRepairProposals?(args?: { status?: RepairProposal["status"]; limit?: number }): Promise<RepairProposal[]>;
 }
 
 export interface SandboxHandle {
@@ -757,3 +761,43 @@ export function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: 
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
+
+// ---------------------------------------------------------------------------
+// Post-mortem self-repair (#13). Additive. A failed/ambiguous attempt is
+// diagnosed by the LLM into a RepairProposal; proposals are applied only after
+// human approval, except `requiredField` additions with confidence >= 0.9.
+
+export const RepairCause = z.enum(["missing_required_field", "selector_changed", "new_step", "confirmation_pattern", "captcha", "unknown"]);
+export type RepairCause = z.infer<typeof RepairCause>;
+
+export const RepairChange = z.object({
+  kind: z.enum(["requiredField", "recipeStep", "confirmRegex", "questionText"]),
+  /** Previous value (null when the change is an addition). */
+  before: z.string().nullable(),
+  after: z.string(),
+  /** Evidence ids (Evidence.id) backing this change. */
+  evidence: z.array(z.string()),
+});
+export type RepairChange = z.infer<typeof RepairChange>;
+
+/** Strict LLM output for the post-mortem diagnosis. */
+export const RepairDiagnosis = z.object({
+  cause: RepairCause,
+  proposedChanges: z.array(RepairChange),
+  confidence: z.number().min(0).max(1),
+});
+export type RepairDiagnosis = z.infer<typeof RepairDiagnosis>;
+
+export const RepairProposal = RepairDiagnosis.extend({
+  id: z.string(),
+  attemptId: z.string(),
+  complaintId: z.string(),
+  category: CategoryId,
+  status: z.enum(["pending", "approved", "rejected"]),
+  createdAt: z.string(),
+  decidedAt: z.string().nullable(),
+});
+export type RepairProposal = z.infer<typeof RepairProposal>;
+
+/** Auto-apply threshold for `requiredField` additions (never for anything affecting submit). */
+export const REPAIR_AUTO_APPLY_CONFIDENCE = 0.9;
