@@ -411,3 +411,35 @@ function emitFormStep(ctx: AdapterContext, step: FormStepSchema): FormStepSchema
   ctx.log("inspect", "info", "form_schema", { stepTitle: step.title, fields: step.fields });
   return step;
 }
+
+// ---------------------------------------------------------------------------
+// extraFields (issue #12): resident answers to learned required fields, keyed by the official label
+// ---------------------------------------------------------------------------
+
+/** Label → comparable form: lower case, "(optional)"/"(required)"/"*"/punctuation dropped, spaces collapsed. */
+export function normalizeLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/\((optional|required)\)/g, " ")
+    .replace(/[^a-z0-9#]+/g, " ")
+    .trim();
+}
+
+/** The resident's answer for a form label: exact label first, then normalised. No fuzzy match here (generic matching is #9). */
+export function matchExtraField(extra: Record<string, string> | undefined, label: string): { key: string; value: string } | null {
+  if (!extra || !label.trim()) return null;
+  const exact = extra[label];
+  if (exact?.trim()) return { key: label, value: exact.trim() };
+  const want = normalizeLabel(label);
+  if (!want) return null;
+  for (const [k, v] of Object.entries(extra)) if (v?.trim() && normalizeLabel(k) === want) return { key: k, value: v.trim() };
+  return null;
+}
+
+/** Fill the input with this exact accessible label. False when the page has no such input (nothing typed). */
+export async function fillByLabel(page: Page, label: string, value: string): Promise<boolean> {
+  const box = page.getByLabel(label, { exact: true }).first();
+  if (!(await box.count())) return false;
+  await box.fill(value);
+  return true;
+}

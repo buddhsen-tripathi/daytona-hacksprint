@@ -50,6 +50,8 @@ export interface FilingPayload {
     dateObserved: string | null;
     /** Subway categories only. */
     transit?: TransitDetails | null;
+    /** Resident answers to learned required fields, keyed by the official form label (#12). Filled by label match only. */
+    extraFields?: Record<string, string>;
   };
   /**
    * True ONLY when the resident explicitly approved AND env ALLOW_REAL_SUBMIT=1.
@@ -225,6 +227,7 @@ export function validatePayload(p: unknown): string[] {
         if (f.transit.delayMinutes !== undefined) numOrNull(f.transit, "delayMinutes", "form.transit.");
       }
     }
+    if (f.extraFields !== undefined && (!isObj(f.extraFields) || !Object.values(f.extraFields).every((v) => typeof v === "string"))) problems.push("form.extraFields must be Record<string,string>");
   }
   if (p.realSubmitAuthorized !== undefined && typeof p.realSubmitAuthorized !== "boolean") problems.push("realSubmitAuthorized must be a boolean");
   if (!isObj(p.limits)) problems.push("limits must be an object");
