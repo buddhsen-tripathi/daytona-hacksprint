@@ -5,6 +5,7 @@
 import type {
   CatalogEntry,
   CategoryId,
+  CategoryOverrides,
   ComplaintDraft,
   ComplaintLocation,
   ComplaintState,
@@ -18,7 +19,7 @@ import type {
   Store,
   WorkflowPattern,
 } from "../core/contracts.js";
-import { nowIso, shortId } from "../core/contracts.js";
+import { mergeCategoryOverrides, nowIso, shortId } from "../core/contracts.js";
 import { filterRelated } from "../services/memory.js";
 import { memoryMatches, searchMemoryRows } from "../services/agent-memory.js";
 
@@ -57,6 +58,7 @@ export function createMemoryStore(): MemoryStore {
   const memories = new Map<string, MemoryRecord>();
   const catalog = new Map<string, CatalogEntry>();
   const repairs = new Map<string, RepairProposal>();
+  const overrides = new Map<string, CategoryOverrides>();
   const learnedSchemas = new Map<string, Pick<CatalogEntry, "requiredFields" | "formSchema">>();
 
   const store: MemoryStore = {
@@ -249,6 +251,20 @@ export function createMemoryStore(): MemoryStore {
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           .slice(0, args?.limit ?? 100),
       );
+    },
+    async updateRepairProposal(id, patch) {
+      const p = repairs.get(id);
+      if (!p) return null;
+      const next = { ...p, ...clone(patch), id };
+      repairs.set(id, next);
+      return clone(next);
+    },
+    async updateCategoryOverrides(id, patch) {
+      overrides.set(id, mergeCategoryOverrides(overrides.get(id), clone(patch)));
+    },
+    async getCategoryOverrides(id) {
+      const o = overrides.get(id);
+      return o ? clone(o) : null;
     },
 
     // -- agent memory (#4): same semantics as the SurrealQL in surrealdb.ts (shared helpers in services/agent-memory.ts)
