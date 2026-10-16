@@ -231,7 +231,10 @@ export function probeTarget(raw: RawArticle): string | null {
  */
 export function isEmergencyArticle(raw: RawArticle): boolean {
   if (/^\W*call 911\b/i.test(raw.cards[0]?.text ?? "")) return true;
-  return raw.emergencyBanner === true && findReportLinks(raw).length === 0;
+  if (raw.emergencyBanner !== true || findReportLinks(raw).length > 0) return false;
+  // A banner over a hotline ("Phone Number: …") is a phone route with a 911 caveat, not a 911 article.
+  const text = raw.cards.map((c) => c.text).join("\n");
+  return extractPhone(text, raw.cards.flatMap((c) => c.links)) === null || /\bcall 911\b/i.test(firstSentences(raw.cards[0]?.text ?? "", 120));
 }
 
 export type BuildContext = {
