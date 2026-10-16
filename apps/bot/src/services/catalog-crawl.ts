@@ -22,7 +22,11 @@ export const DIRECT_CREATE_AGENCIES = new Set(["OTI", "DPR", "DEP", "EDC", "DOT"
 export type RawLink = { cls: string; text: string; href: string | null; onclick: string | null };
 /** One accordion card of an article. `title` is null for the always-open intro card. */
 export type RawCard = { title: string | null; text: string; links: RawLink[] };
-export type RawArticle = { kaNumber: string; title: string; cards: RawCard[] };
+/**
+ * `emergencyBanner`: the page shows the red "Call 911" .divTable banner (stripped from card text).
+ * Absent on articles cached before #28.
+ */
+export type RawArticle = { kaNumber: string; title: string; cards: RawCard[]; emergencyBanner?: boolean };
 /** Result of opening an official link once (GET only). */
 export type LandingProbe = { finalUrl: string; hasCaptcha: boolean; requiresLogin: boolean };
 
@@ -197,6 +201,15 @@ export function probeTarget(raw: RawArticle): string | null {
   return findReportLinks(raw).find((l) => l.url)?.url ?? null;
 }
 
+/**
+ * A "Call 911" article: its intro opens with "Call 911", or the page shows the 911 banner and offers no
+ * filing route at all (a banner next to an SR form just means "if it is an emergency, call 911").
+ */
+export function isEmergencyArticle(raw: RawArticle): boolean {
+  if (/^\W*call 911\b/i.test(raw.cards[0]?.text ?? "")) return true;
+  return raw.emergencyBanner === true && findReportLinks(raw).length === 0;
+}
+
 export type BuildContext = {
   topic: string | null;
   /** One-line summary from the "by category" listing, if the article appears there. */
@@ -229,6 +242,7 @@ export function buildCatalogEntry(raw: RawArticle, ctx: BuildContext): CatalogEn
   // The report action's agency, else what the intro names, else any "Agency:" line on the page.
   const agency =
     best?.agency ?? agencyFromName(agencyNameFromText(intro)) ?? agencyFromProse(intro) ?? agencyFromName(agencyNameFromText(text)) ?? null;
+  const emergency = isEmergencyArticle(raw);
   const probed = ctx.probe && officialUrl && best?.url === officialUrl ? ctx.probe : null;
 
   return {
@@ -244,8 +258,9 @@ export function buildCatalogEntry(raw: RawArticle, ctx: BuildContext): CatalogEn
     requiresLogin: probed ? probed.requiresLogin : null,
     hasCaptcha: probed ? probed.hasCaptcha : null,
     requiredFields: null,
-    automation: channel === "phone-only" || channel === "info-only" ? "none" : "handoff",
+    automation: emergency || channel === "phone-only" || channel === "info-only" ? "none" : "handoff",
     lastVerifiedAt: ctx.now,
+    emergency,
   };
 }
 
@@ -292,6 +307,7 @@ export function fileableCatalogEntries(now: string): CatalogEntry[] {
       requiredFields: [...c.requiredFields],
       automation: `adapter:${f.adapter}`,
       lastVerifiedAt: now,
+      emergency: false,
     };
   });
 }

@@ -10,6 +10,7 @@ import {
   extractPhone,
   fileableCatalogEntries,
   filingScore,
+  isEmergencyArticle,
   parseServiceRequestCall,
   type RawArticle,
   serviceRequestUrl,
@@ -165,5 +166,33 @@ describe("fileableCatalogEntries", () => {
     expect(e.automation).toBe("adapter:mta-subway-delay");
     expect(e.requiredFields).toEqual(["transit", "description"]);
     expect(e.lastVerifiedAt).toBe(NOW);
+  });
+});
+
+describe("emergency (Call 911) articles (#28)", () => {
+  const ctx = { topic: null, summary: null, probe: null, now: NOW };
+  const banner = (cards: RawArticle["cards"], emergencyBanner = true): RawArticle => ({ kaNumber: "KA-02048", title: "Gas Leak", cards, emergencyBanner });
+
+  it("a 911 banner with no filing route is an emergency with automation none", () => {
+    const raw = banner([{ title: null, text: "", links: [] }]);
+    expect(isEmergencyArticle(raw)).toBe(true);
+    const e = buildCatalogEntry(raw, ctx);
+    expect(e).toMatchObject({ emergency: true, automation: "none", officialUrl: null });
+    expect(CatalogEntry.parse(e).emergency).toBe(true);
+  });
+
+  it("an intro that opens with 'Call 911' is an emergency", () => {
+    expect(isEmergencyArticle(banner([{ title: null, text: "Call 911 if you smell gas.", links: [] }], false))).toBe(true);
+  });
+
+  it("a banner next to an SR form is not an emergency (it only says 'if it is an emergency…')", () => {
+    const raw = { ...srArticle("NYPD"), emergencyBanner: true };
+    expect(isEmergencyArticle(raw)).toBe(false);
+    expect(buildCatalogEntry(raw, ctx)).toMatchObject({ emergency: false, automation: "handoff" });
+  });
+
+  it("emergency defaults to false for rows written before #28", () => {
+    const { emergency: _e, ...old } = buildCatalogEntry(srArticle("NYPD"), ctx);
+    expect(CatalogEntry.parse(old).emergency).toBe(false);
   });
 });

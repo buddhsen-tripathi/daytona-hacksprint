@@ -1,7 +1,7 @@
 /**
  * Crawl the NYC311 "Report Problems" directory into a category catalog (#7).
  *
- *   pnpm --filter @311relay/bot exec tsx scripts/crawl-311-catalog.ts [--limit 20] [--delay 600] [--refresh] [--no-probe] [--headed] [--no-db] [--embedded]
+ *   pnpm --filter @311relay/bot exec tsx scripts/crawl-311-catalog.ts [--limit 20] [--delay 600] [--refresh] [--no-probe] [--headed] [--no-db] [--embedded] [--cache DIR]
  *
  * 1. /report-problems/: the "All A–Z" list (every article) and the "All by category" tree.
  * 2. Each subcategory page: topic + one-line summary per article.
@@ -16,7 +16,7 @@
  * --limit) and complaint_category rows in SurrealDB (UPSERT … MERGE by id; --no-db skips, --embedded uses
  * mem://). The CATEGORIES entries (subway-delay) are added with their worker adapter as `automation`.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import type { CatalogEntry } from "../src/core/contracts.js";
@@ -48,7 +48,10 @@ const DB = !flag("--no-db");
 const EMBEDDED = flag("--embedded");
 const SNAPSHOT = resolve(REPO_ROOT, "fixtures/nyc311-catalog.json");
 
-const CACHE = resolve(RUNS_DIR, "catalog-cache");
+const CACHE = (() => {
+  const i = argv.indexOf("--cache");
+  return i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : resolve(RUNS_DIR, "catalog-cache");
+})();
 for (const d of ["", "categories", "articles"]) mkdirSync(resolve(CACHE, d), { recursive: true });
 
 const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -155,6 +158,7 @@ async function crawlArticle(page: Page, kaNumber: string): Promise<RawArticle> {
   await load(page, `${PORTAL}/article/?kanumber=${kaNumber}`);
   await page.waitForSelector(".ka-content", { timeout: 15_000 }).catch(() => {});
   const extracted = await page.evaluate(() => {
+    const emergencyBanner = Array.from(document.querySelectorAll(".ka-content .divTable")).some((t) => /call 911/i.test(t.textContent ?? ""));
     const cards = Array.from(document.querySelectorAll(".ka-content .accordion > .card")).map((c) => {
       const header = c.querySelector(".card-header");
       const body = c.querySelector(".collapse") ?? c;
@@ -175,9 +179,9 @@ async function crawlArticle(page: Page, kaNumber: string): Promise<RawArticle> {
         })),
       };
     });
-    return { title: document.title.replace(/\s*·\s*NYC311\s*$/, "").trim(), cards };
+    return { title: document.title.replace(/\s*·\s*NYC311\s*$/, "").trim(), cards, emergencyBanner };
   });
-  const raw: RawArticle = { kaNumber, title: extracted.title, cards: extracted.cards as RawCard[] };
+  const raw: RawArticle = { kaNumber, title: extracted.title, cards: extracted.cards as RawCard[], emergencyBanner: extracted.emergencyBanner };
   writeCache(`articles/${kaNumber}.json`, raw);
   return raw;
 }
@@ -238,7 +242,9 @@ try {
   const crawled = assignUniqueIds(
     raws.map((raw) => {
       const target = probeTarget(raw);
-      return buildCatalogEntry(raw, { topic: topic.get(raw.kaNumber) ?? null, summary: summary.get(raw.kaNumber) ?? null, probe: target ? (probes[target] ?? null) : null, now });
+      // lastVerifiedAt = when the article was fetched (its cache file), so rebuilding from cache doesn't churn the snapshot.
+      const fetched = statSync(resolve(CACHE, `articles/${raw.kaNumber}.json`)).mtime.toISOString();
+      return buildCatalogEntry(raw, { topic: topic.get(raw.kaNumber) ?? null, summary: summary.get(raw.kaNumber) ?? null, probe: target ? (probes[target] ?? null) : null, now: fetched });
     }),
   );
   const fileable = fileableCatalogEntries(now);

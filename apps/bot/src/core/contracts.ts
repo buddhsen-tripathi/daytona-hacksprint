@@ -105,6 +105,8 @@ export const CatalogEntry = z.object({
   requiredFields: z.array(z.string()).nullable(),
   automation: CatalogAutomation,
   lastVerifiedAt: z.string(),
+  /** A "Call 911" article (gas leak, fire, overdose, …): route to the 911 referral, never to a form. */
+  emergency: z.boolean().default(false),
 });
 export type CatalogEntry = z.infer<typeof CatalogEntry>;
 
