@@ -135,7 +135,15 @@ export const M = {
     ].join("\n"),
   failed: (o: FilingOutcome) => `I couldn't complete the filing: ${esc(filingReason(o.errorCode).replace(/\.$/, ""))}. Nothing was submitted. You can try again from the draft.`,
 
-  myReports: (drafts: ComplaintDraft[], requests: OfficialRequest[]) => {
+  /** #5 "Add me to the existing report": no new filing; the resident follows the original's status. */
+  sameIssueJoined: (label: string, status: string, supporters: number) =>
+    [
+      `➕ Done — you're added to the existing report (${esc(label)}; status: ${esc(status)}).${supporters > 1 ? ` ${supporters} people have joined it so far.` : ""}`,
+      "I'm not filing a new one. You'll get its status updates in /myreports.",
+    ].join("\n"),
+  sameIssueDifferent: () => "OK, treating this as a different issue. I won't ask about that report again.",
+  sameIssueGone: () => "That report isn't open anymore, so I'll continue with yours.",
+  myReports: (drafts: ComplaintDraft[], requests: OfficialRequest[], supported: Record<string, string> = {}) => {
     if (!drafts.length && !requests.length) return "You don't have any reports yet. Send a photo or description to start one.";
     const lines = [drafts.length > 5 ? "<b>Your last 5 reports</b>" : "<b>Your reports</b>", ""];
     for (const d of drafts.slice(0, 5)) {
@@ -145,7 +153,8 @@ export const M = {
         : (d.location.address ?? (d.location.latitude != null ? `${d.location.latitude.toFixed(4)}, ${d.location.longitude?.toFixed(4)}` : null));
       const sr = d.officialRequestNumber ? ` · SR <code>${esc(d.officialRequestNumber)}</code>` : "";
       const dryRun = d.status === "HUMAN_ACTION_REQUIRED" && /dry-run/i.test(d.statusReason ?? "") ? "dry run, nothing sent" : null;
-      lines.push(`• ${esc(cat)}${where ? ` · ${esc(where)}` : ""} · <i>${esc(dryRun ?? humanStatus(d.status))}</i>${sr} · ${esc(fmtWhen(d.createdAt))}`);
+      const joined = supported[d.id];
+      lines.push(`• ${esc(cat)}${where ? ` · ${esc(where)}` : ""} · <i>${esc(joined ? `➕ added to an existing report (${joined})` : (dryRun ?? humanStatus(d.status)))}</i>${sr} · ${esc(fmtWhen(d.createdAt))}`);
     }
     const unlisted = requests.filter((r) => !drafts.some((d) => d.officialRequestNumber === r.officialRequestNumber));
     for (const r of unlisted) lines.push(`• SR <code>${esc(r.officialRequestNumber)}</code> · ${esc(r.status ?? "status unknown")}`);

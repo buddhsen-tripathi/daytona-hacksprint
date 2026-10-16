@@ -115,13 +115,17 @@ export const RELATIONS: Record<string, { in: string; out: string }> = {
   produced: { in: "filing_attempt", out: "evidence" },
   /** Remembered issues: same category + same line / within 100 m, recent (dashboard cluster). */
   similar_to: { in: "complaint", out: "complaint" },
+  /** #5: a supporter joined another resident's report ("Add me to the existing report"). */
+  same_issue_as: { in: "complaint", out: "complaint" },
+  /** #5: the resident said it's a different issue (never prompted about that report again). */
+  not_same_as: { in: "complaint", out: "complaint" },
   /** Agent memory (#4): what a memory item is about. */
   about: { in: "memory", out: "complaint|complaint_category|filing_attempt" },
 };
 
 /** Tables surfaced by `graph()` (media/evidence/audit rows are left out to keep it readable). */
 const GRAPH_NODE_TABLES = ["resident", "complaint", "location", "complaint_category", "official_request", "filing_attempt", "workflow_pattern"];
-const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted_in", "possibly_duplicates", "attempted", "learned", "applies_to", "similar_to"];
+const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted_in", "possibly_duplicates", "attempted", "learned", "applies_to", "similar_to", "same_issue_as", "not_same_as"];
 const KIND: Record<string, string> = { complaint_category: "category" };
 
 /**
@@ -243,7 +247,8 @@ class Batch {
 // ---------------------------------------------------------------------------
 export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore {
   const url = (opts.url ?? env.SURREALDB_URL).trim();
-  const embedded = url === "" || url.startsWith("mem://");
+  // embedded engine: mem:// (default) or a local file via surrealkv:// / rocksdb:// (e.g. two demo runs sharing one store)
+  const embedded = url === "" || /^(mem|surrealkv|rocksdb):\/\//.test(url);
   const namespace = opts.namespace ?? env.SURREALDB_NAMESPACE;
   const database = opts.isolated ? `test_${Math.random().toString(36).slice(2, 10)}` : (opts.database ?? env.SURREALDB_DATABASE);
   const connectTimeoutMs = opts.connectTimeoutMs ?? 8000;
@@ -258,7 +263,7 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       // @surrealdb/node is ESM-only + a native addon: load lazily so remote-only setups never touch it.
       const { createNodeEngines } = await import("@surrealdb/node");
       instance = new Surreal({ engines: createNodeEngines() });
-      await withTimeout(instance.connect("mem://"), connectTimeoutMs, "embedded connect");
+      await withTimeout(instance.connect(url || "mem://"), connectTimeoutMs, "embedded connect");
     } else {
       instance = new Surreal({ engines: createRemoteEngines() });
       await withTimeout(
@@ -377,6 +382,9 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       })} RETURN NONE`,
     );
     b.relate("reported", rid("resident", c.residentId), cr);
+    // #5: `supporters` is derived from same_issue_as edges (a stale copy of the original never resets it)
+    b.add(`LET $supporters = array::len((SELECT VALUE id FROM same_issue_as WHERE out = ${cRef}))`);
+    b.add(`IF $supporters > 0 { UPDATE ${cRef} SET supporters = $supporters, doc.supporters = $supporters RETURN NONE; }`);
 
     // category edge: exactly one (or none)
     const cat = c.category ? rid("complaint_category", c.category) : null;
@@ -852,6 +860,36 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       const cr = rid("complaint", complaintId);
       for (const id of new Set(similarIds)) if (id !== complaintId) b.relate("similar_to", cr, rid("complaint", id));
       await run(b);
+    }),
+
+    // -- same issue across residents (#5) -----------------------------------------
+    linkSameIssue: guard("linkSameIssue", async (supporterId: string, originalId: string) => {
+      const b = new Batch();
+      const o = rid("complaint", originalId);
+      if (supporterId !== originalId) b.relate("same_issue_as", rid("complaint", supporterId), o);
+      const oRef = b.bind(o);
+      b.add(`LET $n = array::len((SELECT VALUE id FROM same_issue_as WHERE out = ${oRef}))`);
+      b.add(`IF $n > 0 { UPDATE ${oRef} SET supporters = $n, doc.supporters = $n RETURN NONE; }`);
+      b.add("RETURN $n");
+      const res = await run(b);
+      const n = res[res.length - 1];
+      return typeof n === "number" ? n : 0;
+    }),
+    linkNotSameIssue: guard("linkNotSameIssue", async (complaintId: string, otherId: string) => {
+      if (complaintId === otherId) return;
+      const b = new Batch();
+      b.relate("not_same_as", rid("complaint", complaintId), rid("complaint", otherId));
+      await run(b);
+    }),
+    getIssueLinks: guard("getIssueLinks", async (complaintId: string) => {
+      const [out, joined, notSame] = await q<[unknown[], { in: unknown; createdAt: unknown }[], unknown[]]>(
+        `SELECT VALUE out FROM same_issue_as WHERE in = $c;
+         SELECT in, createdAt FROM same_issue_as WHERE out = $c ORDER BY createdAt ASC;
+         SELECT VALUE out FROM not_same_as WHERE in = $c;`,
+        { c: rid("complaint", complaintId) },
+      );
+      const ids = (joined ?? []).map((r) => plainId(r.in));
+      return { sameIssueAs: out?.[0] ? plainId(out[0]) : null, joined: ids, notSameAs: (notSame ?? []).map(plainId), supporters: ids.length };
     }),
 
     // -- agent memory (#4) -------------------------------------------------------

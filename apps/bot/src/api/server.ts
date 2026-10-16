@@ -81,7 +81,8 @@ export function createApiServer(deps: ApiDeps): Server {
               const evidence = attempts.flatMap((a) => a.evidence);
               const traceUrl = c.traceId ? deps.tracer.traceUrl(c.traceId) : null;
               const transitions = await listTransitions(store, c.id);
-              return json(res, 200, { complaint: redactComplaint(c), attempts, evidence, transitions, traceUrl, sessionUrl: deps.tracer.sessionUrl(c.telegramChatId) });
+              const sameIssue = await sameIssueOf(store, c.id);
+              return json(res, 200, { complaint: redactComplaint(c), attempts, evidence, transitions, sameIssue, traceUrl, sessionUrl: deps.tracer.sessionUrl(c.telegramChatId) });
             }
             const list = await store.listComplaints({ chatId: url.searchParams.get("chatId") ?? undefined, limit: Number(url.searchParams.get("limit") ?? 100) });
             return json(res, 200, { complaints: list.map(redactComplaint) });
@@ -204,6 +205,23 @@ async function listTransitions(store: Store, complaintId: string): Promise<Trans
     console.warn("[api] listTransitions failed:", (err as Error).message);
   }
   return [];
+}
+
+/**
+ * #5 cluster for the dashboard (UI in #14): the original this complaint belongs to (itself when others joined it),
+ * its supporters' complaint ids, and the reports the resident said are different. Complaint ids only.
+ */
+async function sameIssueOf(store: Store, complaintId: string): Promise<{ originalId: string | null; supporters: number; joined: string[]; notSameAs: string[] } | null> {
+  if (!store.getIssueLinks) return null;
+  try {
+    const own = await store.getIssueLinks(complaintId);
+    const originalId = own.sameIssueAs ?? (own.joined.length ? complaintId : null);
+    const cluster = originalId && originalId !== complaintId ? await store.getIssueLinks(originalId) : own;
+    return { originalId, supporters: originalId ? cluster.supporters : 0, joined: originalId ? cluster.joined : [], notSameAs: own.notSameAs };
+  } catch (err) {
+    console.warn("[api] getIssueLinks failed:", (err as Error).message);
+    return null;
+  }
 }
 
 async function allPatterns(store: Store) {

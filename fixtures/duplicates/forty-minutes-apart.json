@@ -1,0 +1,21 @@
+{
+  "name": "same line + direction, 40 min apart, different station",
+  "original": {
+    "line": "A",
+    "direction": "Downtown & Queens",
+    "station": "34 St-Penn Station",
+    "description": "The downtown A train was stuck at 34 St-Penn Station for 20 minutes.",
+    "incidentMinutesAgo": 60,
+    "reportedMinutesAgo": 55
+  },
+  "incoming": {
+    "line": "A",
+    "direction": "Downtown & Queens",
+    "station": "14 St",
+    "description": "The downtown A train was stuck at 14 St for 20 minutes.",
+    "incidentMinutesAgo": 20
+  },
+  "expect": "match",
+  "reason": null,
+  "category": "subway-delay"
+}
