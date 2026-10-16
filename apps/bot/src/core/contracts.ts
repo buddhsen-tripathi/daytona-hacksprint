@@ -66,6 +66,49 @@ export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
 };
 
 // ---------------------------------------------------------------------------
+// NYC311 category catalog (#7): every "Report Problems" article, where it is
+// filed and how far we can automate it. A routing superset of CATEGORIES:
+// CategoryId stays the filing allowlist, and a catalog entry is only fileable
+// when `automation` names a worker adapter.
+// ---------------------------------------------------------------------------
+export const CatalogChannel = z.enum([
+  "nyc311-sr-form", // NYC311 service request on portal.311.nyc.gov
+  "agency-form", // a City agency's own online form (nyc.gov, *.aspx, …)
+  "external-site", // a non-City organization (e.g. MTA contact.mta.info)
+  "phone-only", // no online route; call the listed number
+  "info-only", // information only, nothing to file
+]);
+export type CatalogChannel = z.infer<typeof CatalogChannel>;
+
+/** "none" | "handoff" (open the official link, a human submits) | "adapter:<worker adapter id>". */
+export const CatalogAutomation = z.string().regex(/^(none|handoff|adapter:[a-z0-9-]+)$/);
+export type CatalogAutomation = z.infer<typeof CatalogAutomation>;
+
+export const CatalogEntry = z.object({
+  /** Stable slug ("noise-from-neighbor"); equals the CategoryId for entries in CATEGORIES. */
+  id: z.string().regex(/^[a-z0-9-]+$/),
+  title: z.string(),
+  kaNumber: z.string().regex(/^KA-\d+$/),
+  /** NYC311 knowledge article. */
+  articleUrl: z.string().url(),
+  summary: z.string(),
+  /** DOT, DSNY, HPD, MTA, NYPD, …; null when the article names none. */
+  agency: z.string().nullable(),
+  /** The "All A–Z" / "All by category" group the article sits in. */
+  topic: z.string().nullable(),
+  channel: CatalogChannel,
+  /** The actual submission link, resolved from the article's "Report"/"File" buttons. */
+  officialUrl: z.string().url().nullable(),
+  requiresLogin: z.boolean().nullable(),
+  hasCaptcha: z.boolean().nullable(),
+  /** null until learned from runs (#11). */
+  requiredFields: z.array(z.string()).nullable(),
+  automation: CatalogAutomation,
+  lastVerifiedAt: z.string(),
+});
+export type CatalogEntry = z.infer<typeof CatalogEntry>;
+
+// ---------------------------------------------------------------------------
 // Conversation state machine (design doc §8.3)
 // ---------------------------------------------------------------------------
 export const ComplaintState = z.enum([
@@ -827,6 +870,9 @@ export interface Store {
   findRelatedComplaints?(args: RelatedComplaintsQuery): Promise<RelatedComplaints>;
   /** complaint->similar_to->complaint edges (dashboard cluster). */
   linkSimilarComplaints?(complaintId: string, similarIds: string[]): Promise<void>;
+  /** NYC311 category catalog (#7): upsert complaint_category rows by id; returns the count written. */
+  upsertCatalog?(entries: CatalogEntry[]): Promise<number>;
+  listCatalog?(): Promise<CatalogEntry[]>;
   /** #5: RELATE supporter->same_issue_as->original and refresh `supporters` on the original. Returns the new count. */
   linkSameIssue?(supporterId: string, originalId: string): Promise<number>;
   /** #5: RELATE complaint->not_same_as->other (the resident said it's a different issue). */
