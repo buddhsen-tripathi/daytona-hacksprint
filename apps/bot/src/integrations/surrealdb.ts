@@ -35,6 +35,7 @@ import type {
   MemoryRecord,
   MemorySearch,
   OfficialRequest,
+  RepairProposal,
   Resident,
   Store,
   RelatedComplaint,
@@ -104,6 +105,7 @@ export const NODE_TABLES = [
   "workflow_pattern",
   "evidence",
   "memory",
+  "repair_proposal",
 ] as const;
 
 /** Relation tables with their IN/OUT types (SurrealDB TYPE RELATION). */
@@ -170,6 +172,7 @@ function schemaSql(): string {
     "DEFINE INDEX IF NOT EXISTS memory_source ON memory FIELDS source;",
     "DEFINE INDEX IF NOT EXISTS memory_ann ON memory FIELDS annIndexed;",
     "DEFINE INDEX IF NOT EXISTS memory_embed_model ON memory FIELDS embedModel;",
+    "DEFINE INDEX IF NOT EXISTS repair_proposal_status ON repair_proposal FIELDS status, createdAt;",
   );
   return lines.join("\n");
 }
@@ -865,6 +868,31 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
          ORDER BY lastCheckedAt DESC`,
         { chat: chatId },
       );
+    }),
+
+    // -- post-mortem repair proposals (#13) -----------------------------------------
+    saveRepairProposal: guard("saveRepairProposal", async (p: RepairProposal) => {
+      const b = new Batch();
+      b.add(
+        `UPSERT ${b.bind(rid("repair_proposal", p.id))} CONTENT ${b.bind({
+          doc: plain(p),
+          attemptId: p.attemptId,
+          complaintId: p.complaintId,
+          category: p.category,
+          status: p.status,
+          createdAt: p.createdAt,
+        })} RETURN NONE`,
+      );
+      await run(b);
+      return p;
+    }),
+    getRepairProposal: guard("getRepairProposal", (id: string) => readOne<RepairProposal>("repair_proposal", id)),
+    listRepairProposals: guard("listRepairProposals", async (args?: { status?: RepairProposal["status"]; limit?: number }) => {
+      const where = args?.status ? "WHERE status = $status" : "";
+      return readDocs<RepairProposal>(`SELECT id, doc, createdAt FROM repair_proposal ${where} ORDER BY createdAt DESC LIMIT $limit`, {
+        status: args?.status,
+        limit: args?.limit ?? 100,
+      });
     }),
 
     // -- idempotency -----------------------------------------------------------
