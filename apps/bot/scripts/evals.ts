@@ -15,6 +15,8 @@
  *   pnpm --filter @311relay/bot evals -- --api http://localhost:3399
  *   pnpm --filter @311relay/bot evals -- --only subway-delay-a-train --with-dry-run subway-delay-a-train
  *   pnpm --filter @311relay/bot evals -- --routing       # #8 router: fixtures/routing-evals.json, top-1 / top-3 / latency
+ *   pnpm --filter @311relay/bot evals -- --postmortem    # #13 self-repair: replay the failing fixture before/after an approved repair
+ *                                                        #     (offline, in-memory store; --llm uses the real OpenRouter diagnoser)
  *
  * Requires the bot API running (`pnpm --filter @311relay/bot dev`, or for a local copy next to the live bot:
  * `TELEGRAM_BOT_TOKEN= PORT_API=3399 pnpm --filter @311relay/bot start` + `--api http://localhost:3399`).
@@ -101,6 +103,9 @@ type EventResponse = {
 
 class ApiDown extends Error {}
 
+/** POST /api/event needs the operator token when the bot has one (#23); loopback works without it. */
+const operatorAuth: Record<string, string> = process.env.OPERATOR_API_TOKEN ? { authorization: `Bearer ${process.env.OPERATOR_API_TOKEN}` } : {};
+
 async function http<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   let res: Response;
   try {
@@ -118,7 +123,7 @@ async function http<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIM
 async function send(chatId: string, ev: EventBody, timeoutMs?: number): Promise<EventResponse> {
   const r = await http<EventResponse>(
     "/api/event",
-    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chatId, username: "eval_bot", ...ev }) },
+    { method: "POST", headers: { "content-type": "application/json", ...operatorAuth }, body: JSON.stringify({ chatId, username: "eval_bot", ...ev }) },
     timeoutMs,
   );
   return { ...r, messages: r.messages ?? [] };
@@ -360,6 +365,54 @@ async function runRoutingSuite(): Promise<never> {
   process.exit(summary.targetsMet ? 0 : 1);
 }
 
+/**
+ * #13 close-the-loop eval: the "Cross Street 2" fixture fails the required-field check against the category's
+ * learned schema, the post-mortem proposes the field, an operator approves it, and the replayed check must now pass.
+ */
+async function runPostmortemSuite(): Promise<never> {
+  const { createMemoryStore } = await import("../src/integrations/memory-store.js");
+  const { createHashEmbedder } = await import("../src/integrations/embedder.js");
+  const { createAgentMemory } = await import("../src/services/agent-memory.js");
+  const { crossStreet2Attempt: fixture } = await import("../src/services/__fixtures__/postmortem-attempt.js");
+  const { currentRequiredFields, decideAndApply, llmDiagnose, runPostmortem } = await import("../src/services/postmortem.js");
+  const useLlm = flag("llm");
+  console.log(`311Relay post-mortem eval · fixture ${fixture.id} · diagnoser ${useLlm ? "LLM (OpenRouter)" : "deterministic stub"}`);
+
+  const store = createMemoryStore();
+  const memory = createAgentMemory({ store, embedder: createHashEmbedder() });
+  await store.createAttempt(fixture);
+  // The field the form rejected the run for (the fixture's validate event).
+  const missing = String(fixture.workerEvents.find((e) => e.step === "validate")?.data?.label ?? "");
+  const replay = async () => ((await currentRequiredFields(store, fixture.category)).requiredFields ?? []).some((l) => l.toLowerCase() === missing.toLowerCase());
+
+  const before = await replay();
+  console.log(`  before repair : ${before ? "PASS" : "FAIL"} (form requires "${missing}"; known up front: ${before})`);
+  const r = await runPostmortem(
+    {
+      store,
+      memory,
+      diagnoser: useLlm
+        ? llmDiagnose
+        : async () => ({ cause: "missing_required_field", confidence: 0.8, proposedChanges: [{ kind: "requiredField", before: null, after: missing, evidence: fixture.evidence.filter((e) => e.step === "validate").map((e) => e.id) }] }),
+    },
+    fixture.id,
+  );
+  if (!r) {
+    console.error("  ✗ no repair proposal was produced");
+    process.exit(1);
+  }
+  console.log(`  proposal      : ${r.proposal.id} ${r.proposal.cause} conf=${r.proposal.confidence} status=${r.proposal.status} changes=${JSON.stringify(r.proposal.proposedChanges.map((c) => `${c.kind}:${c.after}`))}`);
+  const decided = r.proposal.status === "pending" ? await decideAndApply({ store, memory }, r.proposal, "approved") : r.proposal;
+  await memory.flush();
+  console.log(`  approved      : by ${decided.decidedBy} · applied ${JSON.stringify(decided.applied ?? [])}`);
+  const after = await replay();
+  console.log(`  after repair  : ${after ? "PASS" : "FAIL"}`);
+  const ok = !before && after;
+  console.log(ok ? "✓ post-mortem loop closed" : "✗ post-mortem loop NOT closed");
+  process.exit(ok ? 0 : 1);
+}
+
+if (flag("postmortem")) await runPostmortemSuite();
 if (flag("routing")) await runRoutingSuite();
 
 const scenarios = loadScenarios();

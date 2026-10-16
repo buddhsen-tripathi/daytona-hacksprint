@@ -9,16 +9,15 @@ import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { openBrowser, type BrowserSession } from "./browser.js";
 import { Recorder } from "./evidence.js";
-import { createMtaSubwayDelayAdapter } from "./adapters/mta-subway-delay.js";
+import { resolveAdapter } from "./adapters/registry.js";
 import { payloadSummary } from "./adapters/common.js";
-import type { AdapterContext, FormAdapter, WorkerState } from "./adapters/types.js";
+import type { AdapterContext, WorkerState } from "./adapters/types.js";
 import {
   DEFAULT_QUESTION_TIMEOUT_MS,
   Outcome,
   nowIso,
   sanitizeUrl,
   validatePayload,
-  type CategoryId,
   type FilingErrorCode,
   type FilingPayload,
   type FilingStatus,
@@ -112,18 +111,6 @@ async function finalEvidence() {
   }
 }
 
-/**
- * Adapter registry: one official-form adapter per category. subway-delay drives the MTA wizard end to end (the final
- * Submit is gated by payload.realSubmitAuthorized inside the adapter). Adding a category = one entry here.
- */
-const ADAPTERS: Partial<Record<CategoryId, () => FormAdapter>> = {
-  "subway-delay": createMtaSubwayDelayAdapter,
-};
-
-function pickAdapter(p: FilingPayload): FormAdapter | null {
-  return ADAPTERS[p.category]?.() ?? null;
-}
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const QID_RE = /^[A-Za-z0-9_-]{1,24}$/;
 const askedIds = new Set<string>();
@@ -189,10 +176,13 @@ async function run() {
   payload = raw as FilingPayload;
   rec.log("navigate", "info", "worker started", { attemptId, complaintId: payload.complaintId, approvedVersion: payload.approvedVersion, ...payloadSummary(payload) });
 
-  const adapter = pickAdapter(payload);
-  if (!adapter) {
-    return writeResult("FAILED", null, `No filing adapter for category "${String(payload.category)}". Nothing was opened or submitted.`, { category: payload.category });
+  // Adapter registry (adapters/registry.ts), resolved before any browser opens.
+  const resolved = resolveAdapter(payload);
+  if (!resolved.ok) {
+    return writeResult("FAILED", "NO_ADAPTER", `${resolved.reason} Nothing was opened or submitted.`, { category: payload.category, automation: resolved.automation });
   }
+  const adapter = resolved.create();
+  rec.log("navigate", "info", "adapter resolved", { adapter: resolved.adapterId, automation: resolved.automation });
 
   try {
     session = await openBrowser(payload, (m, d) => rec.log(currentStep, "info", m, d));
@@ -215,6 +205,7 @@ async function run() {
           : new Outcome("HUMAN_ACTION_REQUIRED", "OFF_ALLOWLIST_NAVIGATION", `During ${step} the form tried to navigate to a site that is not allowed (${s.guard.offAllowlistUrl}). 311Relay stopped.`);
     },
     ask: (q, fallback) => askResident(s, q, fallback),
+    action: (a) => rec.log(currentStep, "info", "action", { action: a }),
   };
 
   const step = async <T>(name: WorkerStep, fn: () => Promise<T>): Promise<T> => {

@@ -98,6 +98,7 @@ import {
   type FieldPhraser,
   type LearnedField,
 } from "../services/field-questions.js";
+import { runPostmortem, type Diagnoser } from "../services/postmortem.js";
 
 export type { FilingService, StatusService } from "../integrations/fallbacks.js";
 
@@ -127,6 +128,11 @@ export type OrchestratorDeps = {
   directionDuringFiling?: boolean;
   /** #12: plain-language phrasing of learned form fields (default: LLM once per label, cached as semantic memory). */
   fieldPhraser?: FieldPhraser;
+  /**
+   * #13 post-mortem self-repair, fired async after the outcome message (never blocks or throws into it).
+   * Absent ⇒ off (tests); index.ts enables it unless POSTMORTEM=0. `diagnoser` overrides the LLM (tests/evals).
+   */
+  postmortem?: { diagnoser?: Diagnoser } | null;
 };
 
 /** A live worker question waiting for the resident (in-memory, keyed by complaint id). */
@@ -1323,7 +1329,22 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       tracer.span("telegram.filing_outcome", { "complaint.id": approved.id, "filing.status": outcome.status, "filing.error_code": outcome.errorCode ?? "" }, async () => {
         await renderOutcome(ctx, approved, outcome);
       }),
-    ).finally(() => outcomeSent());
+    ).finally(() => {
+      outcomeSent();
+      schedulePostmortem(ctx, approved, outcome);
+    });
+  }
+
+  /** #13: post-mortem after the outcome was sent. Fire-and-forget; every failure is swallowed (logged). */
+  function schedulePostmortem(ctx: Ctx, approved: ComplaintDraft, outcome: FilingOutcome) {
+    const pm = deps.postmortem;
+    if (!pm || !outcome.attemptId || outcome.attemptId === "unknown") return;
+    void tracer
+      .withSession({ sessionId: ctx.chatId, metadata: { complaintId: approved.id } }, async () => {
+        const r = await runPostmortem({ store, tracer, memory, diagnoser: pm.diagnoser }, outcome.attemptId);
+        if (r?.askUpFront.length) await ctx.t.send({ chatId: ctx.chatId, text: M.learnedFromAttempt(r.askUpFront), parseMode: "HTML" });
+      })
+      .catch((err) => console.warn("[orchestrator] post-mortem failed:", (err as Error).message));
   }
 
   /**

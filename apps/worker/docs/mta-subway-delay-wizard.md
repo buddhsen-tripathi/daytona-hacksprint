@@ -75,3 +75,7 @@ Possible results: a number gives `officialRequestNumber` + `confirmationText`. A
 ## Screenshots (`docs/mta/`)
 
 01-landing, 02-service, 03-i-have-a, 04-related-to, 05-about, 06-line, 07-direction, 08-station-picker, 09-additional-info, 10-tell-us-more (filled), 11-contact-submit (filled final page, before Submit).
+
+## As a recipe (#9)
+
+The same path is expressed declaratively in `fixtures/recipes/subway-delay.json` (run by `src/adapters/recipe.ts` with `automation: "adapter:recipe"`). This hand-written adapter stays the reference implementation. `test/recipe-equivalence.test.ts` checks both take the same actions on a local mock of the wizard, and `node scripts/run-mta-dryrun.mjs --recipe` runs the recipe against the real form as a dry run. The recipe leaves the optional date/time picker and the borough filter for duplicate station names at the form default.

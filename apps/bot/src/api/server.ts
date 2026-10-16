@@ -5,16 +5,19 @@
  * Auth (#23): with OPERATOR_API_TOKEN set, GET /api/* needs `Authorization: Bearer <token>`; with it unset,
  * only loopback callers are trusted (local dev). /api/health is always open. An untrusted caller may still
  * read GET /api/memory?complaintId=… (the complaint id acts as a capability), with chat ids / contact fields
- * redacted. Everything else ⇒ 401 JSON. POST /api/event and /telegram/webhook are unchanged.
+ * redacted. Everything else ⇒ 401 JSON. POST /api/event needs the same operator check (it can act as any chat,
+ * including an approve tap). /telegram/webhook is guarded by TELEGRAM_WEBHOOK_SECRET.
+ * POST /api/repairs/:id/approve|reject (#13) uses the same operator check (401 otherwise).
  */
 import { timingSafeEqual } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
-import type { AgentMemory, CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
+import type { AgentMemory, CatalogEntry, CategoryId, RepairProposal, Store, Tracer } from "../core/contracts.js";
 import { CATEGORIES, InboundEvent, MemoryKind } from "../core/contracts.js";
 import { createAgentMemory, recallForComplaintCached } from "../services/agent-memory.js";
 import { categorySchemaView } from "../services/form-schema-memory.js";
+import { decideAndApply } from "../services/postmortem.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
 import { env, hasTelegram, REPO_ROOT } from "../integrations/env.js";
@@ -180,6 +183,18 @@ export function createApiServer(deps: ApiDeps): Server {
             const items = await memory.recall({ text: url.searchParams.get("q") ?? undefined, kind: kind.success ? kind.data : undefined, limit });
             return json(res, 200, { items });
           }
+          case "repairs": {
+            // #13: post-mortem repair proposals (+ the screenshots / evidence they cite)
+            if (!store.listRepairProposals || !store.getRepairProposal) return json(res, 200, { repairs: [] });
+            if (seg[2]) {
+              const p = await store.getRepairProposal(decodeURIComponent(seg[2]));
+              return p ? json(res, 200, { repair: await withRepairEvidence(store, p) }) : json(res, 404, { error: "repair proposal not found" });
+            }
+            const st = url.searchParams.get("status");
+            const status = st === "pending" || st === "approved" || st === "rejected" ? st : undefined;
+            const list = await store.listRepairProposals({ status, limit: Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 100) || 100)) });
+            return json(res, 200, { repairs: await Promise.all(list.map((p) => withRepairEvidence(store, p))) });
+          }
           case "workflow-patterns":
             return json(res, 200, { patterns: await allPatterns(store) });
           case "residents": {
@@ -199,8 +214,23 @@ export function createApiServer(deps: ApiDeps): Server {
         }
       }
 
+      // POST /api/repairs/:id/approve | /reject (#13): operator only. Approve applies requiredField changes only.
+      if (req.method === "POST" && seg[1] === "repairs") {
+        if (!isOperator(req)) return json(res, 401, { error: "unauthorized", message: "Authorization: Bearer <OPERATOR_API_TOKEN> required" });
+        const action = seg[3];
+        if (!seg[2] || seg.length !== 4 || (action !== "approve" && action !== "reject")) return json(res, 404, { error: "not found" });
+        const p = await store.getRepairProposal?.(decodeURIComponent(seg[2]));
+        if (!p) return json(res, 404, { error: "repair proposal not found" });
+        if (p.status !== "pending") return json(res, 409, { error: `repair proposal already ${p.status}`, repair: p });
+        const decided = await decideAndApply({ store, memory }, p, action === "approve" ? "approved" : "rejected");
+        return json(res, 200, { repair: await withRepairEvidence(store, decided) });
+      }
+
       // POST /api/event (legacy alias: /api/demo/event).
       if (req.method === "POST" && (seg[1] === "event" || (seg[1] === "demo" && seg[2] === "event"))) {
+        if (!isOperator(req)) {
+          return json(res, 401, { error: "unauthorized", message: "Authorization: Bearer <OPERATOR_API_TOKEN> required" });
+        }
         const body = JSON.parse((await readBody(req)) || "{}");
         const parsed = InboundEvent.safeParse({ updateId: `api-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, username: null, ...body });
         if (!parsed.success) return json(res, 400, { error: "invalid InboundEvent", issues: parsed.error.issues });
@@ -267,6 +297,14 @@ async function sameIssueOf(store: Store, complaintId: string): Promise<{ origina
     console.warn("[api] getIssueLinks failed:", (err as Error).message);
     return null;
   }
+}
+
+/** A proposal plus the evidence rows it cites (same shape as GET /api/complaints/:id evidence) and the attempt outcome. */
+async function withRepairEvidence(store: Store, p: RepairProposal) {
+  const cited = new Set(p.proposedChanges.flatMap((c) => c.evidence));
+  const attempt = await store.getAttempt(p.attemptId).catch(() => null);
+  const evidence = (attempt?.evidence ?? []).filter((e) => cited.has(e.id));
+  return { ...p, evidence, traceId: attempt?.traceId ?? null, outcome: attempt?.outcome ?? null, errorCode: attempt?.errorCode ?? null };
 }
 
 async function allPatterns(store: Store) {

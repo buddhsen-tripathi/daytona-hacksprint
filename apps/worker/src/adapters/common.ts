@@ -1,6 +1,7 @@
 import type { Page } from "playwright-core";
 import { Outcome, nowIso, type FilingPayload, type FormField, type FormFieldType, type FormSchema } from "../protocol.js";
 import type { AdapterContext } from "./types.js";
+import { normLabel } from "./fields.js";
 
 export const BOROUGHS = ["Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"] as const;
 export type Borough = (typeof BOROUGHS)[number];
@@ -145,6 +146,70 @@ export function payloadSummary(p: FilingPayload) {
     hasAddress: !!p.form.address,
     borough: p.form.borough,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Option matching shared by the hand-written MTA adapter and the recipe interpreter (identical behaviour).
+// ---------------------------------------------------------------------------
+const STOP = new Set(["the", "to", "toward", "towards", "train", "trains", "line", "bound", "going", "heading", "headed", "direction", "in", "on", "at", "st", "av", "ave", "avs", "street", "avenue", "and", "of", "from", "into", "a", "an", "way", "side", "service", "-", "&"]);
+const SYN: Record<string, string> = { northbound: "uptown", north: "uptown", up: "uptown", southbound: "downtown", south: "downtown", down: "downtown", center: "ctr", centre: "ctr", square: "sq", wtc: "ctr", bx: "bronx", bk: "brooklyn", bklyn: "brooklyn", city: "manhattan" };
+
+export function tokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/-bound\b/g, " ")
+    .replace(/(\d+)(st|nd|rd|th)\b/g, "$1")
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t && !STOP.has(t))
+    .map((t) => SYN[t] ?? t);
+}
+
+/**
+ * Pick the option whose (core) label best overlaps what the resident said, token-wise (synonyms: northbound→uptown, …).
+ * Unique best overlap wins; zero overlap or a tie ⇒ null (ask, never guess).
+ */
+export function matchByTokens(said: string | null | undefined, options: string[], core: (label: string) => string = (l) => l): string | null {
+  const want = new Set(tokens(said ?? ""));
+  if (!want.size || !options.length) return null;
+  const scored = options.map((o) => {
+    const have = new Set(tokens(core(o)));
+    let score = 0;
+    for (const t of want) if (have.has(t)) score++;
+    return { o, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  if (scored[0]!.score === 0) return null;
+  if (scored.length > 1 && scored[1]!.score === scored[0]!.score) return null;
+  return scored[0]!.o;
+}
+
+export function normName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\bstreet\b/g, "st")
+    .replace(/\bavenue\b/g, "av")
+    .replace(/\bave\b/g, "av")
+    .replace(/\bavenues\b|\bavs\b/g, "avs")
+    .replace(/\bsquare\b/g, "sq")
+    .replace(/\bcenter\b/g, "ctr")
+    .replace(/\bparkway\b/g, "pkwy")
+    .replace(/\bboulevard\b/g, "blvd")
+    .replace(/\bwest\b/g, "w")
+    .replace(/\beast\b/g, "e")
+    .replace(/(\d+)(st|nd|rd|th)\b/g, "$1")
+    .replace(/\bstation\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Options for what the resident said: exact (normalized: street→st, 14th→14, …) matches, else whole-word contains matches. */
+export function nameCandidates(said: string | null | undefined, options: string[]): string[] {
+  const w = normName(said ?? "");
+  if (!w) return [];
+  const exact = options.filter((o) => normName(o) === w);
+  if (exact.length) return exact;
+  const re = new RegExp(`(^| )${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
+  return options.filter((o) => re.test(normName(o)));
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +471,8 @@ export function updateFormStep(ctx: AdapterContext, stepTitle: string, update: (
   if (cur) emitFormStep(ctx, { title: stepTitle, fields: update(cur.fields) });
 }
 
-function emitFormStep(ctx: AdapterContext, step: FormStepSchema): FormStepSchema {
+/** Merge a step into ctx.state.formSchema and emit its `form_schema` event (no capture; adapters that list fields themselves). */
+export function emitFormStep(ctx: AdapterContext, step: FormStepSchema): FormStepSchema {
   ctx.state.formSchema = mergeFormStep(ctx.state.formSchema, step);
   ctx.log("inspect", "info", "form_schema", { stepTitle: step.title, fields: step.fields });
   return step;
@@ -416,14 +482,8 @@ function emitFormStep(ctx: AdapterContext, step: FormStepSchema): FormStepSchema
 // extraFields (issue #12): resident answers to learned required fields, keyed by the official label
 // ---------------------------------------------------------------------------
 
-/** Label → comparable form: lower case, "(optional)"/"(required)"/"*"/punctuation dropped, spaces collapsed. */
-export function normalizeLabel(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/\((optional|required)\)/g, " ")
-    .replace(/[^a-z0-9#]+/g, " ")
-    .trim();
-}
+/** Label → comparable form (same rule as the hand-off / recipe adapters, fields.ts `normLabel`). */
+export const normalizeLabel = normLabel;
 
 /** The resident's answer for a form label: exact label first, then normalised. No fuzzy match here (generic matching is #9). */
 export function matchExtraField(extra: Record<string, string> | undefined, label: string): { key: string; value: string } | null {

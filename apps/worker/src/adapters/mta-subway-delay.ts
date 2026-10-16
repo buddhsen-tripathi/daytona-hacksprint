@@ -18,7 +18,8 @@
 import type { Locator, Page } from "playwright-core";
 import { Outcome, SUBWAY_LINES, sanitizeUrl, type FormField, type TransitDetails } from "../protocol.js";
 import { detectCaptcha, detectLogin } from "../safety.js";
-import { fillByLabel, gotoWithRetries, matchExtraField, needField, needFieldOutcome, normalizeBorough, recordFormSchema, updateFormStep } from "./common.js";
+import { fillByLabel, gotoWithRetries, matchByTokens, matchExtraField, nameCandidates, needField, needFieldOutcome, normalizeBorough, recordFormSchema, updateFormStep } from "./common.js";
+import { labelOf } from "./fields.js";
 import type { AdapterContext, ConfirmResult, FormAdapter } from "./types.js";
 
 export const MTA_FEEDBACK_URL = "https://contact.mta.info/s/customer-feedback";
@@ -50,19 +51,6 @@ export function lineButtonLabel(line: string | null | undefined): string | null 
   return hit ? `${hit} Line` : null;
 }
 
-const STOP = new Set(["the", "to", "toward", "towards", "train", "trains", "line", "bound", "going", "heading", "headed", "direction", "in", "on", "at", "st", "av", "ave", "avs", "street", "avenue", "and", "of", "from", "into", "a", "an", "way", "side", "service", "-", "&"]);
-const SYN: Record<string, string> = { northbound: "uptown", north: "uptown", up: "uptown", southbound: "downtown", south: "downtown", down: "downtown", center: "ctr", centre: "ctr", square: "sq", wtc: "ctr", bx: "bronx", bk: "brooklyn", bklyn: "brooklyn", city: "manhattan" };
-
-function tokens(s: string): string[] {
-  return s
-    .toLowerCase()
-    .replace(/-bound\b/g, " ")
-    .replace(/(\d+)(st|nd|rd|th)\b/g, "$1")
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t && !STOP.has(t))
-    .map((t) => SYN[t] ?? t);
-}
-
 /**
  * Strip the line prefix: "A Train-Uptown (Inwood-207 St)" → "Uptown (Inwood-207 St)",
  * "S-42 Street Shuttle-Times Sq-42 St" → "Times Sq-42 St", "Staten Island Railway-St. George" → "St. George".
@@ -79,48 +67,12 @@ export function directionCore(label: string): string {
  * "downtown" → "A Train-Downtown & Queens"; "toward Inwood" → "A Train-Uptown (Inwood-207 St)"; "Brooklyn" on A ⇒ null (ask).
  */
 export function matchDirection(said: string | null | undefined, options: string[]): string | null {
-  const want = new Set(tokens(said ?? ""));
-  if (!want.size || !options.length) return null;
-  const scored = options.map((o) => {
-    const have = new Set(tokens(directionCore(o)));
-    // "uptown & the bronx": treat the conjunction parts as one option; overlap count only.
-    let score = 0;
-    for (const t of want) if (have.has(t)) score++;
-    return { o, score };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  if (scored[0]!.score === 0) return null;
-  if (scored.length > 1 && scored[1]!.score === scored[0]!.score) return null;
-  return scored[0]!.o;
-}
-
-function normStation(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/\bstreet\b/g, "st")
-    .replace(/\bavenue\b/g, "av")
-    .replace(/\bave\b/g, "av")
-    .replace(/\bavenues\b|\bavs\b/g, "avs")
-    .replace(/\bsquare\b/g, "sq")
-    .replace(/\bcenter\b/g, "ctr")
-    .replace(/\bparkway\b/g, "pkwy")
-    .replace(/\bboulevard\b/g, "blvd")
-    .replace(/\bwest\b/g, "w")
-    .replace(/\beast\b/g, "e")
-    .replace(/(\d+)(st|nd|rd|th)\b/g, "$1")
-    .replace(/\bstation\b/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+  return matchByTokens(said, options, directionCore);
 }
 
 /** Candidate station options for what the resident said: exact (normalized) matches, else whole-word contains matches. */
 export function stationCandidates(said: string | null | undefined, options: string[]): string[] {
-  const w = normStation(said ?? "");
-  if (!w) return [];
-  const exact = options.filter((o) => normStation(o) === w);
-  if (exact.length) return exact;
-  const re = new RegExp(`(^| )${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
-  return options.filter((o) => re.test(normStation(o)));
+  return nameCandidates(said, options);
 }
 
 /** Unique station option or null. */
@@ -238,6 +190,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
       if (await fillByLabel(ctx.page, label, hit.value)) {
         usedExtra.add(hit.key);
         done.push({ label, value: hit.value });
+        ctx.action({ kind: "fill", target: label, chars: hit.value.length });
         ctx.log("fill", "info", `filled "${clean(label, 60)}" from the resident's answer (learned required field)`);
       }
     }
@@ -281,6 +234,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
     const btn = ctx.page.getByRole("button", { name, exact: true }).first();
     await btn.waitFor({ state: "visible", timeout: stepMs(ctx) });
     await btn.click();
+    ctx.action({ kind: "choose", target: name });
     ctx.log("fill", "info", `chose "${name}"`);
   }
 
@@ -296,6 +250,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
       needField(`The MTA form would not continue past "${what}" (a required choice is missing).`, { step: what, page: clean(before, 400) });
     }
     await cont.click();
+    ctx.action({ kind: "continue", target: "Continue" });
     const changed = await waitFor(async () => (await wizardText(page)) !== before, stepMs(ctx));
     if (!changed) throw new Outcome("FAILED", "BROWSER_ERROR", `The MTA wizard did not move past "${what}" after Continue; nothing was submitted.`);
     await page.waitForTimeout(900); // Skuid renders the next question's buttons asynchronously
@@ -359,11 +314,13 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
     const want = t?.station?.trim();
     if (!want) {
       filled.skipped.push("station (not given)");
+      ctx.action({ kind: "skip", target: "station" });
       ctx.log("fill", "info", "no station given; leaving the optional station picker empty");
     } else {
       const picker = page.locator('button[aria-haspopup="listbox"]').filter({ visible: true }).first();
       if (!(await picker.count())) {
         filled.skipped.push("station (picker not found)");
+        ctx.action({ kind: "skip", target: "station" });
         ctx.log("fill", "warn", "station picker not found; skipping (optional)");
       } else {
         const readOptions = async () => {
@@ -429,9 +386,11 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
           await list.getByRole("option", { name: hit, exact: true }).first().click();
           await page.waitForTimeout(500);
           filled.station = hit;
+          ctx.action({ kind: "pick", target: hit });
           ctx.log("fill", "info", `station "${want}" matched "${hit}"`, { optionCount: options.length });
         } else {
           await page.keyboard.press("Escape").catch(() => {});
+          ctx.action({ kind: "skip", target: "station" });
           filled.skipped.push(`station ("${want}" ${cands.length ? `ambiguous: ${cands.join(" / ")}` : "not on this line's list"})`);
           ctx.log("fill", "warn", `station "${want}" not matched uniquely (optional, left empty)`, { optionCount: options.length, candidates: cands, sample: options.slice(0, 10) });
         }
@@ -455,6 +414,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
     await ta.fill(text);
     filled.descriptionLen = text.length;
     filled.descriptionOk = (await ta.inputValue()) === text;
+    ctx.action({ kind: "fill", target: (await labelOf(ta)) || "Tell us more", chars: text.length });
 
     const parts = nycDateTimeParts(t?.incidentTime);
     if (!parts) {
@@ -481,6 +441,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         const shown = [await dateInput.inputValue(), ...(await sels.allInnerTexts()).map((s) => s.split("\n")[0]!.trim())];
         filled.dateTime = `${shown[0]} ${shown[1]}:${shown[2]} ${shown[3]}`;
         if (shown[0] !== parts.date) throw new Error(`date shows "${shown[0]}"`);
+        ctx.action({ kind: "fill", target: "date/time", chars: filled.dateTime.length });
         ctx.log("fill", "info", `incident time set to ${filled.dateTime} (New York time)`);
       } catch (err) {
         // Optional field: leave it blank rather than half-set.
@@ -534,13 +495,14 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         if (fd.value()) ctx.log("fill", "info", `the MTA form has no ${fd.what} field; not sent`);
         continue;
       }
-      const label = clean((await box.evaluate((e) => (e as HTMLInputElement).labels?.[0]?.innerText ?? e.getAttribute("aria-label") ?? "").catch(() => "")) || fd.what, 60);
+      const label = (await labelOf(box)) || fd.what;
       const required = !/optional/i.test(label) && (/required|\*/i.test(label) || (await box.evaluate((e) => (e as HTMLInputElement).required || e.getAttribute("aria-required") === "true")));
       if (!fd.value() && required) await askFor(fd.what, label);
       const value = fd.value();
       if (!value) continue;
       await box.fill(value);
       filled.contact.push({ label, value });
+      ctx.action({ kind: "fill", target: label, chars: value.length });
     }
     // #12: inputs matching a learned required field the resident already answered (exact / normalised label).
     filled.contact.push(...(await fillExtraFields(ctx)));
@@ -562,6 +524,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         if (!a.value) throw fallback;
         await box.fill(a.value);
         filled.contact.push({ label: u.label, value: a.value });
+        ctx.action({ kind: "fill", target: clean(u.label, 60), chars: a.value.length });
       }
       if (unknownRequired.length > 3) throw fallback;
     }
@@ -579,11 +542,13 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
       await ctx.shot("navigate", "mta-feedback-loaded");
       await safetyCheck(ctx, "navigate");
       await ctx.page.getByRole("button", { name: /^get started$/i }).first().click();
+      ctx.action({ kind: "click", target: "Get started" });
       for (const [i, choice] of FIXED_PATH.entries()) {
         const btn = ctx.page.getByRole("button", { name: choice, exact: true }).first();
         await btn.waitFor({ state: "visible", timeout: stepMs(ctx) });
         await snap(ctx, FIXED_PATH_TITLES[i]!);
         await btn.click();
+        ctx.action({ kind: "choose", target: choice });
         ctx.log("navigate", "info", `chose "${choice}"`);
         await advance(ctx, "navigate", choice);
       }
@@ -681,6 +646,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         await ctx.shot("submit", "dry-run-stop", caption ? `Dry run: everything filled, stopped before "${SUBMIT_LABEL}" (${filled.breadcrumb})` : `Dry run: everything filled, stopped before "${SUBMIT_LABEL}"`);
         if (caption) await page.evaluate(() => document.getElementById("relay-evidence-caption")?.remove()).catch(() => {});
         await ctx.saveHtml("submit", "dry-run-stop");
+        ctx.action({ kind: "stop", target: SUBMIT_LABEL });
         throw new Outcome("HUMAN_ACTION_REQUIRED", null, "Stopped before the final Submit (dry run). Everything is filled in.", {
           dryRun: true,
           liveViewUrl: ctx.payload.liveViewUrl,
@@ -692,6 +658,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
       if (!(await btn.isEnabled())) throw new Outcome("FAILED", "BROWSER_ERROR", `"${SUBMIT_LABEL}" is disabled; nothing was submitted.`);
       ctx.log("submit", "warn", `realSubmitAuthorized=true: clicking "${SUBMIT_LABEL}" exactly once`);
       ctx.state.submitClicked = true;
+      ctx.action({ kind: "submit", target: SUBMIT_LABEL });
       await btn.click({ noWaitAfter: true, timeout: 10_000 });
     },
 

@@ -1,0 +1,177 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>MTA wizard mock (test fixture)</title>
+    <!--
+      Local stand-in for https://contact.mta.info/s/customer-feedback with the same structure the adapters rely on
+      (apps/worker/docs/mta-subway-delay-wizard.md): aria-label-only choice buttons, Continue disabled until a choice,
+      "Details:" breadcrumb, a listbox station picker, "Tell us more" textarea, optional contact fields and
+      "Submit your feedback". Only line A is mapped. Used to compare the recipe with the hand-written adapter.
+    -->
+  </head>
+  <body>
+    <main id="app"></main>
+    <footer><p>THE MTA</p><p>Footer links</p></footer>
+    <script>
+      window.__submitted = false;
+      const LINES = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D", "F", "M", "N", "Q", "R", "W", "G", "L", "J", "Z", "S-42 Street Shuttle", "S-Franklin Av Shuttle", "S-Rockaway Park Shuttle", "Staten Island Railway"];
+      const DIRECTIONS = { A: ["A Train-Uptown (Inwood-207 St)", "A Train-Downtown & Queens"] };
+      const STATIONS = { A: ["Inwood-207 St", "168 St", "125 St", "59 St-Columbus Circle", "42 St-Port Authority Bus Terminal", "34 St-Penn Station", "14 St", "W 4 St-Wash Sq", "Fulton St", "Jay St-MetroTech", "Hoyt-Schermerhorn Sts", "Euclid Av"] };
+      const sel = { line: null, direction: null, station: null };
+      let step = 0;
+      const app = document.getElementById("app");
+      const choiceStep = (q, options, key) => ({ q, options, key });
+      const steps = [
+        "landing",
+        choiceStep("Which service?", ["Subways", "Buses", "Long Island Rail Road", "Metro-North Railroad"], "service"),
+        choiceStep("I have a…", ["Complaint or issue", "Compliment", "Request", "Suggestion"], "topic"),
+        choiceStep("Related to…", ["At a station", "On a train", "Service and schedule", "Something else"], "related"),
+        choiceStep("About…", ["Delay", "Planned service change", "Rerouting", "Something else"], "about"),
+        "line",
+        "direction",
+        "station",
+        "additional",
+        "details",
+        "contact",
+        "thanks",
+      ];
+      const crumb = () => "Details: " + [sel.line, sel.direction && sel.direction.replace(/^.*?Train-/, ""), sel.station].filter(Boolean).join(" / ");
+      function cont(enabled) {
+        const b = document.createElement("button");
+        b.textContent = "Continue";
+        b.disabled = !enabled;
+        b.onclick = () => {
+          step++;
+          render();
+        };
+        return b;
+      }
+      function choices(options, onPick, labelOf = (o) => o) {
+        const wrap = document.createElement("div");
+        for (const o of options) {
+          const b = document.createElement("button");
+          b.setAttribute("aria-label", labelOf(o));
+          b.onclick = () => {
+            onPick(o);
+            document.getElementById("continue-slot").firstChild.disabled = false;
+          };
+          wrap.appendChild(b);
+        }
+        return wrap;
+      }
+      function render() {
+        app.innerHTML = "";
+        const s = steps[step];
+        const h = (t) => {
+          const e = document.createElement("h2");
+          e.textContent = t;
+          app.appendChild(e);
+        };
+        const slot = document.createElement("div");
+        slot.id = "continue-slot";
+        if (s === "landing") {
+          h("Customer feedback");
+          const b = document.createElement("button");
+          b.textContent = "Get started";
+          b.onclick = () => {
+            step++;
+            render();
+          };
+          app.appendChild(b);
+          return;
+        }
+        if (typeof s === "object") {
+          h(s.q);
+          app.appendChild(choices(s.options, () => {}));
+          slot.appendChild(cont(false));
+        } else if (s === "line") {
+          h("Select the line");
+          app.appendChild(choices(LINES, (l) => (sel.line = l), (l) => l + " Line"));
+          slot.appendChild(cont(false));
+        } else if (s === "direction") {
+          h("Which direction?");
+          const p = document.createElement("p");
+          p.textContent = crumb();
+          app.appendChild(p);
+          app.appendChild(choices(DIRECTIONS[sel.line] || [], (d) => (sel.direction = d)));
+          slot.appendChild(cont(false));
+        } else if (s === "station") {
+          h("Which station was nearest (if known)?");
+          const deck = document.createElement("div");
+          deck.setAttribute("data-te", "skuid__deck");
+          deck.innerHTML = "<div>Manhattan</div><div>Brooklyn</div><div>Queens</div>";
+          app.appendChild(deck);
+          const picker = document.createElement("button");
+          picker.setAttribute("aria-haspopup", "listbox");
+          picker.setAttribute("aria-controls", "station-list");
+          picker.textContent = "- - - -";
+          const list = document.createElement("ul");
+          list.id = "station-list";
+          list.setAttribute("role", "listbox");
+          list.hidden = true;
+          for (const st of STATIONS[sel.line] || []) {
+            const li = document.createElement("li");
+            li.setAttribute("role", "option");
+            li.textContent = st;
+            li.onclick = () => {
+              sel.station = st;
+              picker.textContent = st;
+              list.hidden = true;
+            };
+            list.appendChild(li);
+          }
+          picker.onclick = () => (list.hidden = !list.hidden);
+          document.onkeydown = (e) => {
+            if (e.key === "Escape") list.hidden = true;
+          };
+          app.appendChild(picker);
+          app.appendChild(list);
+          slot.appendChild(cont(true));
+        } else if (s === "additional") {
+          h("Additional Information");
+          app.insertAdjacentHTML("beforeend", '<label for="car">Car number</label><input id="car" type="text" />');
+          slot.appendChild(cont(true));
+        } else if (s === "details") {
+          const p = document.createElement("p");
+          p.textContent = crumb();
+          app.appendChild(p);
+          app.insertAdjacentHTML(
+            "beforeend",
+            '<label for="more">Tell us more (Required)</label><textarea id="more" placeholder="Please provide more details about your feedback"></textarea><p>0/4000</p>' +
+              '<p>When did this happen?</p><input id="date" placeholder="M/D/YYYY" />',
+          );
+          const c = cont(false);
+          slot.appendChild(c);
+          document.getElementById("more").addEventListener("input", (e) => (c.disabled = !e.target.value));
+        } else if (s === "contact") {
+          h("Contact details");
+          app.insertAdjacentHTML(
+            "beforeend",
+            "<p>Enter your contact information if you'd like us to follow up about your feedback.</p>" +
+              '<label for="fn">First name (optional)</label><input id="fn" type="text" />' +
+              '<label for="ln">Last name (optional)</label><input id="ln" type="text" />' +
+              '<label for="em">Email (optional)</label><input id="em" type="text" />' +
+              '<input id="news" type="checkbox" /><label for="news">Sign up to receive news and updates from the MTA</label>',
+          );
+          const submit = document.createElement("button");
+          submit.setAttribute("aria-label", "Submit your feedback");
+          submit.textContent = "Submit your feedback";
+          submit.onclick = () => {
+            window.__submitted = true;
+            step++;
+            render();
+          };
+          app.appendChild(submit);
+          return;
+        } else if (s === "thanks") {
+          h("Thank you for your feedback");
+          app.insertAdjacentHTML("beforeend", "<p>Your case number is 01234567.</p>");
+          return;
+        }
+        app.appendChild(slot);
+      }
+      render();
+    </script>
+  </body>
+</html>
