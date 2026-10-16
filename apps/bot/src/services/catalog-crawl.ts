@@ -158,8 +158,31 @@ export function filingScore(text: string): number {
   if (!t || /^(learn|visit|get |read|see |find|view|download|watch|check|look up|call)/i.test(t)) return 0;
   if (/^(report|file|complain|make a complaint|register a complaint)/i.test(t)) return 3;
   if (/^(submit|request|apply)/i.test(t)) return 2;
-  if (/\b(report|file|submit|complaint|complain|apply|feedback|claim|contact)\b/i.test(t)) return 1;
+  // "Street Lighting Repair Form", "Service request portal", …: the link names the form itself.
+  if (/\b(report|file|submit|complaint|complain|apply|feedback|claim|contact|form|repair|request)\b/i.test(t)) return 1;
   return 0;
+}
+
+/**
+ * Generic navigation targets that are never the filing route for the article they appear on
+ * (#28: "Contact your school" → find-a-school, lost pet → dog-license lookup, …).
+ */
+const NAV_DENYLIST: RegExp[] = [
+  /schools\.nyc\.gov\/find-a-school/i,
+  /\/locations-and-hours\/?/i,
+  /a816-healthpsi\.nyc\.gov\/DogLicense/i,
+  /^https?:\/\/(www\.)?nyc\.gov\/?(\?.*)?$/i,
+  /^https?:\/\/(www\.)?nyc\.gov\/(main\/)?(services|agencies|home|index\.page)\b/i,
+  /\/contact-us\b|\/contact\.page\b/i,
+];
+
+export function isGenericNav(url: string): boolean {
+  return NAV_DENYLIST.some((re) => re.test(url));
+}
+
+/** The always-open intro and "File a Complaint" / "Report …" sections hold the article's own filing route. */
+export function isFilingSection(title: string | null): boolean {
+  return title === null || /^(file|report|submit|make)\b|complaint$/i.test(title.replace(/["“”]/g, "").trim());
 }
 
 export function slugify(title: string): string {
@@ -186,9 +209,10 @@ export function findReportLinks(raw: RawArticle): ReportLink[] {
         continue;
       }
       if (!l.cls.includes("externallink") || !l.href) continue;
-      // A link inside a "… Complaint" / "Report …" section beats an equally worded one elsewhere on the page.
-      const score = filingScore(l.text) && filingScore(l.text) + (/complaint|report/i.test(card.title ?? "") ? 1 : 0);
-      if (score > 0 && channelForUrl(l.href)) ext.push({ kind: "external", url: new URL(l.href, PORTAL).href, agency: agencyFromUrl(l.href), text: l.text, score });
+      // A link in the intro or a "File a Complaint" / "Report …" section beats an equally worded one elsewhere.
+      const base = filingScore(l.text);
+      const score = base && base + (isFilingSection(card.title) ? 1 : 0);
+      if (score > 0 && channelForUrl(l.href) && !isGenericNav(new URL(l.href, PORTAL).href)) ext.push({ kind: "external", url: new URL(l.href, PORTAL).href, agency: agencyFromUrl(l.href), text: l.text, score });
     }
   }
   sr.sort((a, b) => Number(b.url !== null) - Number(a.url !== null));
