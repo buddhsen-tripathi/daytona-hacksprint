@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>Static official form (test fixture)</title></head>
+  <body>
+    <h1>Report a problem</h1>
+    <form id="f" onsubmit="window.__submitted = true; event.preventDefault();">
+      <label for="desc">Describe the problem (required)</label>
+      <textarea id="desc" name="desc" required></textarea>
+      <label for="btype">Building type</label>
+      <select id="btype" name="btype"><option value="">Choose…</option><option value="apt">Apartment</option><option value="house">House</option></select>
+      <label for="floor">Floor number</label>
+      <input id="floor" name="floor" type="text" />
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" />
+      <label for="pw">Password</label>
+      <input id="pw" name="pw" type="text" />
+      <button type="submit" id="submit">Submit</button>
+    </form>
+    <script>window.__submitted = false;</script>
+  </body>
+</html>

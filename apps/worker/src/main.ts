@@ -204,6 +204,7 @@ async function run() {
           : new Outcome("HUMAN_ACTION_REQUIRED", "OFF_ALLOWLIST_NAVIGATION", `During ${step} the form tried to navigate to a site that is not allowed (${s.guard.offAllowlistUrl}). 311Relay stopped.`);
     },
     ask: (q, fallback) => askResident(s, q, fallback),
+    action: (a) => rec.log(currentStep, "info", "action", { action: a }),
   };
 
   const step = async <T>(name: WorkerStep, fn: () => Promise<T>): Promise<T> => {

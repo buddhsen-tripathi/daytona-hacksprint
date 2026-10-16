@@ -61,6 +61,8 @@ export interface FilingPayload {
     dateObserved: string | null;
     /** Subway categories only. */
     transit?: TransitDetails | null;
+    /** Resident's answers to questions learned from earlier filings (field label → answer). Hand-off prefill matches labels. */
+    extraFields?: Record<string, string>;
   };
   /**
    * True ONLY when the resident explicitly approved AND env ALLOW_REAL_SUBMIT=1.
@@ -205,6 +207,7 @@ export function validatePayload(p: unknown): string[] {
     for (const k of ["address", "borough", "contactName", "contactEmail", "contactPhone", "dateObserved"]) strOrNull(f, k, "form.");
     numOrNull(f, "latitude", "form.");
     numOrNull(f, "longitude", "form.");
+    if (f.extraFields !== undefined && (!isObj(f.extraFields) || !Object.values(f.extraFields).every((v) => typeof v === "string"))) problems.push("form.extraFields must be Record<string,string>");
     if (f.transit !== undefined && f.transit !== null) {
       if (!isObj(f.transit)) problems.push("form.transit must be an object|null");
       else {

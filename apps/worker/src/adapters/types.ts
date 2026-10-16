@@ -9,6 +9,17 @@ export interface WorkerState {
   finalUrl: string | null;
 }
 
+/**
+ * One semantic action an adapter took on the form (click / choose / fill / pick / continue / stop / submit). Logged as an
+ * `action` event and used to compare adapters (the recipe vs the hand-written MTA adapter). PII-free: `target` is a
+ * form label or a choice label from the page; typed values are never recorded, only their length.
+ */
+export interface AdapterAction {
+  kind: "click" | "choose" | "continue" | "pick" | "fill" | "skip" | "stop" | "submit";
+  target: string;
+  chars?: number;
+}
+
 export interface AdapterContext {
   page: Page;
   payload: FilingPayload;
@@ -24,6 +35,8 @@ export interface AdapterContext {
    * `fallback` (the adapter's original HUMAN_ACTION_REQUIRED outcome) on timeout / when questions are disabled.
    */
   ask(q: WorkerQuestion, fallback: Error): Promise<WorkerAnswer>;
+  /** Record a semantic action (see AdapterAction). */
+  action(a: AdapterAction): void;
 }
 
 export interface ConfirmResult {
