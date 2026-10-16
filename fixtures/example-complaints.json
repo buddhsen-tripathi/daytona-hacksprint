@@ -1,0 +1,105 @@
+[
+  {
+    "id": "clear-pothole-with-location",
+    "scenario": "Clear pothole photo and location",
+    "expectedBehavior": "Produce correct reviewable draft",
+    "clear": true,
+    "inputText": "Big pothole in the road here, cars keep swerving around it.",
+    "imageFixture": "fixtures/images/pothole-1.jpg",
+    "location": { "latitude": 40.7576, "longitude": -73.9858, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
+    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
+  },
+  {
+    "id": "pothole-in-repaired-patch",
+    "scenario": "Pothole on repaired street patch",
+    "expectedBehavior": "Route toward street repair defect",
+    "clear": true,
+    "inputText": "There's a hole in the road here and it keeps getting worse.",
+    "imageFixture": "fixtures/images/repaired-patch-1.jpg",
+    "location": { "latitude": 40.6831, "longitude": -73.9792, "address": "32 4th Avenue, Brooklyn", "borough": "Brooklyn" },
+    "expected": { "triage": "SUPPORTED", "category": "street-repair-defect", "asksForLocation": false, "emergency": false }
+  },
+  {
+    "id": "photo-without-location",
+    "scenario": "Photo without location",
+    "expectedBehavior": "Ask for location",
+    "clear": true,
+    "inputText": null,
+    "imageFixture": "fixtures/images/pothole-1.jpg",
+    "location": null,
+    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": true, "emergency": false }
+  },
+  {
+    "id": "possible-nearby-duplicate",
+    "scenario": "Possible nearby duplicate",
+    "expectedBehavior": "Offer existing report for review (real Open Data SRs 70342225 / 70339080 / 69647377 lie within ~70 m)",
+    "clear": true,
+    "inputText": "Pothole in the street right by 1515 Broadway in Times Square, it's been there for weeks.",
+    "imageFixture": null,
+    "location": { "latitude": 40.758, "longitude": -73.9855, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
+    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false, "expectDuplicates": true }
+  },
+  {
+    "id": "ambiguous-roadway-hole",
+    "scenario": "Ambiguous roadway hole",
+    "expectedBehavior": "Ask clarification or escalate",
+    "clear": false,
+    "inputText": "Can you report this?",
+    "imageFixture": "fixtures/images/blurry-1.jpg",
+    "location": null,
+    "expected": { "triage": "UNCLEAR", "category": null, "asksForLocation": true, "emergency": false }
+  },
+  {
+    "id": "user-cancels",
+    "scenario": "User cancels",
+    "expectedBehavior": "Do not submit (user sends /cancel at READY_FOR_APPROVAL)",
+    "clear": false,
+    "inputText": "Pothole on my block, it's about a foot wide.",
+    "imageFixture": "fixtures/images/pothole-1.jpg",
+    "location": { "latitude": 40.7576, "longitude": -73.9858, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
+    "flow": { "afterDraft": "cancel" },
+    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
+  },
+  {
+    "id": "browser-requires-captcha",
+    "scenario": "Browser requires CAPTCHA",
+    "expectedBehavior": "Request human action (portalMode=captcha → HUMAN_ACTION_REQUIRED/CAPTCHA)",
+    "clear": false,
+    "inputText": "Pothole in the crosswalk lane, pretty deep but no one is hurt.",
+    "imageFixture": "fixtures/images/pothole-1.jpg",
+    "location": { "latitude": 40.7576, "longitude": -73.9858, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
+    "flow": { "portalMode": "captcha", "afterDraft": "approve" },
+    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
+  },
+  {
+    "id": "no-official-confirmation",
+    "scenario": "No official confirmation",
+    "expectedBehavior": "Mark outcome unknown (portalMode=flaky → SUBMISSION_UNKNOWN, no auto-retry)",
+    "clear": false,
+    "inputText": "Pothole in front of the deli, my bike tire hit it.",
+    "imageFixture": "fixtures/images/pothole-1.jpg",
+    "location": { "latitude": 40.6831, "longitude": -73.9792, "address": "32 4th Avenue, Brooklyn", "borough": "Brooklyn" },
+    "flow": { "portalMode": "flaky", "afterDraft": "approve" },
+    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
+  },
+  {
+    "id": "explicit-emergency",
+    "scenario": "Explicit emergency description",
+    "expectedBehavior": "Refer to 911",
+    "clear": true,
+    "inputText": "The street just caved in into a huge deep sinkhole, a car's front wheels fell in and the driver is hurt. There's no barrier around it.",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "EMERGENCY", "category": null, "emergency": true }
+  },
+  {
+    "id": "out-of-scope-streetlight",
+    "scenario": "Extra: out-of-scope photo",
+    "expectedBehavior": "Manual guidance with link (streetlight is not a supported category)",
+    "clear": false,
+    "inputText": "This light on my corner has been out for a week.",
+    "imageFixture": "fixtures/images/streetlight-1.jpg",
+    "location": null,
+    "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
+  }
+]
