@@ -14,6 +14,7 @@ import { type IncomingMessage, type Server, type ServerResponse, createServer } 
 import type { AgentMemory, CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
 import { CATEGORIES, InboundEvent, MemoryKind } from "../core/contracts.js";
 import { createAgentMemory, recallForComplaintCached } from "../services/agent-memory.js";
+import { categorySchemaView } from "../services/form-schema-memory.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
 import { env, hasTelegram, REPO_ROOT } from "../integrations/env.js";
@@ -156,6 +157,12 @@ export function createApiServer(deps: ApiDeps): Server {
               return hit ? json(res, 200, { entry: hit, source }) : json(res, 404, { error: "catalog entry not found" });
             }
             return json(res, 200, { entries, count: entries.length, source });
+          }
+          case "categories": {
+            // #11: GET /api/categories/:id/schema → the form structure learned from filing runs, with provenance
+            if (!seg[2] || seg[3] !== "schema" || seg.length > 4) return json(res, 404, { error: "not found" });
+            const view = await categorySchemaView(store, decodeURIComponent(seg[2]));
+            return view ? json(res, 200, view) : json(res, 404, { error: "no form schema learned for this category yet" });
           }
           case "memory": {
             // What the agent recalls and why: { items: ScoredMemory[] } with score breakdowns (UI in #14).

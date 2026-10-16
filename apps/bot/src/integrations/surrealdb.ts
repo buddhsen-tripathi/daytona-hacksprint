@@ -28,6 +28,7 @@ import type {
   DuplicateCandidate,
   FilingAttempt,
   FilingTarget,
+  FormSchema,
   MemoryAboutRef,
   MemoryHit,
   MemoryKind,
@@ -82,6 +83,7 @@ export type SurrealStore = Store & {
   close(): Promise<void>;
   upsertCatalog(entries: CatalogEntryT[]): Promise<number>;
   listCatalog(): Promise<CatalogEntryT[]>;
+  updateCategorySchema(id: string, learned: { requiredFields: string[]; formSchema: FormSchema; lastVerifiedAt: string }): Promise<void>;
   /** Raw SurrealQL for scripts (seed / dashboards). Returns one result per statement. */
   query<T extends unknown[] = unknown[]>(sql: string, vars?: Record<string, unknown>): Promise<T>;
 };
@@ -257,6 +259,9 @@ class Batch {
   }
 }
 
+/** #11: seeds / catalog upserts set requiredFields only until a filing run has taught the category its form schema. */
+const keepLearnedRequiredFields = (idVar: string, fieldsVar: string) => `UPDATE ${idVar} SET requiredFields = ${fieldsVar} WHERE formSchema = NONE OR formSchema = NULL RETURN NONE`;
+
 // ---------------------------------------------------------------------------
 // factory
 // ---------------------------------------------------------------------------
@@ -350,20 +355,21 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
   async function seedCategories() {
     const b = new Batch();
     for (const c of Object.values(CATEGORIES)) {
+      const id = b.bind(rid("complaint_category", c.id));
       b.add(
         // MERGE, not CONTENT: catalog fields written by upsertCatalog (#7) must survive a restart.
-        `UPSERT ${b.bind(rid("complaint_category", c.id))} MERGE ${b.bind(
+        `UPSERT ${id} MERGE ${b.bind(
           plain({
             label: c.officialLabel,
             shortLabel: c.label,
             officialRoute: c.officialFormUrl,
             articleUrl: c.articleUrl,
-            requiredFields: c.requiredFields,
             openData: c.openData,
             guidance: c.guidance,
           }),
         )} RETURN NONE`,
       );
+      b.add(keepLearnedRequiredFields(id, b.bind(c.requiredFields)));
     }
     await run(b);
   }
@@ -1009,14 +1015,23 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       for (let i = 0; i < entries.length; i += 100) {
         const b = new Batch();
         for (const e of entries.slice(i, i + 100)) {
-          const { id, ...fields } = e;
+          const { id, requiredFields, formSchema: _learned, ...fields } = e;
           // Rows seeded from CATEGORIES keep their official label; catalog-only rows are labelled by title.
           const label = id in CATEGORIES ? {} : { label: e.title, shortLabel: e.title, articleUrl: e.articleUrl };
-          b.add(`UPSERT ${b.bind(rid("complaint_category", id))} MERGE ${b.bind(plain({ ...fields, ...label, catalog: true }))} RETURN NONE`);
+          const rec = b.bind(rid("complaint_category", id));
+          b.add(`UPSERT ${rec} MERGE ${b.bind(plain({ ...fields, ...label, catalog: true }))} RETURN NONE`);
+          b.add(keepLearnedRequiredFields(rec, b.bind(requiredFields)));
         }
         await run(b);
       }
       return entries.length;
+    }),
+
+    // #11: learned form structure (services/form-schema-memory.ts); creates the row when the category has none yet
+    updateCategorySchema: guard("updateCategorySchema", async (id: string, learned: { requiredFields: string[]; formSchema: FormSchema; lastVerifiedAt: string }) => {
+      const b = new Batch();
+      b.add(`UPSERT ${b.bind(rid("complaint_category", id))} MERGE ${b.bind(plain({ requiredFields: learned.requiredFields, formSchema: learned.formSchema, lastVerifiedAt: learned.lastVerifiedAt }))} RETURN NONE`);
+      await run(b);
     }),
 
     listCatalog: guard("listCatalog", async () => {

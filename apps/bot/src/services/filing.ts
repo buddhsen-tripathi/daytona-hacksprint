@@ -43,6 +43,7 @@ import { CATEGORIES, DEFAULT_QUESTION_TIMEOUT_MS, nowIso, questionFromEvent, sho
 import { transition } from "../core/state-machine.js";
 import { askFromOutcome, recordAskPattern } from "./memory.js";
 import { askPatternItem, filingOutcomeItem, liveQuestionItem } from "./agent-memory.js";
+import { recordFormSchema, requiredFieldsOf, sanitizeFormSchema, schemaSummary } from "./form-schema-memory.js";
 import { RUNS_DIR, env } from "../integrations/env.js";
 import { isRealOnly } from "../core/knowledge.js";
 import { registerEvidenceFile } from "./evidence-registry.js";
@@ -487,7 +488,11 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
                 await done;
                 sset("worker.events", events.length);
                 sset("worker.level", events.some((e) => e.level === "error") ? "error" : events.some((e) => e.level === "warn") ? "warn" : "info");
-                soi.output(redactJson(events.map((e) => ({ level: e.level, message: e.message, data: e.data }))));
+                // #11: browser.inspect carries the required labels of the form_schema events it saw (structure only)
+                const seen = sanitizeFormSchema({ steps: events.filter((e) => e.message === "form_schema").map((e) => ({ title: e.data?.stepTitle, fields: e.data?.fields })) });
+                if (seen) sset("form.required_fields", requiredFieldsOf(seen));
+                const structureOnly = (e: WorkerEvent) => (e.message === "form_schema" ? (sanitizeFormSchema({ steps: [{ title: e.data?.stepTitle, fields: e.data?.fields }] })?.steps[0] ?? null) : e.data);
+                soi.output(redactJson(events.map((e) => ({ level: e.level, message: e.message, data: structureOnly(e) }))));
               })
               .catch(() => {}),
           );
@@ -563,7 +568,13 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         if (r.result && r.result.steps.length > attempt.workerEvents.length) attempt.workerEvents = r.result.steps;
         set("worker.exit_code", r.exitCode);
         set("worker.status", r.result?.status ?? "NO_RESULT");
-        oi.output(redactJson({ status: r.result?.status ?? null, errorCode: r.result?.errorCode ?? null, submitClicked: r.result?.submitClicked ?? null, evidence: r.result?.evidence.length ?? 0, exitCode: r.exitCode, durationMs: attempt.timing.workerMs }));
+        // #11: the merged form structure (labels / types / required / option counts; never values)
+        const schema = r.result?.formSchema ? sanitizeFormSchema(r.result.formSchema) : null;
+        if (schema) {
+          set("form.required_fields", requiredFieldsOf(schema));
+          set("form.steps", schema.steps.length);
+        }
+        oi.output(redactJson({ status: r.result?.status ?? null, errorCode: r.result?.errorCode ?? null, submitClicked: r.result?.submitClicked ?? null, evidence: r.result?.evidence.length ?? 0, exitCode: r.exitCode, durationMs: attempt.timing.workerMs, formSchema: schema ? schemaSummary(schema) : null }));
 
         // (g) evidence -------------------------------------------------------------
         const dir = join(RUNS_DIR, attempt.id);
@@ -700,6 +711,13 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         void memory.remember(filingOutcomeItem({ complaint: current, attempt, status, errorCode: v.errorCode, officialRequestNumber: sr, dryRun })).catch((e) => console.warn("[filing] memory (outcome):", (e as Error).message));
         for (const lp of learned) void memory.remember(askPatternItem(lp)).catch((e) => console.warn("[filing] memory (pattern):", (e as Error).message));
         set("memory.writes", 1 + learned.length);
+      }
+      // [memory] #11: the form structure this run observed → procedural schema memory + catalog row (structure only).
+      if (result?.formSchema) {
+        set("memory.form_schema", true);
+        track(
+          recordFormSchema({ store, memory }, { category, attempt, outcome: status, formSchema: result.formSchema }).catch((e) => console.warn("[filing] memory (form schema):", (e as Error).message)),
+        );
       }
       // ---- [/memory] ----
       oi.output({ attemptId: attempt.id, status, sr, pattern: p.kind, evidence: attempt.evidence.length, timing: attempt.timing });
