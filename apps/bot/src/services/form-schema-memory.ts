@@ -286,6 +286,8 @@ export function recordFormSchema(deps: { store: Store; memory?: Pick<AgentMemory
 /** `GET /api/categories/:id/schema`: the merged schema with provenance; falls back to the catalog row (no provenance). */
 export async function categorySchemaView(store: Store, category: string) {
   const cur = await readCurrentSchema(store, category);
+  // #13: human-approved confirmRegex / questionText repairs for this category (null when none)
+  const overrides = (await store.getCategoryOverrides?.(category).catch(() => null)) ?? null;
   if (cur) {
     return {
       category,
@@ -295,12 +297,13 @@ export async function categorySchemaView(store: Store, category: string) {
       outcome: cur.outcome,
       provenance: { attemptId: cur.source?.attemptId ?? null, traceId: cur.source?.traceId ?? null, capturedAt: cur.source?.capturedAt ?? cur.formSchema.capturedAt, evidenceIds: cur.source?.evidenceIds ?? [] },
       history: cur.history,
+      overrides,
       source: "memory" as const,
     };
   }
   const row: CatalogEntry | undefined = (await store.listCatalog?.().catch(() => []))?.find((e) => e.id === category);
   if (row?.formSchema) {
-    return { category, requiredFields: row.requiredFields ?? requiredFieldsOf(row.formSchema), formSchema: row.formSchema, version: null, outcome: null, provenance: { attemptId: null, traceId: null, capturedAt: row.lastVerifiedAt, evidenceIds: [] }, history: [], source: "catalog" as const };
+    return { category, requiredFields: row.requiredFields ?? requiredFieldsOf(row.formSchema), formSchema: row.formSchema, version: null, outcome: null, provenance: { attemptId: null, traceId: null, capturedAt: row.lastVerifiedAt, evidenceIds: [] }, history: [], overrides, source: "catalog" as const };
   }
   return null;
 }
