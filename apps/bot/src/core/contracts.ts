@@ -448,6 +448,32 @@ export const EvidenceFile = z.object({
   summary: z.string(),
 });
 
+/**
+ * Observed structure of one form control (procedural memory input, issue #11). STRUCTURE ONLY: never a value the
+ * resident typed or chose. `options` are the form's own labels (choice buttons / select / radio).
+ */
+export const FormFieldType = z.enum(["text", "textarea", "select", "radio", "checkbox", "button-choice", "date", "time", "file", "unknown"]);
+export type FormFieldType = z.infer<typeof FormFieldType>;
+export const FormField = z.object({
+  label: z.string(),
+  type: FormFieldType,
+  required: z.boolean(),
+  options: z.array(z.string()).optional(),
+  /** Attribute maxlength, or the visible "0/4000" counter; null when unknown. */
+  maxLength: z.number().nullable().optional(),
+  /** Title of the wizard step / page section this field was seen on. */
+  step: z.string(),
+  /** Playwright selector that found it (role/label/placeholder based), e.g. `role=textbox[name="Email (optional)"]`. */
+  selectorHint: z.string().optional(),
+});
+export type FormField = z.infer<typeof FormField>;
+/** Merged, ordered per-step schema observed during one run. Emitted per step as `EVT {"step":"inspect","message":"form_schema"}`. */
+export const FormSchema = z.object({
+  steps: z.array(z.object({ title: z.string(), fields: z.array(FormField) })),
+  capturedAt: z.string(),
+});
+export type FormSchema = z.infer<typeof FormSchema>;
+
 /** Written to /work/out/result.json by the worker. The bot re-validates it. */
 export const WorkerResult = z.object({
   attemptId: z.string(),
@@ -467,6 +493,8 @@ export const WorkerResult = z.object({
   message: z.string().nullable().optional(),
   startedAt: z.string(),
   finishedAt: z.string(),
+  /** Form structure observed during this run (additive; null/absent when nothing was captured). */
+  formSchema: FormSchema.nullable().optional(),
 });
 export type WorkerResult = z.infer<typeof WorkerResult>;
 
@@ -675,6 +703,122 @@ export type RelatedComplaints = {
   others: { reports: number; residents: number; latestAt: string | null; oldestAt: string | null; ids: string[] };
 };
 
+// ---------------------------------------------------------------------------
+// Agent memory (issue #4): one memory stream of episodic / semantic / procedural
+// items, recalled by relevance × recency × importance (services/agent-memory.ts).
+// `text` is always neutral (classifier description, form prompts, official
+// labels); never contact fields or a resident's free-typed answer.
+// ---------------------------------------------------------------------------
+export const MemoryKind = z.enum([
+  "episodic", // what happened: drafts ready for approval, filing outcomes, live questions + answers, reflections
+  "semantic", // facts about the world: categories, agencies, required fields
+  "procedural", // how to do things: form recipes, ask-before-approval rules
+]);
+export type MemoryKind = z.infer<typeof MemoryKind>;
+
+/** Graph targets of `memory->about->…` (SurrealDB relation; the memory store keeps them as plain refs). */
+export type MemoryAboutTable = "complaint" | "complaint_category" | "filing_attempt";
+export type MemoryAboutRef = { table: MemoryAboutTable; id: string };
+
+/** What a caller hands to `AgentMemory.remember()`. */
+export type MemoryItem = {
+  /** Deterministic id ⇒ idempotent upsert (e.g. `mem_seed_<category>`); omitted ⇒ generated. */
+  id?: string;
+  kind: MemoryKind;
+  /** Neutral, PII-free text: what gets embedded and shown in explanations. */
+  text: string;
+  /** Category id (string so catalog categories from #7 fit without a contract change). */
+  category?: string | null;
+  /** Owning resident (Telegram chat id); null for world facts. Never shown to other residents. */
+  chatId?: string | null;
+  /** Subway line, for `scope.line` filtering. */
+  line?: string | null;
+  /** Point, for `scope.geo` filtering. */
+  geo?: { lat: number; lon: number } | null;
+  /** 0..1, set at write time (a confirmed filing > a cancelled draft). Default 0.5. */
+  importance?: number;
+  /** Structured payload (ids, counts, option labels). JSON-safe, PII-free. */
+  data?: Record<string, unknown>;
+  /** `complaint:<id>` | `attempt:<id>` | `trace:<id>` | `seed`. */
+  source: string;
+  /** Edges `memory->about->(complaint|complaint_category|filing_attempt)`. */
+  about?: MemoryAboutRef[];
+  /** ISO time; default now. */
+  createdAt?: string;
+};
+
+/** A persisted memory row (Store layer). */
+export type MemoryRecord = Required<Omit<MemoryItem, "id" | "createdAt">> & {
+  id: string;
+  createdAt: string;
+  /** Embedding vector (null when no embedder was available at write time). */
+  embedding: number[] | null;
+  /** Model that produced `embedding` (vectors are only compared within one model). */
+  embedModel: string | null;
+};
+
+/** Low-level search (Store layer): structural filters + cosine similarity; ranking happens in AgentMemory. */
+export type MemorySearch = {
+  embedding?: number[] | null;
+  embedModel?: string | null;
+  kind?: MemoryKind;
+  category?: string | null;
+  /** Set ⇒ only this resident's items + world facts (chatId null). Never other residents'. */
+  chatId?: string | null;
+  line?: string | null;
+  geo?: { lat: number; lon: number; radiusMeters: number } | null;
+  /** Only items created within the last `sinceMs`. */
+  sinceMs?: number;
+  /** Only items with an `about` edge to this ref. */
+  about?: MemoryAboutRef | null;
+  /** Clock for `sinceMs` (default Date.now()). */
+  nowMs?: number;
+  limit: number;
+};
+/** Search hit: the row (without the vector) + cosine similarity when comparable (same model + dims), else null. */
+export type MemoryHit = Omit<MemoryRecord, "embedding"> & { similarity: number | null };
+
+export type MemoryScoreBreakdown = {
+  /** 0..1: cosine similarity (clamped) or keyword overlap, 0 when there is no query text. */
+  relevance: number;
+  relevanceKind: "cosine" | "keyword" | "none";
+  /** 0..1: 0.5^(age / halfLife), halfLife = 7 days. */
+  recency: number;
+  importance: number;
+  ageMs: number;
+  /** The weights used: score = w.relevance·relevance + w.recency·recency + w.importance·importance. */
+  weights: { relevance: number; recency: number; importance: number };
+};
+export type ScoredMemory = Omit<MemoryRecord, "embedding"> & { score: number; breakdown: MemoryScoreBreakdown };
+
+export type MemoryRecallQuery = {
+  text?: string;
+  kind?: MemoryKind;
+  scope?: { chatId?: string | null; category?: string | null; line?: string | null; geo?: { lat: number; lon: number; radiusMeters?: number } | null };
+  sinceMs?: number;
+  /** Only items about this complaint / attempt / category. */
+  about?: MemoryAboutRef;
+  limit?: number;
+};
+
+export interface AgentMemory {
+  /** Persist one item (embedded when an embedder is configured). Returns its id. */
+  remember(item: MemoryItem): Promise<string>;
+  /** Scored recall: score = 0.5·relevance + 0.3·recency + 0.2·importance, highest first, with the breakdown. */
+  recall(q: MemoryRecallQuery): Promise<ScoredMemory[]>;
+  /** Reflexion-style lesson after an attempt: episodic item, source `attempt:<id>`, about→filing_attempt. */
+  reflect(attemptId: string, lesson: string, data?: Record<string, unknown>): Promise<void>;
+  /** Resolves when every in-flight remember() has settled (tests / scripts). */
+  flush(): Promise<void>;
+}
+
+/** Text → vectors. `model` labels the vectors so different models are never compared. */
+export interface Embedder {
+  readonly model: string;
+  readonly dim: number;
+  embed(texts: string[]): Promise<{ model: string; vectors: number[][] }>;
+}
+
 export interface Store {
   backend: string;
   init(): Promise<void>;
@@ -712,6 +856,13 @@ export interface Store {
   listCatalog?(): Promise<CatalogEntry[]>;
   /** For the dashboard: nodes + edges of the complaint graph. */
   graph(args?: { complaintId?: string }): Promise<{ nodes: { id: string; kind: string; label: string }[]; edges: { from: string; to: string; rel: string }[] }>;
+  // agent memory (#4) — low-level; use AgentMemory (services/agent-memory.ts). Optional so test doubles stay small.
+  /** Upsert by id + RELATE memory->about->… */
+  insertMemory?(row: MemoryRecord): Promise<void>;
+  /** Structural filters + cosine similarity (same embedModel + dims), most similar first, else newest first. */
+  searchMemory?(q: MemorySearch): Promise<MemoryHit[]>;
+  /** Newest first (no vectors). */
+  listMemory?(args?: { kind?: MemoryKind; category?: string; chatId?: string; source?: string; about?: MemoryAboutRef; limit?: number }): Promise<Omit<MemoryRecord, "embedding">[]>;
 }
 
 export interface SandboxHandle {

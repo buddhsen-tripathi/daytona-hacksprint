@@ -7,6 +7,9 @@ import { resolve } from "node:path";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
 import type { CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
 import { CATEGORIES, InboundEvent } from "../core/contracts.js";
+import type { AgentMemory, CategoryId, Store, Tracer } from "../core/contracts.js";
+import { CATEGORIES, InboundEvent, MemoryKind } from "../core/contracts.js";
+import { createAgentMemory, recallForComplaint } from "../services/agent-memory.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
 import { env, hasTelegram, REPO_ROOT } from "../integrations/env.js";
@@ -18,6 +21,8 @@ export type ApiDeps = {
   store: Store;
   tracer: Tracer;
   orchestrator: Orchestrator;
+  /** Agent memory (#4) for GET /api/memory. Absent ⇒ keyword-only recall over the store. */
+  memory?: AgentMemory | null;
   /** Set when Telegram runs in webhook mode. Read lazily so the bot can start after the server. */
   getWebhook?: () => WebhookHandler | null;
 };
@@ -41,6 +46,7 @@ async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<string
 
 export function createApiServer(deps: ApiDeps): Server {
   const { store, orchestrator } = deps;
+  const memory = deps.memory ?? createAgentMemory({ store });
   const started = new Date().toISOString();
 
   return createServer(async (req, res) => {
@@ -115,6 +121,19 @@ export function createApiServer(deps: ApiDeps): Server {
               return hit ? json(res, 200, { entry: hit, source }) : json(res, 404, { error: "catalog entry not found" });
             }
             return json(res, 200, { entries, count: entries.length, source });
+          case "memory": {
+            // What the agent recalls and why: { items: ScoredMemory[] } with score breakdowns (UI in #14).
+            const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 10) || 10));
+            const complaintId = url.searchParams.get("complaintId");
+            if (complaintId) {
+              const c = await store.getComplaint(complaintId);
+              if (!c) return json(res, 404, { error: "complaint not found" });
+              const { query, items } = await recallForComplaint(memory, c, limit);
+              return json(res, 200, { complaintId: c.id, query, items });
+            }
+            const kind = MemoryKind.safeParse(url.searchParams.get("kind"));
+            const items = await memory.recall({ text: url.searchParams.get("q") ?? undefined, kind: kind.success ? kind.data : undefined, limit });
+            return json(res, 200, { items });
           }
           case "workflow-patterns":
             return json(res, 200, { patterns: await allPatterns(store) });

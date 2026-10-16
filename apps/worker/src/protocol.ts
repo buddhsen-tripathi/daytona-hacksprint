@@ -2,7 +2,8 @@
  * Worker-side copy of the protocol types from apps/bot/src/core/contracts.ts.
  * The worker runs alone inside the sandbox (only playwright-core installed), so it must not import the bot.
  * KEEP IDENTICAL to: FilingTarget, CategoryId, FilingPayload, FilingStatus, FilingErrorCode,
- * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult, TransitDetails, SUBWAY_LINES, WorkerQuestion, WorkerAnswer.
+ * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult, TransitDetails, SUBWAY_LINES, WorkerQuestion, WorkerAnswer,
+ * FormField, FormSchema.
  */
 /** Every filing targets the official form (the replica portal is gone). */
 export type FilingTarget = "real";
@@ -115,6 +116,29 @@ export interface EvidenceFile {
   summary: string;
 }
 
+/**
+ * Observed structure of one form control (procedural memory input, issue #11). STRUCTURE ONLY: never a value the
+ * resident typed or chose. `options` are the form's own labels (choice buttons / select / radio).
+ */
+export type FormFieldType = "text" | "textarea" | "select" | "radio" | "checkbox" | "button-choice" | "date" | "time" | "file" | "unknown";
+export interface FormField {
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+  options?: string[];
+  /** Attribute maxlength, or the visible "0/4000" counter; null when unknown. */
+  maxLength?: number | null;
+  /** Title of the wizard step / page section this field was seen on. */
+  step: string;
+  /** Playwright selector that found it (role/label/placeholder based), e.g. `role=textbox[name="Email (optional)"]`. */
+  selectorHint?: string;
+}
+/** Merged, ordered per-step schema observed during one run. Emitted per step as `EVT {"step":"inspect","message":"form_schema"}`. */
+export interface FormSchema {
+  steps: { title: string; fields: FormField[] }[];
+  capturedAt: string;
+}
+
 export interface WorkerResult {
   attemptId: string;
   status: FilingStatus;
@@ -128,6 +152,8 @@ export interface WorkerResult {
   evidence: EvidenceFile[];
   startedAt: string;
   finishedAt: string;
+  /** Form structure observed during this run (additive; null/absent when nothing was captured). */
+  formSchema?: FormSchema | null;
 }
 
 /**

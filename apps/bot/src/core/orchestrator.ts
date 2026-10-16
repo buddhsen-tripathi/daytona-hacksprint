@@ -9,6 +9,7 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
+  AgentMemory,
   Classifier,
   ClassificationResult,
   ComplaintDraft,
@@ -55,23 +56,26 @@ import type { FilingService, StatusService } from "../integrations/fallbacks.js"
 import { RUNS_DIR } from "../integrations/env.js";
 import { resolveEvidencePath } from "../services/evidence-registry.js";
 import {
-  ASK_KIND,
   MACHINERY_FIELDS,
   RELATED_DEFAULTS,
   type AskHint,
-  askHints,
   askPrompt,
   fieldValue,
   memoryCardLine,
   parseLearnedAnswer,
+  readAskPatterns,
+  readRelated,
   relatedCardLines,
 } from "../services/memory.js";
+import { readyForApprovalItem } from "../services/agent-memory.js";
 
 export type { FilingService, StatusService } from "../integrations/fallbacks.js";
 
 export type OrchestratorDeps = {
   store: Store;
   tracer: Tracer;
+  /** Agent memory (#4). Absent ⇒ no memory writes (reads fall back to the store). */
+  memory?: AgentMemory | null;
   classifier: Classifier;
   location: LocationService;
   duplicates: DuplicateService;
@@ -127,6 +131,7 @@ export function looksLikeAddress(text: string): boolean {
 
 export function createOrchestrator(deps: OrchestratorDeps) {
   const { store, tracer, classifier, location, duplicates, filing } = deps;
+  const memory = deps.memory ?? null;
   const target: FilingTarget = "real";
   const mediaRoot = deps.mediaDir ?? resolve(RUNS_DIR, "media");
   const maxPerHour = deps.maxFilingsPerHour ?? 6;
@@ -269,16 +274,10 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     try {
       return await tracer.span("surrealdb.read_context", { "query.kind": "workflow_pattern", "openinference.span.kind": "RETRIEVER", "filing.target": route.target, "complaint.category": route.category }, async (set, oi) => {
         oi.input(route);
-        const patterns = await store.getWorkflowPatterns(route);
-        const hints = askHints(patterns);
+        const { patterns, hints, docs } = await readAskPatterns(store, memory, route);
         set("patterns.count", patterns.length);
         set("patterns.ask_before_approval", hints.length);
-        oi.retriever(
-          patterns.slice(0, 10).map((p) => {
-            const h = p.hint as { field?: unknown; count?: unknown };
-            return { id: p.id, content: `${p.kind}: ${p.description}`, score: p.kind === ASK_KIND ? 1 : 0.3, metadata: { kind: p.kind, field: h.field ?? null, count: h.count ?? null, observedInAttemptId: p.observedInAttemptId } };
-          }),
-        );
+        oi.retriever(docs);
         return hints;
       });
     } catch (err) {
@@ -353,14 +352,11 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     try {
       const r = await tracer.span("surrealdb.read_context", { "query.kind": "related_complaints", "openinference.span.kind": "RETRIEVER", "complaint.id": draft.id, "complaint.category": draft.category, "transit.line": line ?? "" }, async (set, oi) => {
         oi.input({ category: q.category, line, lat: lat != null ? Number(lat.toFixed(4)) : null, lon: lon != null ? Number(lon.toFixed(4)) : null, radiusMeters: q.radiusMeters, sinceMs: q.sinceMs, othersSinceMs: q.othersSinceMs });
-        const res = await store.findRelatedComplaints!(q);
+        const { related: res, docs } = await readRelated(store, memory, q, readyForApprovalItem(draft).text);
         set("related.mine", res.mine.length);
         set("related.others_reports", res.others.reports);
         set("related.others_residents", res.others.residents);
-        oi.retriever([
-          ...res.mine.map((m) => ({ id: m.id, content: `your ${m.status} report at ${m.createdAt}${m.officialRequestNumber ? ` (SR ${m.officialRequestNumber})` : ""}`, score: 1, metadata: { status: m.status, distanceMeters: m.distanceMeters } })),
-          ...res.others.ids.map((id) => ({ id, content: "another resident's report (same category, same line / nearby)", score: 0.8 })),
-        ]);
+        oi.retriever(docs);
         return res;
       });
       const ids = [...r.mine.map((m) => m.id), ...r.others.ids];
@@ -459,6 +455,8 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         contextLines,
       });
       oi.output({ category: draft.category, version: draft.draftVersion, photos: draft.media.length, transit: draft.transit ?? null });
+      // [memory] episodic: this draft reached READY_FOR_APPROVAL (neutral description + transit facts; upserted per complaint; never blocks the card)
+      if (memory) void memory.remember(readyForApprovalItem(draft)).catch((e) => console.warn("[orchestrator] memory (ready):", (e as Error).message));
       return s;
     });
     const parts = [...notes, summary];

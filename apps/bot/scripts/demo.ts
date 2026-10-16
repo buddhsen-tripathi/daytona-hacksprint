@@ -21,6 +21,7 @@ const { resolveProviders, providerReport } = await import("../src/integrations/i
 const { createCaptureTransport } = await import("../src/api/capture-transport.js");
 const { stripHtml } = await import("../src/telegram/messages.js");
 const { previewPayload } = await import("../src/services/filing.js");
+const { recallForComplaint } = await import("../src/services/agent-memory.js");
 type InboundEvent = import("../src/core/contracts.js").InboundEvent;
 type CapturedMessage = import("../src/api/capture-transport.js").CapturedMessage;
 
@@ -224,6 +225,17 @@ if (last) {
   if (attempts[0]) console.log(`${C.bold}Filing attempt:${C.reset} ${attempts[0].id} outcome=${attempts[0].outcome} error=${attempts[0].errorCode ?? "-"} evidence=${attempts[0].evidence.length}`);
 }
 await (providers.filing as { drain?: () => Promise<void> }).drain?.().catch(() => {});
+await providers.memory.flush();
+if (last) {
+  // What the agent remembers for this complaint and why (same as GET /api/memory?complaintId=…).
+  const fresh = (await providers.store.getComplaint(last.id)) ?? last;
+  const { query, items } = await recallForComplaint(providers.memory, fresh, 5);
+  console.log(`\n${C.bold}Agent memory${C.reset} (${providers.memory.embedder?.model ?? "keyword only"}) — recall for “${query}”:`);
+  for (const m of items) {
+    const b = m.breakdown;
+    console.log(`  ${m.score.toFixed(3)}  ${m.kind.padEnd(10)} rel ${b.relevance.toFixed(2)} (${b.relevanceKind}) · rec ${b.recency.toFixed(2)} · imp ${b.importance.toFixed(2)}  ${m.text.slice(0, 110)}`);
+  }
+}
 if (lastOutcome) console.log(`\n${C.bold}FilingOutcome:${C.reset}\n${JSON.stringify(lastOutcome, null, 2)}`);
 await providers.tracer.flush().catch(() => {});
 process.exit(0);

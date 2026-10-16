@@ -82,6 +82,9 @@ console.log(
     2,
   ),
 );
+console.log(`form schema: ${result.formSchema?.steps.length ?? 0} step(s)`);
+for (const s of result.formSchema?.steps ?? [])
+  console.log(`  ${s.title}: ${s.fields.map((f) => `${f.type} "${f.label}"${f.required ? " (required)" : ""}${f.maxLength ? ` max ${f.maxLength}` : ""}${f.options ? ` [${f.options.length} options]` : ""}`).join("; ")}`);
 console.log("evidence:");
 for (const e of result.evidence) console.log(`  ${join(outDir, e.name)}  (${e.type}, ${e.step}) ${e.summary}`);
 const ok = result.status === "HUMAN_ACTION_REQUIRED" && result.errorCode === null && result.submitClicked === false;
