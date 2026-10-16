@@ -1,0 +1,32 @@
+{
+  "name": "@311relay/bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "seed": "tsx scripts/seed.ts",
+    "demo": "tsx scripts/demo.ts",
+    "evals": "tsx scripts/evals.ts"
+  },
+  "dependencies": {
+    "@arizeai/phoenix-otel": "latest",
+    "@arizeai/phoenix-client": "latest",
+    "@daytona/sdk": "latest",
+    "@opentelemetry/api": "^1.9.0",
+    "@surrealdb/node": "latest",
+    "grammy": "^1.46.0",
+    "playwright-core": "^1.64.0",
+    "surrealdb": "latest",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.19.0",
+    "typescript": "^5",
+    "vitest": "^3.1.0"
+  }
+}
