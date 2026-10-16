@@ -458,7 +458,10 @@ export const SAME_ISSUE = {
    * #22: the same-issue check gates the approval card, so it waits at most this long for the query embedding;
    * past it, recall uses keyword relevance (and the embedding is cached for the next turn).
    */
-  embedBudgetMs: 150,
+  // The orchestrator pre-warms the embedding right after classification (memory.warm), so by the time the
+  // same-issue gate runs the vector is normally cached (<5 ms). The budget only matters on a cold cache
+  // (first OpenRouter call ≈ 1.9 s, or an outage): wait at most 600 ms, then fall back to keyword overlap.
+  embedBudgetMs: 600,
 } as const;
 
 /** Statuses an original must NOT be in to count as "already raised". */

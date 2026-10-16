@@ -834,6 +834,8 @@ export interface AgentMemory {
   reflect(attemptId: string, lesson: string, data?: Record<string, unknown>): Promise<void>;
   /** Resolves when every in-flight remember() has settled (tests / scripts). */
   flush(): Promise<void>;
+  /** Fire-and-forget: embed `text` now so a later recall() for the same text is served from cache. Never throws. */
+  warm?(text: string): void;
 }
 
 /** Text → vectors. `model` labels the vectors so different models are never compared. */

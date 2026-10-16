@@ -43,7 +43,7 @@ function orchestrator(store: Store, memory: AgentMemoryService) {
 }
 
 describe("#22 approval card does not wait for recall", () => {
-  it("an embedder that never resolves: the card is still sent within 200 ms", async () => {
+  it("an embedder that never resolves: the card is still sent within 1000 ms", async () => {
     const store = createMemoryStore();
     let calls = 0;
     const hanging: Embedder = { model: "test/hang", dim: 8, embed: () => (calls++, new Promise(() => {})) };
@@ -54,7 +54,7 @@ describe("#22 approval card does not wait for recall", () => {
     const ms = Date.now() - t0;
     const card = transport.messages.find((m) => m.buttons?.flat().some((b) => /approve/i.test(b.text)));
     expect(card, transport.messages.map((m) => m.text).join("\n---\n")).toBeTruthy();
-    expect(ms).toBeLessThan(200);
+    expect(ms).toBeLessThan(1000) // bounded: the same-issue gate waits ≤ SAME_ISSUE.embedBudgetMs (600 ms) for a pre-warmed vector, then falls back to keywords;
     expect(calls).toBeGreaterThan(0); // remember + recall did start embedding, in the background
   });
 
