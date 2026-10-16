@@ -42,8 +42,9 @@ import type {
   RelatedComplaints,
   RelatedComplaintsQuery,
   WorkflowPattern,
+  CategoryOverrides,
 } from "../core/contracts.js";
-import { CATEGORIES, CatalogEntry, nowIso } from "../core/contracts.js";
+import { CATEGORIES, CatalogEntry, mergeCategoryOverrides, nowIso } from "../core/contracts.js";
 import { NOT_REPORTED, NOT_REPORTED_OTHERS, RELATED_DEFAULTS } from "../services/memory.js";
 import { mergeMemoryPool } from "../services/agent-memory.js";
 import { env } from "./env.js";
@@ -128,6 +129,8 @@ export const RELATIONS: Record<string, { in: string; out: string }> = {
   not_same_as: { in: "complaint", out: "complaint" },
   /** Agent memory (#4): what a memory item is about. */
   about: { in: "memory", out: "complaint|complaint_category|filing_attempt" },
+  /** #13: the failed attempt a repair proposal was diagnosed from. */
+  from_attempt: { in: "repair_proposal", out: "filing_attempt" },
 };
 
 /** Tables surfaced by `graph()` (media/evidence/audit rows are left out to keep it readable). */
@@ -502,6 +505,26 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     return a;
   }
 
+  // -- repair proposals (#13): row + repair_proposal->from_attempt->filing_attempt ----------
+  async function writeRepair(p: RepairProposal): Promise<RepairProposal> {
+    const b = new Batch();
+    const rr = rid("repair_proposal", p.id);
+    b.add(
+      `UPSERT ${b.bind(rr)} CONTENT ${b.bind({
+        doc: plain(p),
+        attemptId: p.attemptId,
+        complaintId: p.complaintId,
+        category: p.category,
+        status: p.status,
+        createdAt: p.createdAt,
+        label: `repair · ${p.cause} · ${p.status}`,
+      })} RETURN NONE`,
+    );
+    b.relate("from_attempt", rr, rid("filing_attempt", p.attemptId));
+    await run(b);
+    return p;
+  }
+
   // -- official requests -------------------------------------------------------
   async function writeOfficialRequest(r: OfficialRequest, viaRel: "resulted_in" | null = "resulted_in"): Promise<OfficialRequest> {
     const b = new Batch();
@@ -871,20 +894,23 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     }),
 
     // -- post-mortem repair proposals (#13) -----------------------------------------
-    saveRepairProposal: guard("saveRepairProposal", async (p: RepairProposal) => {
+    saveRepairProposal: guard("saveRepairProposal", writeRepair),
+    updateRepairProposal: guard("updateRepairProposal", async (id: string, patch: Partial<RepairProposal>) => {
+      const prev = await readOne<RepairProposal>("repair_proposal", id);
+      return prev ? writeRepair({ ...prev, ...patch, id }) : null;
+    }),
+    // approved confirmRegex / questionText repairs live on the category row (creates the row when absent, like #11)
+    updateCategoryOverrides: guard("updateCategoryOverrides", async (id: string, patch: CategoryOverrides) => {
+      const r = rid("complaint_category", id);
+      const [rows] = await q<[{ repairOverrides?: CategoryOverrides }[]]>("SELECT repairOverrides FROM $r", { r });
+      const next = mergeCategoryOverrides(rows?.[0]?.repairOverrides ?? null, patch);
       const b = new Batch();
-      b.add(
-        `UPSERT ${b.bind(rid("repair_proposal", p.id))} CONTENT ${b.bind({
-          doc: plain(p),
-          attemptId: p.attemptId,
-          complaintId: p.complaintId,
-          category: p.category,
-          status: p.status,
-          createdAt: p.createdAt,
-        })} RETURN NONE`,
-      );
+      b.add(`UPSERT ${b.bind(r)} MERGE ${b.bind(plain({ repairOverrides: next }))} RETURN NONE`);
       await run(b);
-      return p;
+    }),
+    getCategoryOverrides: guard("getCategoryOverrides", async (id: string) => {
+      const [rows] = await q<[{ repairOverrides?: CategoryOverrides }[]]>("SELECT repairOverrides FROM $r", { r: rid("complaint_category", id) });
+      return rows?.[0]?.repairOverrides ?? null;
     }),
     getRepairProposal: guard("getRepairProposal", (id: string) => readOne<RepairProposal>("repair_proposal", id)),
     listRepairProposals: guard("listRepairProposals", async (args?: { status?: RepairProposal["status"]; limit?: number }) => {

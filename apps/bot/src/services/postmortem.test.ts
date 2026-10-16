@@ -5,7 +5,7 @@ import { createHashEmbedder } from "../integrations/embedder.js";
 import { createMemoryStore } from "../integrations/memory-store.js";
 import { createAgentMemory } from "./agent-memory.js";
 import { readCurrentSchema } from "./form-schema-memory.js";
-import { autoApplicableChanges, decideAndApply, decideProposal, diagnose, gatherEvidence, isAutoApplicable, runPostmortem, shouldPostmortem, withRequiredFields } from "./postmortem.js";
+import { RECIPES_UNAVAILABLE, applicability, autoApplicableChanges, decideAndApply, decideProposal, diagnose, gatherEvidence, isAutoApplicable, runPostmortem, shouldPostmortem, withRequiredFields } from "./postmortem.js";
 
 const stub = (d: RepairDiagnosis) => async () => d;
 const crossStreet2: RepairDiagnosis = {
@@ -23,6 +23,12 @@ describe("postmortem (#13)", () => {
     expect(shouldPostmortem(clean)).toBe(false);
     expect(shouldPostmortem({ ...clean, outcome: "FAILED", errorCode: "CAPTCHA" })).toBe(false);
     expect(shouldPostmortem({ ...clean, workerEvents: [{ ts: "t", step: "fill", level: "info", message: "question" }] })).toBe(true);
+  });
+
+  it("a dry-run stop (HUMAN_ACTION_REQUIRED, no error code) never triggers, even after a live question", () => {
+    const dry = { ...crossStreet2Attempt, outcome: "HUMAN_ACTION_REQUIRED" as const, errorCode: null };
+    expect(shouldPostmortem({ ...dry, workerEvents: [] })).toBe(false);
+    expect(shouldPostmortem({ ...dry, workerEvents: [{ ts: "t", step: "fill", level: "info", message: "question" }] })).toBe(false);
   });
 
   it("gathers evidence ids, events and the form_schema from events", () => {
@@ -113,16 +119,61 @@ describe("postmortem job + store + apply (#13)", () => {
     expect(rejected.applied).toEqual([]);
   });
 
-  it("recipeStep / confirmRegex are proposal-only, even when approved", async () => {
+  it("confirmRegex / questionText: never auto-applied; approve writes them to the category row; recipeStep stays applyable:false", async () => {
     const { store } = await setup();
+    const annotations: { traceId: string; name: string; label?: string }[] = [];
+    const annotate = async (traceId: string, a: { name: string; label?: string }) => (annotations.push({ traceId, name: a.name, label: a.label }), true);
+    const ev = ["ev_validate_shot"];
     const r = await runPostmortem(
-      { store, diagnoser: stub({ cause: "confirmation_pattern", confidence: 0.99, proposedChanges: [{ kind: "confirmRegex", before: "a", after: "b", evidence: ["ev_validate_shot"] }] }) },
+      {
+        store,
+        annotate,
+        diagnoser: stub({
+          cause: "confirmation_pattern",
+          confidence: 0.99,
+          proposedChanges: [
+            { kind: "confirmRegex", before: null, after: "Reference (?:#|number)\\s*(\\d{6,})", evidence: ev },
+            { kind: "questionText", before: "Cross Street 2", after: "What's the other cross street nearest the station?", evidence: ev },
+            { kind: "recipeStep", before: null, after: "click 'Next' after the location step", evidence: ev },
+            { kind: "confirmRegex", before: null, after: "([unclosed", evidence: ev },
+          ],
+        }),
+      },
       crossStreet2Attempt.id,
     );
     expect(r?.proposal.status).toBe("pending");
-    const approved = await decideAndApply({ store }, r!.proposal, "approved");
+    expect(r?.askUpFront).toEqual([]);
+    expect(r!.proposal.proposedChanges.map((c) => [c.kind, c.applyable, c.reason])).toEqual([
+      ["confirmRegex", true, null],
+      ["questionText", true, null],
+      ["recipeStep", false, RECIPES_UNAVAILABLE],
+      ["confirmRegex", false, "invalid regex"],
+    ]);
+    expect(await store.getCategoryOverrides!("subway-delay")).toBeNull();
+
+    const approved = await decideAndApply({ store, annotate }, r!.proposal, "approved");
     expect(approved.applied).toEqual([]);
+    expect(approved.appliedOverrides).toEqual(["confirmRegex", "questionText:Cross Street 2"]);
+    expect(await store.getCategoryOverrides!("subway-delay")).toMatchObject({
+      confirmRegex: "Reference (?:#|number)\\s*(\\d{6,})",
+      questionTexts: { "Cross Street 2": "What's the other cross street nearest the station?" },
+      repairIds: [r!.proposal.id],
+    });
     expect(await readCurrentSchema(store, "subway-delay")).toBeNull();
+    // before (diagnosis) + after (decision) on the failing attempt's trace
+    await new Promise((res) => setImmediate(res));
+    expect(annotations).toEqual([
+      { traceId: "trace_fixture1", name: "postmortem.diagnosis", label: "confirmation_pattern" },
+      { traceId: "trace_fixture1", name: "postmortem.repair", label: "approved" },
+    ]);
+  });
+
+  it("applicability: recipes unavailable, regex must compile, questionText needs the label", () => {
+    const ev = ["e"];
+    expect(applicability({ kind: "recipeStep", before: null, after: "x", evidence: ev })).toEqual({ applyable: false, reason: RECIPES_UNAVAILABLE });
+    expect(applicability({ kind: "confirmRegex", before: null, after: "(", evidence: ev }).applyable).toBe(false);
+    expect(applicability({ kind: "questionText", before: null, after: "q?", evidence: ev }).applyable).toBe(false);
+    expect(applicability({ kind: "requiredField", before: null, after: "Cross Street 2", evidence: ev })).toEqual({ applyable: true, reason: null });
   });
 
   it("never throws; skips attempts that don't qualify", async () => {

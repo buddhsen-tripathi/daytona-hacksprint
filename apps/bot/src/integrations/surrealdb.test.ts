@@ -221,8 +221,25 @@ describe("SurrealStore (embedded mem://)", () => {
     await store.saveRepairProposal!({ ...base, id: "rep_a", proposedChanges: [change], status: "approved", createdAt: "2026-10-16T10:00:00.000Z", decidedAt: "2026-10-16T12:00:00.000Z", decidedBy: "operator", applied: ["Cross Street 2"] });
     expect(await store.listRepairProposals!({ status: "pending" })).toEqual([]);
     expect(await store.getRepairProposal!("rep_a")).toMatchObject({ status: "approved", applied: ["Cross Street 2"] });
+    // repair_proposal->from_attempt->filing_attempt
+    const [edges] = await store.query<[{ out: unknown }[]]>("SELECT out FROM from_attempt WHERE in = repair_proposal:rep_a");
+    expect(edges.map((e) => String(e.out))).toEqual(["filing_attempt:att_1"]);
+    expect(await store.updateRepairProposal!("rep_b", { status: "pending", decidedAt: null })).toMatchObject({ id: "rep_b", status: "pending" });
+    expect((await store.listRepairProposals!({ status: "pending" })).map((p) => p.id)).toEqual(["rep_b"]);
+    expect(await store.updateRepairProposal!("rep_missing", { status: "approved" })).toBeNull();
     await store.reset();
     expect(await store.listRepairProposals!()).toEqual([]);
+  });
+
+  it("category overrides (#13): approved confirmRegex / questionText merge onto complaint_category", async () => {
+    expect(await store.getCategoryOverrides!("subway-delay")).toBeNull();
+    await store.updateCategoryOverrides!("subway-delay", { confirmRegex: "Reference #\\s*(\\d+)", repairIds: ["rep_1"] });
+    await store.updateCategoryOverrides!("subway-delay", { questionTexts: { "Cross Street 2": "What is the second cross street?" }, repairIds: ["rep_2"] });
+    expect(await store.getCategoryOverrides!("subway-delay")).toMatchObject({
+      confirmRegex: "Reference #\\s*(\\d+)",
+      questionTexts: { "Cross Street 2": "What is the second cross street?" },
+      repairIds: ["rep_1", "rep_2"],
+    });
   });
 
   it("reset clears data but keeps categories", async () => {

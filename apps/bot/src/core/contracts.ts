@@ -958,6 +958,11 @@ export interface Store {
   saveRepairProposal?(p: RepairProposal): Promise<RepairProposal>;
   getRepairProposal?(id: string): Promise<RepairProposal | null>;
   listRepairProposals?(args?: { status?: RepairProposal["status"]; limit?: number }): Promise<RepairProposal[]>;
+  /** Merge a patch into a stored proposal (decision / applied flags). Returns the saved row, null when absent. */
+  updateRepairProposal?(id: string, patch: Partial<RepairProposal>): Promise<RepairProposal | null>;
+  /** Approved confirmRegex / questionText repairs on `complaint_category:<id>` (merged via mergeCategoryOverrides). */
+  updateCategoryOverrides?(id: string, patch: CategoryOverrides): Promise<void>;
+  getCategoryOverrides?(id: string): Promise<CategoryOverrides | null>;
 }
 
 export interface SandboxHandle {
@@ -1089,8 +1094,34 @@ export const RepairProposal = RepairDiagnosis.extend({
   decidedBy: z.enum(["auto", "operator"]).nullable().optional(),
   /** `requiredField` labels actually written to the catalog (auto-apply or approval). Other kinds stay proposal-only. */
   applied: z.array(z.string()).optional(),
+  /**
+   * The diagnosed changes plus what deterministic code decided about each: `applyable: false` + `reason` when nothing
+   * can apply that kind yet (`recipeStep` until recipes #9 land) or the value is unusable (invalid regex). Additive:
+   * rows without the flags parse as before; the LLM schema (RepairDiagnosis) is unchanged.
+   */
+  proposedChanges: z.array(RepairChange.extend({ applyable: z.boolean().optional(), reason: z.string().nullable().optional() })),
+  /** Non-requiredField repairs written on approval: "confirmRegex", "questionText:<field label>". */
+  appliedOverrides: z.array(z.string()).optional(),
 });
 export type RepairProposal = z.infer<typeof RepairProposal>;
+
+/** #13: per-category repairs a human approved, stored on `complaint_category:<id>.repairOverrides`. */
+export type CategoryOverrides = {
+  /** Confirmation-page pattern for the official reference number (approved `confirmRegex`). */
+  confirmRegex?: string | null;
+  /** Form field label → the plain question to ask the resident for it (approved `questionText`). */
+  questionTexts?: Record<string, string>;
+  repairIds?: string[];
+  updatedAt?: string;
+};
+
+/** Both stores: questionTexts merge per label, repairIds union, the rest last-write-wins. */
+export function mergeCategoryOverrides(prev: CategoryOverrides | null | undefined, patch: CategoryOverrides): CategoryOverrides {
+  const out: CategoryOverrides = { ...(prev ?? {}), ...patch };
+  if (prev?.questionTexts || patch.questionTexts) out.questionTexts = { ...(prev?.questionTexts ?? {}), ...(patch.questionTexts ?? {}) };
+  if (prev?.repairIds || patch.repairIds) out.repairIds = [...new Set([...(prev?.repairIds ?? []), ...(patch.repairIds ?? [])])];
+  return out;
+}
 
 /** Auto-apply threshold for `requiredField` additions (never for anything affecting submit). */
 export const REPAIR_AUTO_APPLY_CONFIDENCE = 0.9;

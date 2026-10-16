@@ -8,10 +8,13 @@
  * (POST /api/repairs/:id/approve). The only exception is the deterministic guard below — a `requiredField`
  * addition with confidence >= 0.9 is auto-applied.
  *
- * Applying = `requiredField` only: the label is merged into the category's learned form schema through #11's path
- * (recordFormSchema → memory + Store.updateCategorySchema, which bumps lastVerifiedAt). `recipeStep` (#9),
- * `confirmRegex` and `questionText` changes stay proposal-only: approving records the decision but writes nothing,
- * and nothing that affects the submit step is ever applied automatically.
+ * Applying (approve):
+ *   requiredField → merged into the category's learned form schema through #11's path (recordFormSchema → memory +
+ *                   Store.updateCategorySchema, which bumps lastVerifiedAt); the only kind ever auto-applied.
+ *   confirmRegex / questionText → `complaint_category.repairOverrides` (Store.updateCategoryOverrides), human-approved only.
+ *   recipeStep → produced but `applyable: false` ("recipes not available yet") until #9's recipes land.
+ * Nothing that affects the submit step is ever applied automatically. The diagnosis ("before") and the decision
+ * ("after") are posted as Phoenix annotations on the failing attempt's trace (best effort).
  */
 import {
   REPAIR_AUTO_APPLY_CONFIDENCE,
@@ -26,6 +29,7 @@ import {
   type Tracer,
   type WorkerEvent,
 } from "../core/contracts.js";
+import { logPhoenixAnnotation, type AnnotationInput } from "../integrations/arize.js";
 import { chatJson, type ChatMessage } from "../integrations/openrouter.js";
 import { readCurrentSchema, recordFormSchema, sanitizeFormSchema } from "./form-schema-memory.js";
 
@@ -44,8 +48,12 @@ function askedLiveQuestion(events: WorkerEvent[]): boolean {
   return events.some((e) => e.message === "question");
 }
 
-/** Which outcomes trigger a post-mortem (issue #13 "Behaviour"). */
+/** A dry run that filled the form and stopped before Submit (HUMAN_ACTION_REQUIRED, no error code): nothing failed. */
+export const isDryRunStop = (attempt: Pick<FilingAttempt, "outcome" | "errorCode">) => attempt.outcome === "HUMAN_ACTION_REQUIRED" && !attempt.errorCode;
+
+/** Which outcomes trigger a post-mortem (issue #13 "Behaviour"). Dry-run stops never do, even after a live question. */
 export function shouldPostmortem(attempt: FilingAttempt): boolean {
+  if (isDryRunStop(attempt)) return false;
   if (attempt.outcome && TRIGGER_CODES.includes(`${attempt.outcome}/${attempt.errorCode ?? ""}`)) return true;
   return askedLiveQuestion(attempt.workerEvents);
 }
@@ -92,6 +100,9 @@ const SYSTEM_PROMPT = `You diagnose why an automated NYC 311 form-filing run did
 Return ONLY JSON matching the schema: { cause, proposedChanges:[{kind,before,after,evidence}], confidence }.
 - cause: missing_required_field | selector_changed | new_step | confirmation_pattern | captcha | unknown
 - kind requiredField: "after" is the exact field label the form required; "before" null.
+- kind questionText: "before" is the exact form field label, "after" the plain-language question to ask the resident for it.
+- kind confirmRegex: "after" is a JavaScript regex (one capture group) for the official reference number on the confirmation page; "before" the old pattern or null.
+- kind recipeStep: "after" describes the step the filing recipe is missing or must change.
 - Every change MUST cite evidence ids taken verbatim from the provided evidence list. Never invent ids.
 - If unsure, use cause "unknown", no changes, low confidence. Never propose bypassing a captcha.`;
 
@@ -117,6 +128,31 @@ export function sanitizeDiagnosis(d: RepairDiagnosis, ev: PostmortemEvidence): R
   return { ...d, proposedChanges };
 }
 
+export const RECIPES_UNAVAILABLE = "recipes not available yet";
+
+/**
+ * Deterministic: can approving this change write anything? `recipeStep` waits for recipes (#9); a `confirmRegex`
+ * must compile (and stay short); a `questionText` needs the field label in `before`.
+ */
+export function applicability(c: RepairChange): { applyable: boolean; reason: string | null } {
+  switch (c.kind) {
+    case "recipeStep":
+      return { applyable: false, reason: RECIPES_UNAVAILABLE };
+    case "confirmRegex":
+      if (c.after.length > 300) return { applyable: false, reason: "regex too long" };
+      try {
+        new RegExp(c.after);
+        return { applyable: true, reason: null };
+      } catch {
+        return { applyable: false, reason: "invalid regex" };
+      }
+    case "questionText":
+      return c.before?.trim() && c.after.trim() ? { applyable: true, reason: null } : { applyable: false, reason: "questionText needs the field label in `before`" };
+    default:
+      return c.after.trim() ? { applyable: true, reason: null } : { applyable: false, reason: "empty field label" };
+  }
+}
+
 /** Gather → diagnose → pending RepairProposal. */
 export async function diagnose(attempt: PostmortemAttempt, opts: { diagnoser?: Diagnoser; now?: () => Date; currentRequiredFields?: string[] | null } = {}): Promise<RepairProposal> {
   const ev = gatherEvidence(attempt, opts.currentRequiredFields ?? null);
@@ -124,6 +160,7 @@ export async function diagnose(attempt: PostmortemAttempt, opts: { diagnoser?: D
   const d = sanitizeDiagnosis(raw, ev);
   return RepairProposal.parse({
     ...d,
+    proposedChanges: d.proposedChanges.map((c) => ({ ...c, ...applicability(c) })),
     id: shortId("rep"),
     attemptId: attempt.id,
     complaintId: attempt.complaintId,
@@ -198,27 +235,71 @@ export async function applyRequiredFields(
   if (!labels.length) return [];
   const { formSchema } = await currentRequiredFields(deps.store, p.category);
   const patched = withRequiredFields(formSchema, labels, now.toISOString());
+  // provenance: the failing attempt's trace + its screenshots (so the schema view links back to what taught it)
+  const attempt = await deps.store.getAttempt(p.attemptId).catch(() => null);
   const rec = await recordFormSchema(
     { store: deps.store, memory: deps.memory ?? null },
-    { category: p.category, attempt: { id: `${p.attemptId}_${p.id}`, traceId: null }, outcome: "HUMAN_ACTION_REQUIRED", formSchema: patched },
+    { category: p.category, attempt: { id: `${p.attemptId}_${p.id}`, traceId: attempt?.traceId ?? null, evidence: attempt?.evidence ?? [] }, outcome: "HUMAN_ACTION_REQUIRED", formSchema: patched },
   );
   if (!rec) return [];
   return labels.filter((l) => rec.requiredFields.some((r) => r.toLowerCase() === l.toLowerCase()));
 }
 
-/** Operator decision (POST /api/repairs/:id/approve|reject). Approve applies requiredField changes only. */
+/**
+ * Approved `confirmRegex` / `questionText` changes → `complaint_category.repairOverrides` (Store.updateCategoryOverrides).
+ * Only applyable ones; never `recipeStep`. Returns what was written ("confirmRegex", "questionText:<label>").
+ */
+export async function applyOverrides(store: Store, p: RepairProposal, now: Date = new Date()): Promise<string[]> {
+  if (!store.updateCategoryOverrides) return [];
+  const usable = p.proposedChanges.filter((c) => (c.kind === "confirmRegex" || c.kind === "questionText") && applicability(c).applyable);
+  if (!usable.length) return [];
+  const regex = usable.filter((c) => c.kind === "confirmRegex").at(-1);
+  const questionTexts = Object.fromEntries(usable.filter((c) => c.kind === "questionText").map((c) => [c.before!.trim(), c.after.trim()]));
+  await store.updateCategoryOverrides(p.category, {
+    ...(regex ? { confirmRegex: regex.after } : {}),
+    ...(Object.keys(questionTexts).length ? { questionTexts } : {}),
+    repairIds: [p.id],
+    updatedAt: now.toISOString(),
+  });
+  return [...(regex ? ["confirmRegex"] : []), ...Object.keys(questionTexts).map((l) => `questionText:${l}`)];
+}
+
+export type Annotate = (traceId: string, a: AnnotationInput) => Promise<boolean>;
+const phoenixAnnotate: Annotate = (traceId, a) => logPhoenixAnnotation({ traceId }, a);
+
+/** Best effort, never awaited by callers' critical path: a Phoenix trace annotation on the failing attempt's trace. */
+function annotateAttempt(annotate: Annotate | null | undefined, traceId: string | null | undefined, a: AnnotationInput) {
+  if (!traceId || annotate === null) return;
+  void (annotate ?? phoenixAnnotate)(traceId, a).catch(() => false);
+}
+
+/**
+ * Operator decision (POST /api/repairs/:id/approve|reject). Approve applies `requiredField` additions (schema +
+ * catalog) and applyable `confirmRegex` / `questionText` (category overrides); `recipeStep` stays applyable:false.
+ * Annotates the attempt's Phoenix trace with the decision ("after" to the diagnosis's "before").
+ */
 export async function decideAndApply(
-  deps: { store: Store; memory?: Pick<AgentMemory, "remember"> | null },
+  deps: { store: Store; memory?: Pick<AgentMemory, "remember"> | null; annotate?: Annotate | null },
   p: RepairProposal,
   decision: "approved" | "rejected",
   now: Date = new Date(),
 ): Promise<RepairProposal> {
   const decided = decideProposal(p, decision, now, "operator");
   if (decision === "approved") {
-    const applied = await applyRequiredFields(deps, p, p.proposedChanges, now);
+    const applied = await applyRequiredFields(deps, p, p.proposedChanges.filter((c) => applicability(c).applyable), now);
     decided.applied = [...new Set([...(p.applied ?? []), ...applied])];
+    const overrides = await applyOverrides(deps.store, p, now);
+    if (overrides.length) decided.appliedOverrides = [...new Set([...(p.appliedOverrides ?? []), ...overrides])];
   }
   await deps.store.saveRepairProposal?.(decided);
+  const attempt = await deps.store.getAttempt(p.attemptId).catch(() => null);
+  annotateAttempt(deps.annotate, attempt?.traceId, {
+    name: "postmortem.repair",
+    label: decision,
+    score: decision === "approved" ? 1 : 0,
+    explanation: decision === "approved" ? `Applied: ${[...(decided.applied ?? []), ...(decided.appliedOverrides ?? [])].join(", ") || "nothing applyable"}` : "Rejected by operator",
+    metadata: { repairId: p.id, cause: p.cause, applied: decided.applied ?? [], appliedOverrides: decided.appliedOverrides ?? [], notApplyable: p.proposedChanges.filter((c) => !applicability(c).applyable).map((c) => ({ kind: c.kind, reason: applicability(c).reason })) },
+  });
   return decided;
 }
 
@@ -231,6 +312,8 @@ export type PostmortemDeps = {
   memory?: Pick<AgentMemory, "remember" | "reflect"> | null;
   diagnoser?: Diagnoser;
   now?: () => Date;
+  /** Phoenix trace annotation (default: logPhoenixAnnotation, best effort); null disables. */
+  annotate?: Annotate | null;
 };
 
 export type PostmortemResult = {
@@ -270,6 +353,15 @@ async function runPostmortemInner(deps: PostmortemDeps, attemptId: string, set: 
   set("repair.id", proposal.id);
   set("repair.status", proposal.status);
   set("repair.auto_applied", askUpFront.length);
+  set("repair.not_applyable", proposal.proposedChanges.filter((c) => c.applyable === false).length);
+  // "before": the diagnosis on the failing attempt's trace (the decision lands next to it as "after")
+  annotateAttempt(deps.annotate, attempt.traceId, {
+    name: "postmortem.diagnosis",
+    label: proposal.cause,
+    score: proposal.confidence,
+    explanation: proposal.proposedChanges.map((c) => `${c.kind}: ${c.before ?? "∅"} → ${c.after}`).join("; "),
+    metadata: { repairId: proposal.id, status: proposal.status, autoApplied: askUpFront, evidence: [...new Set(proposal.proposedChanges.flatMap((c) => c.evidence))] },
+  });
 
   if (deps.memory) {
     const what = proposal.proposedChanges.map((c) => `${c.kind}: ${c.before ?? "∅"} → ${c.after}`).join("; ");
