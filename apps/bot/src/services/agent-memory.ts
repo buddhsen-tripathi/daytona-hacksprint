@@ -21,7 +21,12 @@
  */
 import type {
   AgentMemory,
+  CategoryDefinition,
+  ComplaintDraft,
   Embedder,
+  FilingAttempt,
+  FilingErrorCode,
+  FilingStatus,
   MemoryHit,
   MemoryItem,
   MemoryRecallQuery,
@@ -29,8 +34,13 @@ import type {
   MemorySearch,
   ScoredMemory,
   Store,
+  Tracer,
+  WorkerAnswer,
+  WorkerQuestion,
+  WorkflowPattern,
 } from "../core/contracts.js";
-import { haversineMeters, shortId } from "../core/contracts.js";
+import { CATEGORIES, haversineMeters, shortId } from "../core/contracts.js";
+import { getCategory } from "../core/knowledge.js";
 
 export const MEMORY_WEIGHTS = { relevance: 0.5, recency: 0.3, importance: 0.2 } as const;
 export const RECENCY_HALF_LIFE_MS = 7 * 24 * 3600_000;
@@ -162,6 +172,8 @@ export type AgentMemoryDeps = {
   store: Store;
   /** null ⇒ keyword-overlap relevance only. */
   embedder?: Embedder | null;
+  /** Phoenix spans: `memory.remember` (TOOL), `memory.recall` (RETRIEVER, recalled items as documents). */
+  tracer?: Tracer | null;
   /** Clock (tests). */
   now?: () => number;
 };
@@ -172,6 +184,7 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
   const { store } = deps;
   const embedder = deps.embedder ?? null;
   const now = deps.now ?? Date.now;
+  const tracer = deps.tracer ?? null;
   const inflight = new Set<Promise<unknown>>();
   let warned = false;
 
@@ -188,6 +201,17 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
   }
 
   async function write(item: MemoryItem): Promise<string> {
+    if (!tracer) return writeRow(item);
+    return tracer.span("memory.remember", { "memory.kind": item.kind, "memory.source": item.source, "memory.category": item.category ?? "", "memory.importance": item.importance ?? DEFAULT_IMPORTANCE }, async (set, oi) => {
+      oi.tool({ name: "memory.remember", description: "Write one item to the agent memory stream (embedded, scored at recall)", parameters: { kind: item.kind, category: item.category ?? null, importance: item.importance ?? DEFAULT_IMPORTANCE } });
+      oi.input({ text: scrubPii(item.text), source: item.source, about: item.about ?? [] });
+      const id = await writeRow(item, (model) => set("memory.embed_model", model ?? "none"));
+      oi.output({ id });
+      return id;
+    });
+  }
+
+  async function writeRow(item: MemoryItem, onEmbed?: (model: string | null) => void): Promise<string> {
     const id = item.id ?? shortId("mem");
     if (!store.insertMemory) {
       if (!warned) console.warn(`[memory] store ${store.backend} has no insertMemory; memory is not persisted`);
@@ -196,6 +220,7 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
     }
     const text = scrubPii(item.text);
     const emb = await embedOne(text);
+    onEmbed?.(emb?.model ?? null);
     const row: MemoryRecord = {
       id,
       kind: item.kind,
@@ -227,31 +252,14 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
     },
 
     async recall(q: MemoryRecallQuery) {
-      if (!store.searchMemory) return [];
-      const limit = Math.min(100, Math.max(1, Math.floor(q.limit ?? 10)));
-      const text = q.text?.trim() ? scrubPii(q.text) : "";
-      const emb = text ? await embedOne(text) : null;
-      const scope = q.scope ?? {};
-      const nowMs = now();
-      const hits = await store.searchMemory({
-        embedding: emb?.vector ?? null,
-        embedModel: emb?.model ?? null,
-        kind: q.kind,
-        category: scope.category ?? null,
-        chatId: scope.chatId ?? null,
-        line: scope.line ?? null,
-        geo: scope.geo ? { lat: scope.geo.lat, lon: scope.geo.lon, radiusMeters: scope.geo.radiusMeters ?? DEFAULT_GEO_RADIUS_M } : null,
-        sinceMs: q.sinceMs,
-        about: q.about ?? null,
-        nowMs,
-        // candidate pool: ranking needs more than `limit` rows (a recent, important item may be less similar)
-        limit: Math.max(limit * 8, 64),
+      if (!tracer) return recallImpl(q);
+      return tracer.span("memory.recall", { "memory.kind": q.kind ?? "", "memory.category": q.scope?.category ?? "", "memory.scoped_to_resident": !!q.scope?.chatId, "memory.limit": q.limit ?? 10 }, async (set, oi) => {
+        oi.input({ text: q.text ? scrubPii(q.text) : null, kind: q.kind ?? null, scope: { ...q.scope, chatId: q.scope?.chatId ? "(resident)" : null }, sinceMs: q.sinceMs ?? null, about: q.about ?? null });
+        const items = await recallImpl(q);
+        set("memory.recalled", items.length);
+        oi.retriever(items.map((m) => ({ id: m.id, content: m.text, score: m.score, metadata: { kind: m.kind, source: m.source, category: m.category, ...m.breakdown } })));
+        return items;
       });
-      const tokens = text ? tokenize(text) : null;
-      return hits
-        .map((h) => scoreMemory(h, tokens, nowMs))
-        .sort((a, b) => b.score - a.score || b.createdAt.localeCompare(a.createdAt))
-        .slice(0, limit);
     },
 
     async reflect(attemptId, lesson, data) {
@@ -274,6 +282,152 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
       while (inflight.size) await Promise.allSettled([...inflight]);
     },
   };
+
+  async function recallImpl(q: MemoryRecallQuery): Promise<ScoredMemory[]> {
+    if (!store.searchMemory) return [];
+    const limit = Math.min(100, Math.max(1, Math.floor(q.limit ?? 10)));
+    const text = q.text?.trim() ? scrubPii(q.text) : "";
+    const emb = text ? await embedOne(text) : null;
+    const scope = q.scope ?? {};
+    const nowMs = now();
+    const hits = await store.searchMemory({
+      embedding: emb?.vector ?? null,
+      embedModel: emb?.model ?? null,
+      kind: q.kind,
+      category: scope.category ?? null,
+      chatId: scope.chatId ?? null,
+      line: scope.line ?? null,
+      geo: scope.geo ? { lat: scope.geo.lat, lon: scope.geo.lon, radiusMeters: scope.geo.radiusMeters ?? DEFAULT_GEO_RADIUS_M } : null,
+      sinceMs: q.sinceMs,
+      about: q.about ?? null,
+      nowMs,
+      // candidate pool: ranking needs more than `limit` rows (a recent, important item may be less similar)
+      limit: Math.max(limit * 8, 64),
+    });
+    const tokens = text ? tokenize(text) : null;
+    return hits
+      .map((h) => scoreMemory(h, tokens, nowMs))
+      .sort((a, b) => b.score - a.score || b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
   return memory;
 }
 
+
+// ---------------------------------------------------------------------------
+// write points (issue #4): the ONLY place memory text is composed, so the
+// PII rule is reviewable in one spot. Neutral facts only: the classifier's
+// description, transit facts, official form prompts / option labels, outcome
+// codes. Never contact fields, never a resident's free-typed answer.
+// ---------------------------------------------------------------------------
+const categoryLabel = (id: string | null | undefined) => (id ? (getCategory(id as never)?.label ?? id) : "Report");
+
+function transitFacts(t: ComplaintDraft["transit"]): string[] {
+  if (!t) return [];
+  return [
+    t.line ? (/^[0-9A-Z]$/.test(t.line) ? `${t.line} train` : t.line) : null,
+    t.direction ? `direction ${t.direction}` : null,
+    t.station ? `near ${t.station}` : null,
+    t.delayMinutes ? `~${t.delayMinutes} min delay` : null,
+  ].filter((x): x is string => !!x);
+}
+
+const geoOf = (d: Pick<ComplaintDraft, "location">) =>
+  d.location.latitude != null && d.location.longitude != null ? { lat: d.location.latitude, lon: d.location.longitude } : null;
+
+/** Episodic: the draft reached READY_FOR_APPROVAL (one item per complaint, upserted). */
+export function readyForApprovalItem(d: ComplaintDraft): MemoryItem {
+  const facts = transitFacts(d.transit);
+  // classifier output, NOT draft.description (for subways that quotes the resident's own words verbatim)
+  const neutral = d.classification?.description?.trim() ?? "";
+  const head = `${categoryLabel(d.category)}${facts.length ? ` (${facts.join(", ")})` : ""}`;
+  return {
+    id: `mem_ready_${d.id}`,
+    kind: "episodic",
+    text: neutral ? `${head}: ${neutral}` : head,
+    category: d.category,
+    chatId: d.telegramChatId,
+    line: d.transit?.line ?? null,
+    geo: geoOf(d),
+    importance: 0.5,
+    data: { complaintId: d.id, draftVersion: d.draftVersion, status: d.status, incidentTime: d.transit?.incidentTime ?? null, photos: d.media.length, borough: d.location.borough ?? d.transit?.borough ?? null },
+    source: `complaint:${d.id}`,
+    about: [{ table: "complaint", id: d.id }, ...(d.category ? [{ table: "complaint_category" as const, id: d.category }] : [])],
+  };
+}
+
+/** Episodic: how a filing attempt ended (0.9 when SUBMITTED, else 0.6). The reference number goes in data, not text. */
+export function filingOutcomeItem(args: { complaint: ComplaintDraft; attempt: Pick<FilingAttempt, "id" | "category">; status: FilingStatus; errorCode: FilingErrorCode | null; officialRequestNumber: string | null; dryRun?: boolean }): MemoryItem {
+  const { complaint: d, attempt, status, errorCode } = args;
+  const facts = transitFacts(d.transit);
+  const what = status === "SUBMITTED" ? (args.officialRequestNumber ? "was submitted and confirmed with an official reference" : "was submitted") : args.dryRun ? "stopped before the final Submit (dry run)" : `ended ${status}${errorCode ? ` (${errorCode})` : ""}`;
+  return {
+    id: `mem_outcome_${attempt.id}`,
+    kind: "episodic",
+    text: `Filing of a ${categoryLabel(attempt.category).toLowerCase()}${facts.length ? ` (${facts.join(", ")})` : ""} ${what}.`,
+    category: attempt.category,
+    chatId: d.telegramChatId,
+    line: d.transit?.line ?? null,
+    geo: geoOf(d),
+    importance: status === "SUBMITTED" ? 0.9 : 0.6,
+    data: { complaintId: d.id, attemptId: attempt.id, status, errorCode, officialRequestNumber: args.officialRequestNumber, dryRun: !!args.dryRun },
+    source: `attempt:${attempt.id}`,
+    about: [{ table: "filing_attempt", id: attempt.id }, { table: "complaint", id: d.id }],
+  };
+}
+
+/** Episodic: a live worker question and how the resident answered (option label, or typed-answer length only). */
+export function liveQuestionItem(args: { complaint: ComplaintDraft; attemptId: string; question: WorkerQuestion; answer: WorkerAnswer | null; waitedMs: number }): MemoryItem {
+  const { complaint: d, question: q, answer } = args;
+  const optionLabel = answer?.optionIndex !== undefined ? (q.options?.[answer.optionIndex] ?? null) : null;
+  const how = !answer ? "no answer came before the timeout" : optionLabel ? `the resident chose “${optionLabel}”` : `the resident typed an answer (${answer.value.length} chars)`;
+  return {
+    id: `mem_q_${args.attemptId}_${q.id}`,
+    kind: "episodic",
+    text: `During filing the ${categoryLabel(d.category).toLowerCase()} form asked: “${q.prompt}” (${q.field}); ${how}.`,
+    category: d.category,
+    chatId: d.telegramChatId,
+    line: d.transit?.line ?? null,
+    importance: 0.6,
+    data: { complaintId: d.id, attemptId: args.attemptId, questionId: q.id, field: q.field, options: q.options ?? [], answered: !!answer, optionIndex: answer?.optionIndex ?? null, optionLabel, freeTextChars: answer && optionLabel === null ? answer.value.length : null, waitedMs: args.waitedMs },
+    source: `attempt:${args.attemptId}`,
+    about: [{ table: "filing_attempt", id: args.attemptId }, { table: "complaint", id: d.id }],
+  };
+}
+
+/** Procedural: an ask-before-approval rule learned from a filing (mirrors workflow_pattern; upserted per pattern). */
+export function askPatternItem(p: WorkflowPattern): MemoryItem {
+  const h = p.hint as { field?: string; prompt?: string; count?: number; options?: string[] };
+  return {
+    id: `mem_${p.id}`,
+    kind: "procedural",
+    text: `${categoryLabel(p.category)} form: ${p.description}${h.prompt ? ` Last prompt: “${h.prompt}”` : ""}`,
+    category: p.category,
+    chatId: null,
+    importance: 0.7,
+    data: { patternId: p.id, patternKind: p.kind, field: h.field ?? null, count: h.count ?? null, options: h.options ?? [] },
+    source: p.observedInAttemptId ? `attempt:${p.observedInAttemptId}` : "seed",
+    about: [{ table: "complaint_category", id: p.category }, ...(p.observedInAttemptId ? [{ table: "filing_attempt" as const, id: p.observedInAttemptId }] : [])],
+  };
+}
+
+/** Semantic: one fact per category in the registry (source `seed`, deterministic id ⇒ idempotent at every boot). */
+export function categorySeedItem(c: CategoryDefinition): MemoryItem {
+  return {
+    id: `mem_seed_${c.id}`,
+    kind: "semantic",
+    text: `${c.label} — filed via ${c.officialLabel}. ${c.guidance} Needed before approval: ${c.requiredFields.join(", ")}.`,
+    category: c.id,
+    chatId: null,
+    importance: 0.4,
+    data: { officialFormUrl: c.officialFormUrl, articleUrl: c.articleUrl, requiredFields: c.requiredFields, openDataBacked: c.openDataBacked, requiresContactName: c.requiresContactName },
+    source: "seed",
+    about: [{ table: "complaint_category", id: c.id }],
+  };
+}
+
+/** Boot: seed the category registry as semantic memory. */
+export async function seedCategoryMemory(memory: Pick<AgentMemory, "remember">, categories: CategoryDefinition[] = Object.values(CATEGORIES)): Promise<number> {
+  for (const c of categories) await memory.remember(categorySeedItem(c));
+  return categories.length;
+}

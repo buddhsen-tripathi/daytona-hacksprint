@@ -9,6 +9,7 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
+  AgentMemory,
   Classifier,
   ClassificationResult,
   ComplaintDraft,
@@ -66,12 +67,15 @@ import {
   parseLearnedAnswer,
   relatedCardLines,
 } from "../services/memory.js";
+import { readyForApprovalItem } from "../services/agent-memory.js";
 
 export type { FilingService, StatusService } from "../integrations/fallbacks.js";
 
 export type OrchestratorDeps = {
   store: Store;
   tracer: Tracer;
+  /** Agent memory (#4). Absent ⇒ no memory writes (reads fall back to the store). */
+  memory?: AgentMemory | null;
   classifier: Classifier;
   location: LocationService;
   duplicates: DuplicateService;
@@ -127,6 +131,7 @@ export function looksLikeAddress(text: string): boolean {
 
 export function createOrchestrator(deps: OrchestratorDeps) {
   const { store, tracer, classifier, location, duplicates, filing } = deps;
+  const memory = deps.memory ?? null;
   const target: FilingTarget = "real";
   const mediaRoot = deps.mediaDir ?? resolve(RUNS_DIR, "media");
   const maxPerHour = deps.maxFilingsPerHour ?? 6;
@@ -459,6 +464,8 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         contextLines,
       });
       oi.output({ category: draft.category, version: draft.draftVersion, photos: draft.media.length, transit: draft.transit ?? null });
+      // [memory] episodic: this draft reached READY_FOR_APPROVAL (neutral description + transit facts; upserted per complaint; never blocks the card)
+      if (memory) void memory.remember(readyForApprovalItem(draft)).catch((e) => console.warn("[orchestrator] memory (ready):", (e as Error).message));
       return s;
     });
     const parts = [...notes, summary];

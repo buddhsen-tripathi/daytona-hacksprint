@@ -55,6 +55,7 @@ async function main() {
     `  telegram   ${telegramLine}`,
     `  api        http://localhost:${env.PORT_API}/api/health`,
     `  store      ${p.store ?? providers.store.backend}`,
+    `  memory     ${p.memory ?? "?"}`,
     `  tracer     ${p.tracer ?? "?"}  (project ${env.PHOENIX_PROJECT})`,
     `  classifier ${p.classifier ?? "?"}`,
     `  location   ${p.location ?? "?"}`,
