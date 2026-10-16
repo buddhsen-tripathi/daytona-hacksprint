@@ -64,7 +64,7 @@ pnpm --filter @311relay/bot evals            # the evaluation scenarios, results
 Before opening a PR, run what CI runs (typecheck, worker build, bot tests; no `.env` or keys needed):
 
 ```bash
-pnpm run ci              # `run` is required: plain `pnpm ci` is pnpm's built-in clean install
+pnpm check
 ```
 
 ## Real filing targets

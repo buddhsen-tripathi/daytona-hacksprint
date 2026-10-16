@@ -5,9 +5,11 @@ on:
   push:
     branches: [main]
 
+# One group per PR (or per pushed ref). Superseded PR runs are cancelled; runs on main are not,
+# so every merge commit gets a result.
 concurrency:
-  group: ci-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -22,6 +24,8 @@ jobs:
       OPENROUTER_API_KEY: ""
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # pnpm version comes from the root package.json `packageManager` field.
       - uses: pnpm/action-setup@v6
