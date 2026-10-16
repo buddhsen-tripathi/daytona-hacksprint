@@ -454,6 +454,11 @@ export const SAME_ISSUE = {
   /** "N people reported this in the last 2 hours". */
   countWindowMs: 2 * 3600_000,
   limit: 30,
+  /**
+   * #22: the same-issue check gates the approval card, so it waits at most this long for the query embedding;
+   * past it, recall uses keyword relevance (and the embedding is cached for the next turn).
+   */
+  embedBudgetMs: 150,
 } as const;
 
 /** Statuses an original must NOT be in to count as "already raised". */
@@ -582,7 +587,7 @@ export async function findSameIssue(
   if (transit ? !line : !geo) return null;
   const queryText = opts.queryText ?? sameIssueQueryText(draft);
   // ACROSS residents: no chatId in the scope (privacy is enforced below: nothing but neutral facts leaves).
-  const hits = await recallWithin(memory, { kind: "episodic", text: queryText, scope: { category: draft.category, line, geo }, sinceMs: SAME_ISSUE.sinceMs, limit: SAME_ISSUE.limit });
+  const hits = await recallWithin(memory, { kind: "episodic", text: queryText, scope: { category: draft.category, line, geo }, sinceMs: SAME_ISSUE.sinceMs, limit: SAME_ISSUE.limit, embedBudgetMs: SAME_ISSUE.embedBudgetMs });
   const links = await store.getIssueLinks?.(draft.id).catch(() => null);
   const dismissed = new Set(links?.notSameAs ?? []);
   const rows = new Map<string, Promise<ComplaintDraft | null>>();

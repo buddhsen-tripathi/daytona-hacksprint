@@ -5,7 +5,7 @@
  *   score = 0.5·relevance + 0.3·recency + 0.2·importance
  *
  *   relevance  cosine(query, item) when both have embeddings from the same model,
- *              else keyword overlap (share of query terms found in the item),
+ *              else 0.6 · Jaccard(query terms, item terms) (on the cosine scale, #22),
  *              0 when the query has no text
  *   recency    0.5^(age / 7 days)
  *   importance 0..1, set at write time
@@ -86,6 +86,27 @@ export function tokenize(text: string): string[] {
   return out;
 }
 
+/**
+ * Keyword relevance is put on the cosine scale (#22): Jaccard of query and document terms (0..1), scaled by
+ * 0.6. Raw "share of query terms found" reaches 1.0 for any document containing a short query, while
+ * text-embedding-3-small cosine for a good match is usually 0.4–0.7, so keyword-only rows (fallback vectors,
+ * other model) used to outrank genuinely similar embedded rows.
+ */
+export const KEYWORD_RELEVANCE_SCALE = 0.6;
+
+/** |query ∩ doc| / |query ∪ doc| over distinct terms (0..1). */
+export function keywordJaccard(queryTokens: string[], docText: string): number {
+  const q = new Set(queryTokens);
+  if (!q.size) return 0;
+  const d = new Set(tokenize(docText));
+  let hit = 0;
+  for (const t of q) if (d.has(t)) hit++;
+  const union = q.size + d.size - hit;
+  return union ? hit / union : 0;
+}
+
+export const keywordRelevance = (queryTokens: string[], docText: string) => KEYWORD_RELEVANCE_SCALE * keywordJaccard(queryTokens, docText);
+
 /** Share of distinct query terms present in the document (0..1). */
 export function keywordOverlap(queryTokens: string[], docText: string): number {
   const q = new Set(queryTokens);
@@ -129,7 +150,37 @@ export function memoryMatches(row: MemoryRecord, q: Omit<MemorySearch, "limit" |
   return true;
 }
 
-/** Reference search (memory store): filter, cosine within the same model, most similar first, else newest first. */
+/** Share of the candidate pool kept for rows without a comparable vector (#22), so they are never crowded out. */
+export const UNCOMPARABLE_POOL_SHARE = 0.25;
+
+const byPoolOrder = (x: MemoryHit, y: MemoryHit) => (y.similarity ?? -2) - (x.similarity ?? -2) || y.createdAt.localeCompare(x.createdAt);
+
+/**
+ * Candidate pool (both stores): rows with a similarity (most similar first) and rows without one (newest first),
+ * reserving ⌈limit·¼⌉ slots for the latter; unused slots go to whichever side has more.
+ */
+export function mergeMemoryPool(similar: MemoryHit[], other: MemoryHit[], limit: number): MemoryHit[] {
+  const seen = new Set<string>();
+  const a = similar.filter((h) => h.similarity != null).sort(byPoolOrder);
+  const b = [...other, ...similar.filter((h) => h.similarity == null)].sort((x, y) => y.createdAt.localeCompare(x.createdAt));
+  const take = (list: MemoryHit[], n: number) => {
+    const out: MemoryHit[] = [];
+    for (const h of list) {
+      if (out.length >= n) break;
+      if (!seen.has(h.id)) {
+        seen.add(h.id);
+        out.push(h);
+      }
+    }
+    return out;
+  };
+  const reserve = Math.min(b.length, Math.ceil(limit * UNCOMPARABLE_POOL_SHARE));
+  const top = take(a, Math.max(0, limit - reserve));
+  const rest = take(b, limit - top.length);
+  return [...top, ...rest, ...take(a, limit - top.length - rest.length)].sort(byPoolOrder);
+}
+
+/** Reference search (memory store): filter, cosine within the same model; pool = mergeMemoryPool (most similar first, then newest). */
 export function searchMemoryRows(rows: Iterable<MemoryRecord>, q: MemorySearch): MemoryHit[] {
   const hits: MemoryHit[] = [];
   for (const row of rows) {
@@ -139,8 +190,8 @@ export function searchMemoryRows(rows: Iterable<MemoryRecord>, q: MemorySearch):
     const { embedding: _e, ...rest } = row;
     hits.push({ ...rest, similarity });
   }
-  hits.sort((a, b) => (b.similarity ?? -2) - (a.similarity ?? -2) || b.createdAt.localeCompare(a.createdAt));
-  return hits.slice(0, q.limit);
+  if (!q.embedding) return hits.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, q.limit);
+  return mergeMemoryPool(hits, [], q.limit);
 }
 
 export function scoreMemory(hit: MemoryHit, queryTokens: string[] | null, nowMs: number): ScoredMemory {
@@ -151,7 +202,7 @@ export function scoreMemory(hit: MemoryHit, queryTokens: string[] | null, nowMs:
     relevance = clamp01(hit.similarity);
     relevanceKind = "cosine";
   } else if (queryTokens?.length) {
-    relevance = keywordOverlap(queryTokens, hit.text);
+    relevance = keywordRelevance(queryTokens, hit.text);
     relevanceKind = "keyword";
   }
   const recency = recencyDecay(ageMs);
@@ -166,6 +217,17 @@ export function scoreMemory(hit: MemoryHit, queryTokens: string[] | null, nowMs:
 }
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
+/** Resolve `p`, or null once `ms` has passed (p keeps running; its result is cached by the caller). */
+async function withinBudget<T>(p: Promise<T | null>, ms: number | undefined): Promise<T | null> {
+  if (ms == null) return p;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([p, new Promise<null>((r) => (timer = setTimeout(() => r(null), Math.max(0, ms))))]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // service
 // ---------------------------------------------------------------------------
@@ -179,7 +241,33 @@ export type AgentMemoryDeps = {
   now?: () => number;
 };
 
-export type AgentMemoryService = AgentMemory & { readonly embedder: Embedder | null };
+/** Recall computed after the approval card was sent (#22): `/api/memory?complaintId=` answers from it instantly. */
+export type CachedRecall = { complaintId: string; draftVersion: number; query: string; items: ScoredMemory[]; at: string };
+
+export type AgentMemoryService = AgentMemory & {
+  readonly embedder: Embedder | null;
+  /**
+   * Re-embed up to `limit` rows whose vector is not from the configured embedder (written during an OpenRouter
+   * outage, or before a key was set). Single-flight; stops as soon as the embedder answers with its fallback.
+   * Returns how many rows were updated. Called in the background after boot and after recalls that met such rows.
+   */
+  reembedFallbackItems(limit?: number): Promise<number>;
+  /** Start embedding `text` now (cached by text), so a later recall()/remember() of the same text is instant. Never throws. */
+  warm(text: string): void;
+  /** Last background recall per complaint (null when none or the draft has moved on). */
+  cachedRecall(complaintId: string, draftVersion?: number): CachedRecall | null;
+  /** Store a recall result for `/api/memory` (bounded, newest wins). */
+  cacheRecall(r: CachedRecall): void;
+};
+
+/** In-process caches (#22): bounded so a long-running bot never grows without limit. */
+export const EMBED_CACHE_MAX = 512;
+export const RECALL_CACHE_MAX = 200;
+/** A cached recall older than this is recomputed (new outcomes / lessons may have landed since). */
+export const RECALL_CACHE_TTL_MS = 60_000;
+/** Re-embedding batch size and the minimum gap between background runs triggered by recall. */
+export const REEMBED_BATCH = 32;
+export const REEMBED_MIN_GAP_MS = 30_000;
 
 export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
   const { store } = deps;
@@ -188,17 +276,55 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
   const tracer = deps.tracer ?? null;
   const inflight = new Set<Promise<unknown>>();
   let warned = false;
+  /** text → embedding (in-flight promises are shared, so remember() + recall() of one draft embed it once). */
+  const embedCache = new Map<string, Promise<{ vector: number[]; model: string } | null>>();
+  const recallCache = new Map<string, CachedRecall>();
+  let reembedRun: Promise<number> | null = null;
+  let lastReembedAt = -Infinity;
+  /** A local hashed embedder has nothing better to offer: only a real (network) embedder re-embeds. */
+  const canReembed = () => !!embedder && !embedder.model.startsWith("local/") && !!store.listMemoryNeedingEmbedding && !!store.setMemoryEmbedding;
 
-  async function embedOne(text: string): Promise<{ vector: number[]; model: string } | null> {
-    if (!embedder || !text) return null;
+  async function reembedImpl(limit: number): Promise<number> {
+    const rows = await store.listMemoryNeedingEmbedding!({ model: embedder!.model, limit });
+    let done = 0;
+    for (let i = 0; i < rows.length; i += REEMBED_BATCH) {
+      const batch = rows.slice(i, i + REEMBED_BATCH);
+      const r = await embedder!.embed(batch.map((b) => b.text));
+      if (r.model !== embedder!.model) break; // still on the fallback: try again later
+      for (let j = 0; j < batch.length; j++) {
+        const v = r.vectors[j];
+        if (!v?.length) continue;
+        await store.setMemoryEmbedding!(batch[j]!.id, v, r.model);
+        done++;
+      }
+    }
+    if (done) console.log(`[memory] re-embedded ${done} item(s) with ${embedder!.model}`);
+    return done;
+  }
+
+  async function embedUncached(text: string): Promise<{ vector: number[]; model: string } | null> {
     try {
-      const r = await embedder.embed([text]);
+      const r = await embedder!.embed([text]);
       const v = r.vectors[0];
       return v?.length ? { vector: v, model: r.model } : null;
     } catch (err) {
       console.warn("[memory] embedding failed:", (err as Error).message);
       return null;
     }
+  }
+
+  function embedOne(text: string): Promise<{ vector: number[]; model: string } | null> {
+    if (!embedder || !text) return Promise.resolve(null);
+    const hit = embedCache.get(text);
+    if (hit) return hit;
+    const p = embedUncached(text).then((r) => {
+      // only the configured model is kept: a fallback vector (OpenRouter down) must not pin this text to the fallback
+      if (!r || r.model !== embedder.model) embedCache.delete(text);
+      return r;
+    });
+    embedCache.set(text, p);
+    if (embedCache.size > EMBED_CACHE_MAX) embedCache.delete(embedCache.keys().next().value!);
+    return p;
   }
 
   async function write(item: MemoryItem): Promise<string> {
@@ -245,6 +371,41 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
   const memory: AgentMemoryService = {
     embedder,
 
+    warm(text) {
+      const t = text?.trim() ? scrubPii(text) : "";
+      if (t) void embedOne(t);
+    },
+
+    reembedFallbackItems(limit = 200) {
+      if (!canReembed()) return Promise.resolve(0);
+      if (reembedRun) return reembedRun;
+      lastReembedAt = now();
+      const p: Promise<number> = reembedImpl(Math.max(1, Math.floor(limit)))
+        .catch((err) => {
+          console.warn("[memory] re-embedding failed:", (err as Error).message);
+          return 0;
+        })
+        .finally(() => {
+          reembedRun = null;
+          inflight.delete(p);
+        });
+      reembedRun = p;
+      inflight.add(p);
+      return p;
+    },
+
+    cachedRecall(complaintId, draftVersion) {
+      const r = recallCache.get(complaintId);
+      if (!r || now() - Date.parse(r.at) > RECALL_CACHE_TTL_MS) return null;
+      return draftVersion == null || r.draftVersion === draftVersion ? r : null;
+    },
+
+    cacheRecall(r) {
+      recallCache.delete(r.complaintId);
+      recallCache.set(r.complaintId, r);
+      if (recallCache.size > RECALL_CACHE_MAX) recallCache.delete(recallCache.keys().next().value!);
+    },
+
     remember(item) {
       const p = write(item);
       inflight.add(p);
@@ -288,7 +449,7 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
     if (!store.searchMemory) return [];
     const limit = Math.min(100, Math.max(1, Math.floor(q.limit ?? 10)));
     const text = q.text?.trim() ? scrubPii(q.text) : "";
-    const emb = text ? await embedOne(text) : null;
+    const emb = text ? await withinBudget(embedOne(text), q.embedBudgetMs) : null;
     const scope = q.scope ?? {};
     const nowMs = now();
     const hits = await store.searchMemory({
@@ -305,6 +466,8 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
       // candidate pool: ranking needs more than `limit` rows (a recent, important item may be less similar)
       limit: Math.max(limit * 8, 64),
     });
+    // #22: rows embedded by another model (fallback during an outage) → re-embed them in the background
+    if (emb && emb.model === embedder?.model && hits.some((h) => h.embedModel !== emb.model) && now() - lastReembedAt > REEMBED_MIN_GAP_MS) void memory.reembedFallbackItems();
     const tokens = text ? tokenize(text) : null;
     return hits
       .map((h) => scoreMemory(h, tokens, nowMs))
@@ -441,4 +604,35 @@ export async function recallForComplaint(memory: AgentMemory, d: ComplaintDraft,
   const query = readyForApprovalItem(d).text;
   const items = await memory.recall({ text: query, scope: { chatId: d.telegramChatId, category: d.category }, limit });
   return { query, items };
+}
+
+/** Default `/api/memory` page size; the background recall computes this many so the API can answer from the cache. */
+export const RECALL_FOR_COMPLAINT_LIMIT = 10;
+
+const isService = (m: AgentMemory): m is AgentMemoryService => typeof (m as Partial<AgentMemoryService>).cacheRecall === "function";
+
+/**
+ * After the approval card is sent (#22): recall for the complaint in the background. Emits the `memory.recall`
+ * RETRIEVER span (trace decoration) and caches the result for `GET /api/memory?complaintId=`. Never throws and
+ * never delays the resident: callers do not await it.
+ */
+export async function recallAfterCard(memory: AgentMemory, d: ComplaintDraft): Promise<CachedRecall | null> {
+  try {
+    const { query, items } = await recallForComplaint(memory, d, RECALL_FOR_COMPLAINT_LIMIT);
+    const r: CachedRecall = { complaintId: d.id, draftVersion: d.draftVersion, query, items, at: new Date().toISOString() };
+    if (isService(memory)) memory.cacheRecall(r);
+    return r;
+  } catch (err) {
+    console.warn("[memory] background recall failed:", (err as Error).message);
+    return null;
+  }
+}
+
+/** `GET /api/memory?complaintId=`: the cached background recall when it covers the request, else a fresh recall (then cached). */
+export async function recallForComplaintCached(memory: AgentMemory, d: ComplaintDraft, limit = RECALL_FOR_COMPLAINT_LIMIT): Promise<{ query: string; items: ScoredMemory[]; cached: boolean }> {
+  const hit = isService(memory) ? memory.cachedRecall(d.id, d.draftVersion) : null;
+  if (hit && limit <= RECALL_FOR_COMPLAINT_LIMIT) return { query: hit.query, items: hit.items.slice(0, limit), cached: true };
+  const { query, items } = await recallForComplaint(memory, d, limit);
+  if (isService(memory) && limit >= RECALL_FOR_COMPLAINT_LIMIT) memory.cacheRecall({ complaintId: d.id, draftVersion: d.draftVersion, query, items: items.slice(0, RECALL_FOR_COMPLAINT_LIMIT), at: new Date().toISOString() });
+  return { query, items, cached: false };
 }

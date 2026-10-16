@@ -213,6 +213,17 @@ export function createMemoryStore(): MemoryStore {
     async searchMemory(q) {
       return clone(searchMemoryRows(memories.values(), q));
     },
+    async listMemoryNeedingEmbedding({ model, limit }) {
+      return [...memories.values()]
+        .filter((m) => m.embedModel !== model)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .slice(0, limit)
+        .map((m) => ({ id: m.id, text: m.text, embedModel: m.embedModel }));
+    },
+    async setMemoryEmbedding(id, embedding, embedModel) {
+      const m = memories.get(id);
+      if (m) memories.set(id, { ...m, embedding: [...embedding], embedModel });
+    },
     async listMemory(args) {
       const list = [...memories.values()]
         .filter((m) => memoryMatches(m, { kind: args?.kind, category: args?.category, chatId: args?.chatId, about: args?.about }))

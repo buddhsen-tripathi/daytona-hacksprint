@@ -4,7 +4,7 @@ import { nowIso } from "../core/contracts.js";
 import { createHashEmbedder } from "../integrations/embedder.js";
 import { createMemoryStore } from "../integrations/memory-store.js";
 import { createSurrealStore, type SurrealStore } from "../integrations/surrealdb.js";
-import { MEMORY_WEIGHTS, createAgentMemory, keywordOverlap, recencyDecay, scrubPii, tokenize } from "./agent-memory.js";
+import { KEYWORD_RELEVANCE_SCALE, MEMORY_WEIGHTS, createAgentMemory, keywordOverlap, recencyDecay, scrubPii, tokenize } from "./agent-memory.js";
 
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
 const daysAgo = (d: number) => new Date(NOW - d * 24 * 3600_000).toISOString();
@@ -181,7 +181,7 @@ describe("agent memory: vectors across models (SurrealDB embedded)", () => {
     // a query embedded by another model never compares vectors across models: keyword overlap instead
     const hash = createAgentMemory({ store, embedder: createHashEmbedder(), now: () => NOW });
     const mixed = await hash.recall({ text: "train delay", scope: { category: "vec" } });
-    expect(mixed[0]).toMatchObject({ id: "mem_v_delay", breakdown: { relevanceKind: "keyword", relevance: 1 } });
+    expect(mixed[0]).toMatchObject({ id: "mem_v_delay", breakdown: { relevanceKind: "keyword", relevance: KEYWORD_RELEVANCE_SCALE } }); // Jaccard 1 × 0.6 (#22)
   });
 });
 

@@ -818,6 +818,11 @@ export type MemoryRecallQuery = {
   /** Only items about this complaint / attempt / category. */
   about?: MemoryAboutRef;
   limit?: number;
+  /**
+   * #22: max wait for the query embedding. Past it, recall proceeds without a query vector (keyword relevance);
+   * the embedding finishes in the background and is cached, so the next recall of the same text is semantic.
+   */
+  embedBudgetMs?: number;
 };
 
 export interface AgentMemory {
@@ -888,6 +893,10 @@ export interface Store {
   searchMemory?(q: MemorySearch): Promise<MemoryHit[]>;
   /** Newest first (no vectors). */
   listMemory?(args?: { kind?: MemoryKind; category?: string; chatId?: string; source?: string; about?: MemoryAboutRef; limit?: number }): Promise<Omit<MemoryRecord, "embedding">[]>;
+  /** #22: rows not embedded by `model` (fallback vectors / none), oldest first — candidates for re-embedding. */
+  listMemoryNeedingEmbedding?(args: { model: string; limit: number }): Promise<{ id: string; text: string; embedModel: string | null }[]>;
+  /** #22: replace one row's vector (re-embedding); everything else on the row is unchanged. */
+  setMemoryEmbedding?(id: string, embedding: number[], embedModel: string): Promise<void>;
 }
 
 export interface SandboxHandle {
