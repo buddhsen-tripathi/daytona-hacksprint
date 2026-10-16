@@ -1,5 +1,5 @@
 {
-  "_note": "15 entries hand-verified against portal.311.nyc.gov on 2026-10-16 (article page + where its Report/File link leads). Checked by apps/bot/src/services/catalog-spot-checks.test.ts.",
+  "_note": "15 entries hand-verified against portal.311.nyc.gov on 2026-10-16 (article page + where its Report/File link leads). Checked by apps/bot/src/services/catalog-spot-checks.test.ts. #28: SR-form hasCaptcha is null (only page 1 was probed); buses-and-subways dropped (same KA-01014 as subway-delay); added street-light-complaint, gas-leak (emergency), lost-or-found-pet, student-attendance-and-absence (no generic-nav link).",
   "entries": [
     {
       "id": "noise-from-neighbor",
@@ -8,7 +8,7 @@
       "agency": "NYPD",
       "automation": "handoff",
       "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
-      "hasCaptcha": false
+      "hasCaptcha": null
     },
     {
       "id": "illegal-parking",
@@ -17,7 +17,7 @@
       "agency": "NYPD",
       "automation": "handoff",
       "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
-      "hasCaptcha": false
+      "hasCaptcha": null
     },
     {
       "id": "apartment-maintenance-complaint",
@@ -35,7 +35,7 @@
       "agency": "NYPD",
       "automation": "handoff",
       "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
-      "hasCaptcha": false
+      "hasCaptcha": null
     },
     {
       "id": "bridges",
@@ -44,7 +44,7 @@
       "agency": "DOT",
       "automation": "handoff",
       "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
-      "hasCaptcha": false
+      "hasCaptcha": null
     },
     {
       "id": "subway-delay",
@@ -56,22 +56,13 @@
       "hasCaptcha": false
     },
     {
-      "id": "buses-and-subways",
-      "kaNumber": "KA-01014",
-      "channel": "external-site",
-      "agency": "MTA",
-      "automation": "handoff",
-      "officialUrlPrefix": "https://contact.mta.info/s/qf-sc",
-      "hasCaptcha": null
-    },
-    {
       "id": "abandoned-vehicle",
       "kaNumber": "KA-02130",
       "channel": "nyc311-sr-form",
       "agency": "NYPD",
       "automation": "handoff",
       "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
-      "hasCaptcha": false
+      "hasCaptcha": null
     },
     {
       "id": "advertising-sign-complaint",
@@ -125,13 +116,51 @@
       "agency": null,
       "automation": "none",
       "officialUrlPrefix": null,
-      "hasCaptcha": null
+      "hasCaptcha": null,
+      "emergency": true
     },
     {
       "id": "affordable-housing-fee-fraud",
       "kaNumber": "KA-01113",
       "channel": "phone-only",
       "agency": "HPD",
+      "automation": "none",
+      "officialUrlPrefix": null,
+      "hasCaptcha": null
+    },
+    {
+      "id": "street-light-complaint",
+      "kaNumber": "KA-02463",
+      "channel": "external-site",
+      "agency": "DOT",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://service.nyctmc.org/alias3/main.asp",
+      "hasCaptcha": null
+    },
+    {
+      "id": "gas-leak",
+      "kaNumber": "KA-02048",
+      "channel": "info-only",
+      "agency": null,
+      "automation": "none",
+      "officialUrlPrefix": null,
+      "hasCaptcha": null,
+      "emergency": true
+    },
+    {
+      "id": "lost-or-found-pet",
+      "kaNumber": "KA-02852",
+      "channel": "phone-only",
+      "agency": null,
+      "automation": "none",
+      "officialUrlPrefix": null,
+      "hasCaptcha": null
+    },
+    {
+      "id": "student-attendance-and-absence",
+      "kaNumber": "KA-03028",
+      "channel": "phone-only",
+      "agency": null,
       "automation": "none",
       "officialUrlPrefix": null,
       "hasCaptcha": null

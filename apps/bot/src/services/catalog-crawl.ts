@@ -22,7 +22,11 @@ export const DIRECT_CREATE_AGENCIES = new Set(["OTI", "DPR", "DEP", "EDC", "DOT"
 export type RawLink = { cls: string; text: string; href: string | null; onclick: string | null };
 /** One accordion card of an article. `title` is null for the always-open intro card. */
 export type RawCard = { title: string | null; text: string; links: RawLink[] };
-export type RawArticle = { kaNumber: string; title: string; cards: RawCard[] };
+/**
+ * `emergencyBanner`: the page shows the red "Call 911" .divTable banner (stripped from card text).
+ * Absent on articles cached before #28.
+ */
+export type RawArticle = { kaNumber: string; title: string; cards: RawCard[]; emergencyBanner?: boolean };
 /** Result of opening an official link once (GET only). */
 export type LandingProbe = { finalUrl: string; hasCaptcha: boolean; requiresLogin: boolean };
 
@@ -154,8 +158,31 @@ export function filingScore(text: string): number {
   if (!t || /^(learn|visit|get |read|see |find|view|download|watch|check|look up|call)/i.test(t)) return 0;
   if (/^(report|file|complain|make a complaint|register a complaint)/i.test(t)) return 3;
   if (/^(submit|request|apply)/i.test(t)) return 2;
-  if (/\b(report|file|submit|complaint|complain|apply|feedback|claim|contact)\b/i.test(t)) return 1;
+  // "Street Lighting Repair Form", "Service request portal", …: the link names the form itself.
+  if (/\b(report|file|submit|complaint|complain|apply|feedback|claim|contact|form|repair|request)\b/i.test(t)) return 1;
   return 0;
+}
+
+/**
+ * Generic navigation targets that are never the filing route for the article they appear on
+ * (#28: "Contact your school" → find-a-school, lost pet → dog-license lookup, …).
+ */
+const NAV_DENYLIST: RegExp[] = [
+  /schools\.nyc\.gov\/find-a-school/i,
+  /\/locations-and-hours\/?/i,
+  /a816-healthpsi\.nyc\.gov\/DogLicense/i,
+  /^https?:\/\/(www\.)?nyc\.gov\/?(\?.*)?$/i,
+  /^https?:\/\/(www\.)?nyc\.gov\/(main\/)?(services|agencies|home|index\.page)\b/i,
+  /\/contact-us\b|\/contact\.page\b/i,
+];
+
+export function isGenericNav(url: string): boolean {
+  return NAV_DENYLIST.some((re) => re.test(url));
+}
+
+/** The always-open intro and "File a Complaint" / "Report …" sections hold the article's own filing route. */
+export function isFilingSection(title: string | null): boolean {
+  return title === null || /^(file|report|submit|make)\b|complaint$/i.test(title.replace(/["“”]/g, "").trim());
 }
 
 export function slugify(title: string): string {
@@ -182,9 +209,10 @@ export function findReportLinks(raw: RawArticle): ReportLink[] {
         continue;
       }
       if (!l.cls.includes("externallink") || !l.href) continue;
-      // A link inside a "… Complaint" / "Report …" section beats an equally worded one elsewhere on the page.
-      const score = filingScore(l.text) && filingScore(l.text) + (/complaint|report/i.test(card.title ?? "") ? 1 : 0);
-      if (score > 0 && channelForUrl(l.href)) ext.push({ kind: "external", url: new URL(l.href, PORTAL).href, agency: agencyFromUrl(l.href), text: l.text, score });
+      // A link in the intro or a "File a Complaint" / "Report …" section beats an equally worded one elsewhere.
+      const base = filingScore(l.text);
+      const score = base && base + (isFilingSection(card.title) ? 1 : 0);
+      if (score > 0 && channelForUrl(l.href) && !isGenericNav(new URL(l.href, PORTAL).href)) ext.push({ kind: "external", url: new URL(l.href, PORTAL).href, agency: agencyFromUrl(l.href), text: l.text, score });
     }
   }
   sr.sort((a, b) => Number(b.url !== null) - Number(a.url !== null));
@@ -195,6 +223,18 @@ export function findReportLinks(raw: RawArticle): ReportLink[] {
 /** The one URL per article the crawler may open (GET) to check CAPTCHA / login. */
 export function probeTarget(raw: RawArticle): string | null {
   return findReportLinks(raw).find((l) => l.url)?.url ?? null;
+}
+
+/**
+ * A "Call 911" article: its intro opens with "Call 911", or the page shows the 911 banner and offers no
+ * filing route at all (a banner next to an SR form just means "if it is an emergency, call 911").
+ */
+export function isEmergencyArticle(raw: RawArticle): boolean {
+  if (/^\W*call 911\b/i.test(raw.cards[0]?.text ?? "")) return true;
+  if (raw.emergencyBanner !== true || findReportLinks(raw).length > 0) return false;
+  // A banner over a hotline ("Phone Number: …") is a phone route with a 911 caveat, not a 911 article.
+  const text = raw.cards.map((c) => c.text).join("\n");
+  return extractPhone(text, raw.cards.flatMap((c) => c.links)) === null || /\bcall 911\b/i.test(firstSentences(raw.cards[0]?.text ?? "", 120));
 }
 
 export type BuildContext = {
@@ -229,6 +269,7 @@ export function buildCatalogEntry(raw: RawArticle, ctx: BuildContext): CatalogEn
   // The report action's agency, else what the intro names, else any "Agency:" line on the page.
   const agency =
     best?.agency ?? agencyFromName(agencyNameFromText(intro)) ?? agencyFromProse(intro) ?? agencyFromName(agencyNameFromText(text)) ?? null;
+  const emergency = isEmergencyArticle(raw);
   const probed = ctx.probe && officialUrl && best?.url === officialUrl ? ctx.probe : null;
 
   return {
@@ -242,10 +283,13 @@ export function buildCatalogEntry(raw: RawArticle, ctx: BuildContext): CatalogEn
     channel,
     officialUrl,
     requiresLogin: probed ? probed.requiresLogin : null,
-    hasCaptcha: probed ? probed.hasCaptcha : null,
+    // The probe only loads page 1 of an NYC311 SR form; a CAPTCHA (if any) would sit on a later step, so
+    // "none on page 1" proves nothing. Keep only a positive finding until the full flow is probed.
+    hasCaptcha: probed ? (channel === "nyc311-sr-form" && !probed.hasCaptcha ? null : probed.hasCaptcha) : null,
     requiredFields: null,
-    automation: channel === "phone-only" || channel === "info-only" ? "none" : "handoff",
+    automation: emergency || channel === "phone-only" || channel === "info-only" ? "none" : "handoff",
     lastVerifiedAt: ctx.now,
+    emergency,
   };
 }
 
@@ -256,6 +300,18 @@ export function firstSentences(text: string, max = 240): string {
   const cut = t.slice(0, max);
   const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
   return end > 60 ? cut.slice(0, end + 1) : `${cut.trimEnd()}…`;
+}
+
+/** Fileable rows first; a crawled row whose id or KA number is already taken is dropped (KA-01014). Sorted by id. */
+export function mergeCatalog(fileable: CatalogEntry[], crawled: CatalogEntry[]): CatalogEntry[] {
+  const ids = new Set(fileable.map((e) => e.id));
+  const kas = new Set(fileable.map((e) => e.kaNumber));
+  const rest = crawled.filter((e) => {
+    if (ids.has(e.id) || kas.has(e.kaNumber)) return false;
+    kas.add(e.kaNumber);
+    return true;
+  });
+  return [...fileable, ...rest].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** Slugs must be unique: on a clash append the KA number ("noise-ka-01234"). */
@@ -292,6 +348,7 @@ export function fileableCatalogEntries(now: string): CatalogEntry[] {
       requiredFields: [...c.requiredFields],
       automation: `adapter:${f.adapter}`,
       lastVerifiedAt: now,
+      emergency: false,
     };
   });
 }

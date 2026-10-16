@@ -30,6 +30,9 @@ const clone = <T>(v: T): T => structuredClone(v);
 export type MemoryStore = Store & {
   transitions: TransitionRecord[];
   listTransitions(complaintId: string): Promise<TransitionRecord[]>;
+  /** Same contract as SurrealStore's (#7/#28): upsert by id (merge), list everything. */
+  upsertCatalog(entries: CatalogEntry[]): Promise<number>;
+  listCatalog(): Promise<CatalogEntry[]>;
 };
 
 export function createMemoryStore(): MemoryStore {

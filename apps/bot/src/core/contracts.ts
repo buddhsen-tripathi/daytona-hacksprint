@@ -105,6 +105,8 @@ export const CatalogEntry = z.object({
   requiredFields: z.array(z.string()).nullable(),
   automation: CatalogAutomation,
   lastVerifiedAt: z.string(),
+  /** A "Call 911" article (gas leak, fire, overdose, …): route to the 911 referral, never to a form. */
+  emergency: z.boolean().default(false),
   /** Merged form structure learned from filing runs (#11, structure only); absent until a run reported one. */
   formSchema: z.lazy(() => FormSchema).nullable().optional(),
 });

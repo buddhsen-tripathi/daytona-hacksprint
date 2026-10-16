@@ -686,7 +686,9 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
 
     reset: guard("reset", async () => {
       const tables = [...NODE_TABLES, ...Object.keys(RELATIONS)];
-      await q(tables.map((t) => `DELETE ${t};`).join("\n"));
+      // #28: the NYC311 catalog (complaint_category rows with catalog = true) is reference data, not run state;
+      // re-crawling it takes ~15 min, so --reset keeps it.
+      await q(tables.map((t) => (t === "complaint_category" ? `DELETE ${t} WHERE catalog != true;` : `DELETE ${t};`)).join("\n"));
       await seedCategories();
     }),
 
