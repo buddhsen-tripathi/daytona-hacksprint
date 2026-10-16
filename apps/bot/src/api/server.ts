@@ -5,9 +5,7 @@
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
-import type { CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
-import { CATEGORIES, InboundEvent } from "../core/contracts.js";
-import type { AgentMemory, CategoryId, Store, Tracer } from "../core/contracts.js";
+import type { AgentMemory, CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
 import { CATEGORIES, InboundEvent, MemoryKind } from "../core/contracts.js";
 import { createAgentMemory, recallForComplaint } from "../services/agent-memory.js";
 import type { Orchestrator } from "../core/orchestrator.js";
