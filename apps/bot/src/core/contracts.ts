@@ -94,7 +94,7 @@ export const TRANSITIONS: Record<ComplaintState, ComplaintState[]> = {
   OUT_OF_SCOPE: ["TRIAGING", "CANCELLED"],
   EMERGENCY_REFERRAL: ["CANCELLED"],
   NEEDS_INFORMATION: ["TRIAGING", "NEEDS_INFORMATION", "DUPLICATE_REVIEW", "READY_FOR_APPROVAL", "CANCELLED"],
-  DUPLICATE_REVIEW: ["READY_FOR_APPROVAL", "NEEDS_INFORMATION", "CANCELLED"],
+  DUPLICATE_REVIEW: ["READY_FOR_APPROVAL", "NEEDS_INFORMATION", "TRACKING", "CANCELLED"],
   READY_FOR_APPROVAL: ["APPROVED", "NEEDS_INFORMATION", "TRIAGING", "CANCELLED"],
   APPROVED: ["FILING", "CANCELLED"],
   FILING: ["SUBMITTED", "HUMAN_ACTION_REQUIRED", "SUBMISSION_UNKNOWN", "FAILED"],
@@ -110,6 +110,8 @@ export const TRANSITIONS: Record<ComplaintState, ComplaintState[]> = {
 export const USER_GATED: ReadonlyArray<`${ComplaintState}->${ComplaintState}`> = [
   "READY_FOR_APPROVAL->APPROVED",
   "DUPLICATE_REVIEW->READY_FOR_APPROVAL",
+  /** #5: "Add me to the existing report" — the resident joins another resident's report; nothing is filed. */
+  "DUPLICATE_REVIEW->TRACKING",
 ];
 
 // ---------------------------------------------------------------------------
@@ -259,6 +261,10 @@ export const ComplaintDraft = z.object({
   duplicateReviewed: z.boolean(),
   /** `dataAsOf` of the Open Data snapshot used for the last duplicate check (null = unavailable / not checked). */
   duplicatesDataAsOf: z.string().nullable().optional(),
+  /** #5: this complaint is a supporter of another resident's report (`complaint->same_issue_as->complaint`); never filed. */
+  sameIssueAs: z.string().nullable().optional(),
+  /** #5: how many residents joined this report via "Add me to the existing report" (count of incoming same_issue_as edges). */
+  supporters: z.number().optional(),
   /** Bumped on every material change to the draft; approval binds to a version. */
   draftVersion: z.number(),
   /** The draftVersion the user approved, or null. */
@@ -567,6 +573,7 @@ export const CallbackAction = z.enum([
   "dup_review",
   "dup_continue",
   "status",
+  "dup_join", // #5: "Add me to the existing report" (same issue already raised by another resident)
   "view_official",
   "confirm_location",
   "retry_location",
@@ -658,6 +665,18 @@ export type RelatedComplaints = {
   mine: RelatedComplaint[];
   /** Other residents: counts only (no PII leaves the store layer except complaint ids for graph edges). */
   others: { reports: number; residents: number; latestAt: string | null; oldestAt: string | null; ids: string[] };
+};
+
+/** #5 duplicate awareness across residents: the same-issue edges around one complaint (complaint ids only, never chat ids). */
+export type IssueLinks = {
+  /** This complaint joined that original (`->same_issue_as->`), or null. */
+  sameIssueAs: string | null;
+  /** Supporters that joined this complaint (`<-same_issue_as<-`), oldest first. */
+  joined: string[];
+  /** The resident said this is different from these (`->not_same_as->`); never prompted about them again. */
+  notSameAs: string[];
+  /** `joined.length` (also cached on the original as `ComplaintDraft.supporters`). */
+  supporters: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -808,6 +827,12 @@ export interface Store {
   findRelatedComplaints?(args: RelatedComplaintsQuery): Promise<RelatedComplaints>;
   /** complaint->similar_to->complaint edges (dashboard cluster). */
   linkSimilarComplaints?(complaintId: string, similarIds: string[]): Promise<void>;
+  /** #5: RELATE supporter->same_issue_as->original and refresh `supporters` on the original. Returns the new count. */
+  linkSameIssue?(supporterId: string, originalId: string): Promise<number>;
+  /** #5: RELATE complaint->not_same_as->other (the resident said it's a different issue). */
+  linkNotSameIssue?(complaintId: string, otherId: string): Promise<void>;
+  /** #5: same_issue_as / not_same_as edges around one complaint. */
+  getIssueLinks?(complaintId: string): Promise<IssueLinks>;
   /** For the dashboard: nodes + edges of the complaint graph. */
   graph(args?: { complaintId?: string }): Promise<{ nodes: { id: string; kind: string; label: string }[]; edges: { from: string; to: string; rel: string }[] }>;
   // agent memory (#4) — low-level; use AgentMemory (services/agent-memory.ts). Optional so test doubles stay small.
