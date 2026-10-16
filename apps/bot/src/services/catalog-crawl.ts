@@ -65,7 +65,8 @@ const AGENCY_NAMES: [RegExp, string][] = [
   [/Metropolitan Transportation Authority|\bMTA\b/i, "MTA"],
   [/Housing Preservation and Development/i, "HPD"],
   [/Department of Buildings/i, "DOB"],
-  [/Health and Mental Hygiene/i, "DOHMH"],
+  [/Health and Mental Hygiene|NYC Health Department/i, "DOHMH"],
+  [/City Clerk/i, "City Clerk"],
   [/Department of Transportation/i, "DOT"],
   [/Department of Sanitation/i, "DSNY"],
   [/Environmental Protection/i, "DEP"],
@@ -151,7 +152,8 @@ export function extractPhone(text: string, links: RawLink[] = []): string | null
 export function filingScore(text: string): number {
   const t = text.replace(/\s+/g, " ").trim();
   if (!t || /^(learn|visit|get |read|see |find|view|download|watch|check|look up|call)/i.test(t)) return 0;
-  if (/^(report|file|submit|complain|make a complaint|request|apply|register a complaint)/i.test(t)) return 2;
+  if (/^(report|file|complain|make a complaint|register a complaint)/i.test(t)) return 3;
+  if (/^(submit|request|apply)/i.test(t)) return 2;
   if (/\b(report|file|submit|complaint|complain|apply|feedback|claim|contact)\b/i.test(t)) return 1;
   return 0;
 }
@@ -180,7 +182,8 @@ export function findReportLinks(raw: RawArticle): ReportLink[] {
         continue;
       }
       if (!l.cls.includes("externallink") || !l.href) continue;
-      const score = filingScore(l.text);
+      // A link inside a "… Complaint" / "Report …" section beats an equally worded one elsewhere on the page.
+      const score = filingScore(l.text) && filingScore(l.text) + (/complaint|report/i.test(card.title ?? "") ? 1 : 0);
       if (score > 0 && channelForUrl(l.href)) ext.push({ kind: "external", url: new URL(l.href, PORTAL).href, agency: agencyFromUrl(l.href), text: l.text, score });
     }
   }

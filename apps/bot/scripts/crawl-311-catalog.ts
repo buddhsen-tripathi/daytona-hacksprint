@@ -262,6 +262,22 @@ try {
     }
   }
   const byChannel = entries.reduce<Record<string, number>>((m, e) => ((m[e.channel] = (m[e.channel] ?? 0) + 1), m), {});
+  // Quality gate (#7): counts by channel, % with an official link, % with CAPTCHA known.
+  const pct = (n: number) => `${((100 * n) / entries.length).toFixed(1)}%`;
+  const online = entries.filter((e) => e.officialUrl);
+  const report = {
+    entries: entries.length,
+    byChannel,
+    withOfficialUrl: pct(online.length),
+    hasCaptchaKnown: pct(entries.filter((e) => e.hasCaptcha !== null).length),
+    hasCaptchaKnownOfOnline: `${((100 * online.filter((e) => e.hasCaptcha !== null).length) / Math.max(1, online.length)).toFixed(1)}%`,
+    withCaptcha: entries.filter((e) => e.hasCaptcha).length,
+    requiresLogin: entries.filter((e) => e.requiresLogin).length,
+    withAgency: pct(entries.filter((e) => e.agency).length),
+    withTopic: pct(entries.filter((e) => e.topic).length),
+  };
+  writeCache("report.json", report);
+  console.log("report:", JSON.stringify(report, null, 2));
   console.log(`catalog: ${entries.length} entries ${JSON.stringify(byChannel)} in ${Math.round((Date.now() - t0) / 1000)} s → ${resolve(CACHE, "catalog.draft.json")}`);
 } finally {
   await browser.close();
