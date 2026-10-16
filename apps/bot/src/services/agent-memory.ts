@@ -217,6 +217,17 @@ export function scoreMemory(hit: MemoryHit, queryTokens: string[] | null, nowMs:
 }
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
+/** Resolve `p`, or null once `ms` has passed (p keeps running; its result is cached by the caller). */
+async function withinBudget<T>(p: Promise<T | null>, ms: number | undefined): Promise<T | null> {
+  if (ms == null) return p;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([p, new Promise<null>((r) => (timer = setTimeout(() => r(null), Math.max(0, ms))))]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // service
 // ---------------------------------------------------------------------------
@@ -438,7 +449,7 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
     if (!store.searchMemory) return [];
     const limit = Math.min(100, Math.max(1, Math.floor(q.limit ?? 10)));
     const text = q.text?.trim() ? scrubPii(q.text) : "";
-    const emb = text ? await embedOne(text) : null;
+    const emb = text ? await withinBudget(embedOne(text), q.embedBudgetMs) : null;
     const scope = q.scope ?? {};
     const nowMs = now();
     const hits = await store.searchMemory({

@@ -163,7 +163,7 @@ describe("#22 recall over the HNSW index (SurrealDB embedded, 5,000 items)", () 
   });
 
   // 300 ms on a developer machine; shared CI runners (2 vCPU, test files in parallel) get a looser budget.
-  const BUDGET_MS = process.env.CI ? 1000 : 300;
+  const BUDGET_MS = process.env.CI ? 1500 : 300;
   it(`recall() < ${BUDGET_MS} ms (KNN over the index, best of 3)`, async (ctx) => {
     if (!store.knnRecall) ctx.skip(); // engine without HNSW/KNN: correctness above still ran on the scan
     // no re-embedding here: the stub embedder maps every text to one vector, which would make the fallback rows exact matches

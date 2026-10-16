@@ -775,6 +775,11 @@ export type MemoryRecallQuery = {
   /** Only items about this complaint / attempt / category. */
   about?: MemoryAboutRef;
   limit?: number;
+  /**
+   * #22: max wait for the query embedding. Past it, recall proceeds without a query vector (keyword relevance);
+   * the embedding finishes in the background and is cached, so the next recall of the same text is semantic.
+   */
+  embedBudgetMs?: number;
 };
 
 export interface AgentMemory {
