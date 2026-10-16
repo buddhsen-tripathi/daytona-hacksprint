@@ -1,0 +1,67 @@
+import type { PostmortemAttempt } from "../postmortem.js";
+
+/** Fixture (#13): the form unexpectedly required "Cross Street 2". formSchema shape follows #11. */
+export const crossStreet2Attempt: PostmortemAttempt = {
+  id: "att_fixture1",
+  complaintId: "cmp_fixture1",
+  approvedVersion: 1,
+  target: "real",
+  category: "subway-delay",
+  sandboxId: null,
+  sandboxProvider: "local",
+  browserSessionId: null,
+  browserProvider: "local",
+  liveViewUrl: null,
+  recordingUrl: null,
+  outcome: "HUMAN_ACTION_REQUIRED",
+  errorCode: "UNEXPECTED_REQUIRED_FIELD",
+  officialRequestNumber: null,
+  verified: false,
+  verificationNotes: null,
+  evidence: [
+    {
+      id: "ev_validate_shot",
+      attemptId: "att_fixture1",
+      complaintId: "cmp_fixture1",
+      type: "screenshot",
+      step: "validate",
+      summary: "Validation error: 'Cross Street 2 is required'",
+      storageReference: "/api/evidence/ev_validate_shot",
+      mime: "image/png",
+      createdAt: "2026-10-16T12:00:05.000Z",
+    },
+    {
+      id: "ev_schema_json",
+      attemptId: "att_fixture1",
+      complaintId: "cmp_fixture1",
+      type: "json",
+      step: "inspect",
+      summary: "form_schema snapshot",
+      storageReference: "/api/evidence/ev_schema_json",
+      mime: "application/json",
+      createdAt: "2026-10-16T12:00:02.000Z",
+    },
+  ],
+  workerEvents: [
+    { ts: "2026-10-16T12:00:01.000Z", step: "navigate", level: "info", message: "loaded form" },
+    {
+      ts: "2026-10-16T12:00:02.000Z",
+      step: "inspect",
+      level: "info",
+      message: "form_schema",
+      data: {
+        stepTitle: "Location",
+        fields: [
+          { label: "Cross Street 1", type: "text", required: true },
+          { label: "Cross Street 2", type: "text", required: true },
+        ],
+      },
+    },
+    { ts: "2026-10-16T12:00:05.000Z", step: "validate", level: "warn", message: "unexpected required field", data: { label: "Cross Street 2" } },
+  ],
+  traceId: "trace_fixture1",
+  traceUrl: null,
+  timing: { sandboxMs: null, browserMs: null, workerMs: 5000, totalMs: 5000 },
+  createdAt: "2026-10-16T12:00:00.000Z",
+  finishedAt: "2026-10-16T12:00:06.000Z",
+};
