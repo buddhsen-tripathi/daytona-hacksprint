@@ -419,7 +419,12 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
         pick = a.optionIndex !== undefined ? (options[a.optionIndex] ?? null) : c.match === "tokens" ? matchByTokens(a.value, options, core) : (options.find((o) => o === a.value) ?? null);
         if (!pick) throw fallback;
       }
-      pendingChoices.push(choiceField(field, options.length ? options : [pick], true));
+      if (phase === "fill") {
+        // A choice the inspect step already listed (e.g. all lines) takes this step's field name; else record it.
+        const known = pendingChoices.find((f) => f.type === "choice" && f.label === "choice" && f.options?.includes(pick!));
+        if (known) known.label = field;
+        else pendingChoices.push(choiceField(field, options.length ? options : [pick], true));
+      }
       await D.clickButton(pick);
       filled.chosen.push(pick);
       ctx.action({ kind: "choose", target: pick });
@@ -431,6 +436,7 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
       ctx.action({ kind: "continue", target: name });
     } else if ("pick" in step) {
       const p = step.pick;
+      if (phase === "fill") pendingChoices.push(choiceField(p.field, [], false, "listbox"));
       if (p.settleMs) await D.settle(p.settleMs);
       const want = renderTemplate(p.value, v).trim();
       if (!want) {
@@ -537,6 +543,7 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
         first.unshift(choiceField("choice", (await D.buttonNames()).filter((n) => re.test(n)), true));
       }
       emitFormSchema(ctx, "inspect", `recipe:${recipe.id}`, [{ name: "first step", fields: first }], false);
+      pendingChoices = first.filter((f) => f.type === "choice").map((f) => ({ ...f })); // copies: the emitted event stays as sent
       return { requiredKnown: fillSteps.flatMap((s) => ("fill" in s && s.fill.required ? [s.fill.label] : "choose" in s ? [s.choose.field ?? "choice"] : [])) };
     },
 
