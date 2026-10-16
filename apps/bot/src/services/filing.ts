@@ -43,6 +43,7 @@ import { CATEGORIES, DEFAULT_QUESTION_TIMEOUT_MS, nowIso, questionFromEvent, sho
 import { transition } from "../core/state-machine.js";
 import { askFromOutcome, recordAskPattern } from "./memory.js";
 import { askPatternItem, filingOutcomeItem, liveQuestionItem } from "./agent-memory.js";
+import { recordFormSchema } from "./form-schema-memory.js";
 import { RUNS_DIR, env } from "../integrations/env.js";
 import { isRealOnly } from "../core/knowledge.js";
 import { registerEvidenceFile } from "./evidence-registry.js";
@@ -700,6 +701,13 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         void memory.remember(filingOutcomeItem({ complaint: current, attempt, status, errorCode: v.errorCode, officialRequestNumber: sr, dryRun })).catch((e) => console.warn("[filing] memory (outcome):", (e as Error).message));
         for (const lp of learned) void memory.remember(askPatternItem(lp)).catch((e) => console.warn("[filing] memory (pattern):", (e as Error).message));
         set("memory.writes", 1 + learned.length);
+      }
+      // [memory] #11: the form structure this run observed → procedural schema memory + catalog row (structure only).
+      if (result?.formSchema) {
+        set("memory.form_schema", true);
+        track(
+          recordFormSchema({ store, memory }, { category, attempt, outcome: status, formSchema: result.formSchema }).catch((e) => console.warn("[filing] memory (form schema):", (e as Error).message)),
+        );
       }
       // ---- [/memory] ----
       oi.output({ attemptId: attempt.id, status, sr, pattern: p.kind, evidence: attempt.evidence.length, timing: attempt.timing });
