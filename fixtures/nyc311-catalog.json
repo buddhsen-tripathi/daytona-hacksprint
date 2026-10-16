@@ -13,7 +13,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "access-a-ride",
@@ -29,7 +29,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "access-city-agencies-as-a-person-with-a-disability",
@@ -45,7 +45,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "accident-with-injury",
@@ -61,7 +61,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "adult-day-care",
@@ -77,7 +77,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "adult-establishment-zoning-complaint",
@@ -93,7 +93,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "adult-protective-services",
@@ -109,7 +109,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "advertising-sign-complaint",
@@ -125,7 +125,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "affordable-housing-fee-fraud",
@@ -141,7 +141,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "after-school-program",
@@ -157,7 +157,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "agency-charges-collected-by-the-department-of-finance",
@@ -173,7 +173,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "air-conditioner-in-danger-of-falling",
@@ -189,7 +189,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "airline-complaint",
@@ -205,7 +205,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "alcohol-drinking-complaint",
@@ -221,7 +221,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "alcohol-license-check",
@@ -237,7 +237,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "alcohol-sale-complaint",
@@ -253,7 +253,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "ambulance-complaint",
@@ -269,7 +269,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "amtrak-trains",
@@ -285,7 +285,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "animal-abuse",
@@ -301,7 +301,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "animal-bite",
@@ -317,7 +317,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "animal-facility-complaint",
@@ -333,7 +333,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "animal-odor",
@@ -349,7 +349,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "anti-smoking-advertising-complaint",
@@ -365,7 +365,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "apartment-maintenance-complaint",
@@ -381,7 +381,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "arcade-complaint",
@@ -397,7 +397,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "architect-or-engineer-complaint",
@@ -413,7 +413,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "arson-tips",
@@ -429,7 +429,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "asbestos-complaint",
@@ -445,7 +445,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "assault",
@@ -461,7 +461,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "assisted-living-facility-or-adult-home-complaint",
@@ -477,7 +477,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "atm-complaint",
@@ -493,7 +493,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "auto-repair-complaint",
@@ -509,7 +509,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "automated-employment-decision-tools",
@@ -525,7 +525,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "automatic-public-toilets",
@@ -541,7 +541,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "automobile-spray-paint-odor",
@@ -557,7 +557,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "awning-canopy-marquee-or-storm-enclosure-complaint",
@@ -573,7 +573,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bail-bond-agent-complaint",
@@ -589,7 +589,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bank-complaint",
@@ -605,7 +605,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bar-or-club-complaint",
@@ -621,7 +621,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "barbecuing",
@@ -637,7 +637,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "barber-shop-or-salon-complaint",
@@ -653,7 +653,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "battery-recycling",
@@ -669,7 +669,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "beach-complaint",
@@ -685,7 +685,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bed-bug-complaint",
@@ -701,7 +701,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bees-or-wasps-complaint",
@@ -717,7 +717,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bike-rack-complaint",
@@ -733,7 +733,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bikes-in-office-buildings",
@@ -749,7 +749,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "biking-rollerblading-or-skating-complaint",
@@ -765,7 +765,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "birth-certificate-change",
@@ -781,7 +781,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "blocked-building-exit-or-fire-escape",
@@ -797,7 +797,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "blocked-driveway",
@@ -813,7 +813,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "blocked-or-clogged-culvert",
@@ -829,7 +829,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "blocked-sidewalk-or-street",
@@ -845,7 +845,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "boiler-complaint",
@@ -861,7 +861,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "boiler-inspection-violation",
@@ -877,7 +877,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "boiler-operator-engineer-complaint",
@@ -893,7 +893,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "booting-company-complaint",
@@ -909,7 +909,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bottle-refund",
@@ -925,7 +925,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bottled-water-complaint",
@@ -941,7 +941,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "breaking-park-rules",
@@ -957,7 +957,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bridges",
@@ -973,7 +973,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "broken-sidewalk",
@@ -989,7 +989,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "broker-fees",
@@ -1005,7 +1005,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "building-construction-complaint",
@@ -1021,7 +1021,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "building-conversion-or-occupancy-complaint",
@@ -1037,7 +1037,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "building-demolition-complaint",
@@ -1053,7 +1053,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "building-not-registered-complaint",
@@ -1069,7 +1069,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "building-or-public-space-accessibility-complaint",
@@ -1085,7 +1085,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "building-planting-regulations",
@@ -1101,7 +1101,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "building-sign-complaint",
@@ -1117,7 +1117,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "burning-garbage",
@@ -1133,7 +1133,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bus-arrival-sign",
@@ -1149,7 +1149,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bus-lane-camera-complaint",
@@ -1165,7 +1165,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "bus-stop-shelters",
@@ -1181,7 +1181,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "buses-and-subways",
@@ -1197,7 +1197,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "business-complaint-against-another-business",
@@ -1213,7 +1213,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cable-complaint",
@@ -1229,7 +1229,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "calorie-posting",
@@ -1245,7 +1245,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "camp",
@@ -1261,7 +1261,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cannabis-retail-sale-complaint",
@@ -1277,7 +1277,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "car-dealer-complaint",
@@ -1293,7 +1293,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "car-rental-complaint",
@@ -1309,7 +1309,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "car-service-complaint",
@@ -1325,7 +1325,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "car-service-lost-and-found",
@@ -1341,7 +1341,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "car-wash-complaint",
@@ -1357,7 +1357,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "carbon-monoxide",
@@ -1373,7 +1373,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "carpet-and-flooring-business-complaint",
@@ -1389,7 +1389,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "carshare",
@@ -1405,7 +1405,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "case-assistance-and-management-for-older-adults",
@@ -1421,7 +1421,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cash-assistance-snap-or-medicaid-fraud",
@@ -1437,7 +1437,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cash-payment-refusal",
@@ -1453,7 +1453,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "catch-basin-complaint",
@@ -1469,7 +1469,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "catch-basin-or-sewer-odor",
@@ -1485,7 +1485,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "catering-establishment-complaint",
@@ -1501,7 +1501,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cell-phone-purchase-complaint",
@@ -1517,7 +1517,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cemetery-complaint",
@@ -1533,7 +1533,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "certificate-of-occupancy-complaint",
@@ -1549,7 +1549,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "chained-bike",
@@ -1565,7 +1565,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "charity-background-check-or-complaint",
@@ -1581,7 +1581,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "charity-fraud",
@@ -1597,7 +1597,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "check-cashing-business-complaint",
@@ -1613,7 +1613,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "chemical-complaint",
@@ -1629,7 +1629,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "chemical-spill",
@@ -1645,7 +1645,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "child-abuse",
@@ -1661,7 +1661,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "child-care-complaint",
@@ -1677,7 +1677,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "child-care-financial-assistance",
@@ -1693,7 +1693,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "child-care-provider-payment",
@@ -1709,7 +1709,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "child-health-plus-complaint",
@@ -1725,7 +1725,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "child-pornography",
@@ -1741,7 +1741,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "child-proof-stove-knob-covers-complaint",
@@ -1757,7 +1757,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "chimney-or-ventilation-smoke",
@@ -1773,7 +1773,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cigarette-sale-complaint",
@@ -1789,7 +1789,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "circumcision",
@@ -1805,7 +1805,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "citi-bike",
@@ -1821,7 +1821,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-agency-language-access-feedback",
@@ -1837,7 +1837,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-agency-or-worker-feedback",
@@ -1853,7 +1853,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-budget-cut-feedback",
@@ -1869,7 +1869,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-claim",
@@ -1885,7 +1885,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-claim-fraud",
@@ -1901,7 +1901,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-comptroller-complaint",
@@ -1917,7 +1917,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-contract-equal-employment-opportunity-compliance",
@@ -1933,7 +1933,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-council-member-complaint",
@@ -1949,7 +1949,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-marshal-complaint",
@@ -1965,7 +1965,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-parking-permit-for-people-with-disabilities",
@@ -1981,7 +1981,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-university-of-new-york-cuny-admissions-complaint",
@@ -1997,7 +1997,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-vehicle-complaint",
@@ -2013,7 +2013,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-worker-conflict-of-interest",
@@ -2029,7 +2029,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "city-worker-or-contractor-corruption-or-criminal-misconduct",
@@ -2045,7 +2045,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "citywide-performance-reporting",
@@ -2061,7 +2061,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "click-to-cancel-complaint",
@@ -2077,7 +2077,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "co-op-or-condo-sponsor-information-complaint",
@@ -2093,7 +2093,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "commercial-bicycling-laws",
@@ -2109,7 +2109,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "commercial-vehicle-parked-in-residential-driveway",
@@ -2125,7 +2125,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "condoms-and-safer-sex-products",
@@ -2141,7 +2141,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "construction-labor-provider-complaint",
@@ -2157,7 +2157,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "construction-site-no-smoking-sign-complaint",
@@ -2173,7 +2173,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cooling-tower-complaint",
@@ -2189,7 +2189,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "coronavirus-covid-19-testing",
@@ -2205,7 +2205,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "cosmetics-complaint",
@@ -2221,7 +2221,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "counterfeit-item-sale",
@@ -2237,7 +2237,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "counterfeit-money",
@@ -2253,7 +2253,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "county-clerk",
@@ -2269,7 +2269,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "court",
@@ -2285,7 +2285,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "crane-or-derrick-complaint",
@@ -2301,7 +2301,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "crash-barrier-complaint",
@@ -2317,7 +2317,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "credit-card-complaint",
@@ -2333,7 +2333,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "crime-stoppers-tip",
@@ -2349,7 +2349,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "criminal-mischief",
@@ -2365,7 +2365,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "crisis-support-for-veterans",
@@ -2381,7 +2381,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "curb-or-driveway-complaint",
@@ -2397,7 +2397,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "damaged-or-defective-goods",
@@ -2413,7 +2413,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dangerous-animal",
@@ -2429,7 +2429,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dangerous-location-or-situation",
@@ -2445,7 +2445,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dating-service-complaint",
@@ -2461,7 +2461,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dead-animal-on-private-property",
@@ -2477,7 +2477,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dead-animal-on-public-property",
@@ -2493,7 +2493,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dead-tree",
@@ -2509,7 +2509,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dealer-in-products-for-disabilities-complaint",
@@ -2525,7 +2525,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "death-certificate-order",
@@ -2541,7 +2541,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "death-investigation",
@@ -2557,7 +2557,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "debt-collection-agency-complaint",
@@ -2573,7 +2573,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "delivery-app-complaint",
@@ -2589,7 +2589,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dentist-complaint",
@@ -2605,7 +2605,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-buildings-document-fraud",
@@ -2621,7 +2621,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-buildings-filing-representative-complaint",
@@ -2637,7 +2637,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-buildings-notice-defaced",
@@ -2653,7 +2653,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-citywide-administrative-services-building-security-complaint",
@@ -2669,7 +2669,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-consumer-and-worker-protection-license-replacement",
@@ -2685,7 +2685,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-consumer-and-worker-protection-online-licensing",
@@ -2701,7 +2701,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-design-and-construction-ddc-services-and-projects",
@@ -2717,7 +2717,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-motor-vehicles-dmv",
@@ -2733,7 +2733,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-sanitation-signs-and-decals",
@@ -2749,7 +2749,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-sanitation-vehicle-accident",
@@ -2765,7 +2765,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-sanitation-worker-or-vehicle-complaint",
@@ -2781,7 +2781,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "department-of-state-dos-licensed-professional-or-business-complaint",
@@ -2797,7 +2797,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dirt-bikes-and-all-terrain-vehicle-atv-storage-complaint",
@@ -2813,7 +2813,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dirty-gutter",
@@ -2829,7 +2829,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dirty-sidewalk",
@@ -2845,7 +2845,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dirty-yard-or-alley",
@@ -2861,7 +2861,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "disabled-vehicle",
@@ -2877,7 +2877,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "discrimination",
@@ -2893,7 +2893,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "disorderly-person-or-group",
@@ -2909,7 +2909,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "doctor-complaint",
@@ -2925,7 +2925,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dog-license",
@@ -2941,7 +2941,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dog-or-animal-waste",
@@ -2957,7 +2957,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "domestic-violence",
@@ -2973,7 +2973,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "domestic-violence-shelter-complaint",
@@ -2989,7 +2989,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "domestic-worker-employment-agency-complaint",
@@ -3005,7 +3005,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "donation-collection-bin-complaint",
@@ -3021,7 +3021,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "door-to-door-sales-complaint",
@@ -3037,7 +3037,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "drag-racing",
@@ -3053,7 +3053,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "drinking-water",
@@ -3069,7 +3069,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "drones",
@@ -3085,7 +3085,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "drug-and-alcohol-services",
@@ -3101,7 +3101,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "drug-sale",
@@ -3117,7 +3117,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "drug-use",
@@ -3133,7 +3133,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dry-cleaner-complaint",
@@ -3149,7 +3149,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dry-cleaning-odor",
@@ -3165,7 +3165,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dry-weather-sewage-discharge-complaint",
@@ -3181,7 +3181,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dumping-in-catch-basin",
@@ -3197,7 +3197,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dumpster-complaint",
@@ -3213,7 +3213,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "dust-complaint",
@@ -3229,7 +3229,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "e-cigarette-sale-complaint",
@@ -3245,7 +3245,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "e-zpass",
@@ -3261,7 +3261,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "earthquake",
@@ -3277,7 +3277,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "elder-abuse",
@@ -3293,7 +3293,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "electric-bike-scooter-or-storage-battery-sale-complaint",
@@ -3309,7 +3309,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "electric-company-complaint",
@@ -3325,7 +3325,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "electric-space-heater-sale-complaint",
@@ -3341,7 +3341,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "electrical-complaint",
@@ -3357,7 +3357,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "electrician-or-plumber-complaint",
@@ -3373,7 +3373,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "electronics-or-appliance-repair-complaint",
@@ -3389,7 +3389,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "electronics-store-complaint",
@@ -3405,7 +3405,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "elevator-or-escalator-complaint",
@@ -3421,7 +3421,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "emergency-housing-voucher-program",
@@ -3437,7 +3437,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "employment-agency-complaint",
@@ -3453,7 +3453,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "essential-service-interruption-notice-not-posted",
@@ -3469,7 +3469,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "excavation-undermining-nearby-building",
@@ -3485,7 +3485,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "exchange-refund-or-return-complaint",
@@ -3501,7 +3501,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fair-fares-nyc-complaint",
@@ -3517,7 +3517,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fair-housing",
@@ -3533,7 +3533,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fair-workweek-law",
@@ -3549,7 +3549,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fallen-tree-or-branch",
@@ -3565,7 +3565,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "false-advertising",
@@ -3581,7 +3581,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "family-court",
@@ -3597,7 +3597,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fence-complaint",
@@ -3613,7 +3613,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "film-or-television-production-complaint",
@@ -3629,7 +3629,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fire-alarm-box-complaint",
@@ -3645,7 +3645,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fire-emergency",
@@ -3661,7 +3661,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fire-hazard",
@@ -3677,7 +3677,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fire-hydrant-complaint",
@@ -3693,7 +3693,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fire-hydrant-request",
@@ -3709,7 +3709,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fire-suppression-contractor-complaint",
@@ -3725,7 +3725,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "fireworks-complaint",
@@ -3741,7 +3741,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "floatable-trash-in-waterway-boom-or-net-containments",
@@ -3757,7 +3757,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "foam-ban",
@@ -3773,7 +3773,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "food-cart-rules",
@@ -3789,7 +3789,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "food-poisoning",
@@ -3805,7 +3805,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "food-safety-complaint",
@@ -3821,7 +3821,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "foster-care-agency-complaint",
@@ -3837,7 +3837,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "foul-odor-from-unknown-source",
@@ -3853,7 +3853,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "freelance-worker-and-hiring-party-assistance",
@@ -3869,7 +3869,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "funeral-director-complaint",
@@ -3885,7 +3885,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "funeral-home-complaint",
@@ -3901,7 +3901,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "furniture-store-complaint",
@@ -3917,7 +3917,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gambling",
@@ -3933,7 +3933,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "games-of-chance-complaint",
@@ -3949,7 +3949,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gaming-cafe-complaint",
@@ -3965,7 +3965,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "garbage-truck-spill",
@@ -3981,7 +3981,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gas-company-complaint",
@@ -3997,7 +3997,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gas-leak",
@@ -4013,7 +4013,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gas-piping-or-hookup-complaint",
@@ -4029,7 +4029,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gas-station-complaint",
@@ -4045,7 +4045,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gender-pricing-complaint",
@@ -4061,7 +4061,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "goods-or-services-delivery-complaint",
@@ -4077,7 +4077,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gowanus-canal-construction-project",
@@ -4093,7 +4093,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "graffiti",
@@ -4109,7 +4109,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "guard-dog-registration",
@@ -4125,7 +4125,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gun-tip",
@@ -4141,7 +4141,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gunshot",
@@ -4157,7 +4157,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "gym-or-health-spa-membership-complaint",
@@ -4173,7 +4173,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "harassment",
@@ -4189,7 +4189,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "hate-crime",
@@ -4205,7 +4205,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "heat-complaint-in-a-commercial-building",
@@ -4221,7 +4221,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "heat-or-hot-water-complaint-in-a-residential-building",
@@ -4237,7 +4237,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "heating-company-complaint",
@@ -4253,7 +4253,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "higher-education-complaint",
@@ -4269,7 +4269,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "highway-fence-complaint",
@@ -4285,7 +4285,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "highway-flooding",
@@ -4301,7 +4301,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "highway-plate-complaint",
@@ -4317,7 +4317,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "highway-resurfacing-request",
@@ -4333,7 +4333,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "highway-sign-complaint",
@@ -4349,7 +4349,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "home-care-complaint",
@@ -4365,7 +4365,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "home-delivered-meals-for-older-adults",
@@ -4381,7 +4381,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "home-heating-oil-company-complaint",
@@ -4397,7 +4397,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "home-improvement-contractor-complaint",
@@ -4413,7 +4413,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "homeless-encampment",
@@ -4429,7 +4429,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "homeless-outreach-assistance",
@@ -4445,7 +4445,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "homeless-shelter-complaint",
@@ -4461,7 +4461,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "homeless-shelter-resident-assistance",
@@ -4477,7 +4477,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "homeowner-and-mortgage-relief-scams",
@@ -4493,7 +4493,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "homeowner-help-desk",
@@ -4509,7 +4509,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "horse-drawn-cab-business-complaint",
@@ -4525,7 +4525,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "hospital-or-clinic-complaint",
@@ -4541,7 +4541,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "hotel-complaint",
@@ -4557,7 +4557,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "housing-information-guide-notice-not-posted",
@@ -4573,7 +4573,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "housing-used-for-short-term-rental-vacation-rentals-or-illegal-home-sharing",
@@ -4589,7 +4589,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "hoverboard",
@@ -4605,7 +4605,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "hpd-section-8-fraud",
@@ -4621,7 +4621,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "human-trafficking",
@@ -4637,7 +4637,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "identity-theft",
@@ -4653,7 +4653,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "idling-vehicle",
@@ -4669,7 +4669,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "idnyc-complaints-status-and-questions",
@@ -4685,7 +4685,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "illegal-animal",
@@ -4701,7 +4701,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "illegal-dumping",
@@ -4717,7 +4717,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "illegal-eviction-or-lockout",
@@ -4733,7 +4733,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "illegal-parking",
@@ -4749,7 +4749,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "immigration-fraud",
@@ -4765,7 +4765,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "immigration-service-provider-complaint",
@@ -4781,7 +4781,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "incarcerated-person-medical-concern",
@@ -4797,7 +4797,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "indoor-air-quality",
@@ -4813,7 +4813,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "injured-or-sick-animal",
@@ -4829,7 +4829,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "insurance-complaint",
@@ -4845,7 +4845,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "internet-service-or-online-business-complaint",
@@ -4861,7 +4861,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "invasive-plant-species",
@@ -4877,7 +4877,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "irs-impersonation",
@@ -4893,7 +4893,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "italian-heritage-day-indigenous-peoples-day",
@@ -4909,7 +4909,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "jail-system-complaint",
@@ -4925,7 +4925,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "janitor-or-super-not-available",
@@ -4941,7 +4941,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "jeweler-complaint",
@@ -4957,7 +4957,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "judge-complaint",
@@ -4973,7 +4973,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "juvenile-detention",
@@ -4989,7 +4989,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "labor-law",
@@ -5005,7 +5005,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "landmark-building-complaint",
@@ -5021,7 +5021,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "laundromat-complaint",
@@ -5037,7 +5037,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lawyer-complaint",
@@ -5053,7 +5053,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "layaway-complaint",
@@ -5069,7 +5069,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lead-paint",
@@ -5085,7 +5085,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "legal-assistance",
@@ -5101,7 +5101,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "legal-assistance-and-inquiries-for-older-adults",
@@ -5117,7 +5117,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lewd-act",
@@ -5133,7 +5133,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "libraries",
@@ -5149,7 +5149,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lifeguard-complaint",
@@ -5165,7 +5165,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "light-from-parking-lot-complaint",
@@ -5181,7 +5181,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "linknyc",
@@ -5197,7 +5197,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lithium-ion-battery-safety-and-complaint",
@@ -5213,7 +5213,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "litter-basket-complaint-or-request",
@@ -5229,7 +5229,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "litter-on-highway",
@@ -5245,7 +5245,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "littering",
@@ -5261,7 +5261,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lockernyc-pilot",
@@ -5277,7 +5277,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "locksmith-complaint",
@@ -5293,7 +5293,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "loft-complaint",
@@ -5309,7 +5309,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "long-island-rail-road",
@@ -5325,7 +5325,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "loose-syringes",
@@ -5341,7 +5341,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lost-item-in-sidewalk-grating",
@@ -5357,7 +5357,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lost-item-in-trash",
@@ -5373,7 +5373,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lost-or-found-pet",
@@ -5389,7 +5389,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "lost-or-found-property",
@@ -5405,7 +5405,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "manage-your-fair-fares-nyc-discount",
@@ -5421,7 +5421,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "managed-care-complaint",
@@ -5437,7 +5437,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "manhole-cover-complaint",
@@ -5453,7 +5453,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "manhole-flooding",
@@ -5469,7 +5469,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "marriage-record",
@@ -5485,7 +5485,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "medicaid-complaint",
@@ -5501,7 +5501,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "medical-device-complaint",
@@ -5517,7 +5517,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "medical-emergency",
@@ -5533,7 +5533,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "medical-payment-product-complaint",
@@ -5549,7 +5549,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "medical-waste-disposal",
@@ -5565,7 +5565,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "medicare",
@@ -5581,7 +5581,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "medicare-fraud-or-abuse",
@@ -5597,7 +5597,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "metro-north-railroad",
@@ -5613,7 +5613,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "missed-trash-recycling-or-compost-collection",
@@ -5629,7 +5629,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "missing-person",
@@ -5645,7 +5645,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "mold-complaint",
@@ -5661,7 +5661,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "money-transmitter-complaint",
@@ -5677,7 +5677,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "mortgage-or-loan-company-complaint",
@@ -5693,7 +5693,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "mosquitoes",
@@ -5709,7 +5709,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "movie-theater-complaint",
@@ -5725,7 +5725,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "moving-company-complaint",
@@ -5741,7 +5741,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "mycity-business",
@@ -5757,7 +5757,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nail-salon-odor",
@@ -5773,7 +5773,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "naturally-occurring-retirement-community-norc-complaints",
@@ -5789,7 +5789,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "neighbor-odor",
@@ -5805,7 +5805,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "neighborhood-area-maps",
@@ -5821,7 +5821,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "new-jersey-transit",
@@ -5837,7 +5837,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "new-york-city-marathon",
@@ -5853,7 +5853,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "new-york-city-public-schools-feedback",
@@ -5869,7 +5869,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "new-york-waterway-ferry",
@@ -5885,7 +5885,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "newspaper-box-complaint",
@@ -5901,7 +5901,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "newsstand-complaint",
@@ -5917,7 +5917,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "no-water-low-water-pressure-or-water-temperature-complaint",
@@ -5933,7 +5933,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-complaints",
@@ -5949,7 +5949,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-air-conditioner-or-ventilation-equipment",
@@ -5965,7 +5965,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-airplane",
@@ -5981,7 +5981,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-alarm",
@@ -5997,7 +5997,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-bar-club-or-restaurant",
@@ -6013,7 +6013,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-boat",
@@ -6029,7 +6029,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-business-equipment",
@@ -6045,7 +6045,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-construction",
@@ -6061,7 +6061,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-dog-or-other-animal",
@@ -6077,7 +6077,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-garbage-truck",
@@ -6093,7 +6093,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-helicopter",
@@ -6109,7 +6109,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-house-of-worship",
@@ -6125,7 +6125,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-ice-cream-truck",
@@ -6141,7 +6141,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-intercity-or-interstate-bus",
@@ -6157,7 +6157,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-large-party-or-crowd",
@@ -6173,7 +6173,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-lawn-equipment",
@@ -6189,7 +6189,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-neighbor",
@@ -6205,7 +6205,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-park",
@@ -6221,7 +6221,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-store-or-business",
@@ -6237,7 +6237,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-street-or-sidewalk",
@@ -6253,7 +6253,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "noise-from-vehicle",
@@ -6269,7 +6269,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "non-residential-building-maintenance-complaint",
@@ -6285,7 +6285,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nursing-home-complaint",
@@ -6301,7 +6301,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nyc-ferry",
@@ -6317,7 +6317,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nyc-health-department-clinic-feedback",
@@ -6333,7 +6333,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nyc-radio-and-television",
@@ -6349,7 +6349,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nyc311-accounts",
@@ -6365,7 +6365,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nyc311-feedback",
@@ -6381,7 +6381,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nycha-pet-policy",
@@ -6397,7 +6397,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nycha-public-housing-maintenance-complaint",
@@ -6413,7 +6413,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nycha-public-housing-section-8-fraud",
@@ -6429,7 +6429,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "nysed-licensed-professional-or-business-complaint",
@@ -6445,7 +6445,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "obscured-license-plate-complaint",
@@ -6461,7 +6461,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "off-hour-delivery-program",
@@ -6477,7 +6477,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "offensive-sexual-material",
@@ -6493,7 +6493,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "oil-burning-equipment-installer-complaint",
@@ -6509,7 +6509,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "oil-spill",
@@ -6525,7 +6525,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "older-adult-center-complaint",
@@ -6541,7 +6541,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "online-or-mail-order-complaint",
@@ -6557,7 +6557,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "open-streets",
@@ -6573,7 +6573,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "organized-crime",
@@ -6589,7 +6589,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "outdoor-dining-complaint",
@@ -6605,7 +6605,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "outdoor-learning",
@@ -6621,7 +6621,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "overcharge",
@@ -6637,7 +6637,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "overdose",
@@ -6653,7 +6653,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "overgrown-grass-or-weeds",
@@ -6669,7 +6669,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "paid-care-worker-or-employer-assistance",
@@ -6685,7 +6685,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "panhandling",
@@ -6701,7 +6701,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "paper-license-plate-complaint",
@@ -6717,7 +6717,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "parent-coordinator",
@@ -6733,7 +6733,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "park-maintenance-complaint",
@@ -6749,7 +6749,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "parking-meter-complaint-or-request",
@@ -6765,7 +6765,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "parking-signs-and-rules",
@@ -6781,7 +6781,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "parknyc-parking-payment",
@@ -6797,7 +6797,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "parole",
@@ -6813,7 +6813,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "path-trains",
@@ -6829,7 +6829,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pavement-marking-complaint-or-request",
@@ -6845,7 +6845,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pawnbroker-complaint",
@@ -6861,7 +6861,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pay-phone-complaint",
@@ -6877,7 +6877,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pedestrian-bridges",
@@ -6893,7 +6893,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pedestrian-plazas",
@@ -6909,7 +6909,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pedestrian-ramp-complaint",
@@ -6925,7 +6925,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pedestrian-ramp-request",
@@ -6941,7 +6941,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pedestrian-signal-complaint-or-request",
@@ -6957,7 +6957,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pedicab-business-or-driver-complaint",
@@ -6973,7 +6973,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pesticide-application-without-notice",
@@ -6989,7 +6989,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pet-sale-complaint",
@@ -7005,7 +7005,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pharmacist-complaint",
@@ -7021,7 +7021,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pharmacy-without-naloxone",
@@ -7037,7 +7037,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "phone-card-complaint",
@@ -7053,7 +7053,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "phone-complaint",
@@ -7069,7 +7069,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pigeon-droppings-or-odor",
@@ -7085,7 +7085,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pigeon-trapping-or-netting",
@@ -7101,7 +7101,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "place-of-assembly-without-permit-complaint",
@@ -7117,7 +7117,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "plastic-bag-ban-and-paper-bag-fee",
@@ -7133,7 +7133,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "plastic-bag-recycling",
@@ -7149,7 +7149,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "plastic-straw-rules",
@@ -7165,7 +7165,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "plumbing-complaint-in-a-commercial-building",
@@ -7181,7 +7181,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "plumbing-work-without-permit",
@@ -7197,7 +7197,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "poison-control-center",
@@ -7213,7 +7213,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "poison-ivy",
@@ -7229,7 +7229,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "police-officer-complaint",
@@ -7245,7 +7245,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "police-officer-impersonation",
@@ -7261,7 +7261,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "poll-site-complaint",
@@ -7277,7 +7277,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "poll-worker-assistance",
@@ -7293,7 +7293,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pool-or-billiard-room-complaint",
@@ -7309,7 +7309,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pool-or-sauna-complaint",
@@ -7325,7 +7325,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "poster-or-sticker-complaint",
@@ -7341,7 +7341,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pothole-or-cave-in-on-highway",
@@ -7357,7 +7357,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pothole-or-cave-in-on-street",
@@ -7373,7 +7373,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "power-outage",
@@ -7389,7 +7389,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "pregnancy-services-center-complaint",
@@ -7405,7 +7405,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "prevailing-wage-complaint",
@@ -7421,7 +7421,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "price-not-posted-or-inaccurate",
@@ -7437,7 +7437,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "private-carter-complaint",
@@ -7453,7 +7453,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "private-elevator-or-escalator-inspector-complaint",
@@ -7469,7 +7469,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "private-garage-or-parking-lot-complaint",
@@ -7485,7 +7485,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "privately-owned-public-space-pops-complaint",
@@ -7501,7 +7501,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "process-server-complaint",
@@ -7517,7 +7517,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "property-deed-or-record-theft",
@@ -7533,7 +7533,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "property-grade-change-complaint",
@@ -7549,7 +7549,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "prostitution",
@@ -7565,7 +7565,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "protected-time-off",
@@ -7581,7 +7581,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "public-advocate",
@@ -7597,7 +7597,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "public-auction-complaint",
@@ -7613,7 +7613,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "public-event-seating-complaint",
@@ -7629,7 +7629,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "public-garages-and-parking-lots",
@@ -7645,7 +7645,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "public-official-threat",
@@ -7661,7 +7661,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "public-recycling-bin-complaint",
@@ -7677,7 +7677,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "public-urination-or-defecation",
@@ -7693,7 +7693,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "rabid-animal",
@@ -7709,7 +7709,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "radioactive-materials-complaint",
@@ -7725,7 +7725,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "rain-garden",
@@ -7741,7 +7741,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "rat-or-mouse-complaint",
@@ -7757,7 +7757,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "receipt-complaint",
@@ -7773,7 +7773,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "reckless-driving",
@@ -7789,7 +7789,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "recycling-theft",
@@ -7805,7 +7805,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "red-light-camera-complaint",
@@ -7821,7 +7821,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "rent-stabilization-notice-not-posted",
@@ -7837,7 +7837,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "residential-pest-complaint",
@@ -7853,7 +7853,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "residential-rental-agency-complaint",
@@ -7869,7 +7869,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "restaurant-allergy-poster-complaint",
@@ -7885,7 +7885,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "restaurant-and-mobile-food-letter-grading",
@@ -7901,7 +7901,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "restaurant-bathroom-rules",
@@ -7917,7 +7917,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "restaurant-complaint",
@@ -7933,7 +7933,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "restaurant-odor",
@@ -7949,7 +7949,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "rigger-complaint",
@@ -7965,7 +7965,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "roof-tank-leak-or-overflow",
@@ -7981,7 +7981,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "roosevelt-island-tramway",
@@ -7997,7 +7997,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "runaway-or-homeless-youth-shelter-and-support",
@@ -8013,7 +8013,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "safe-construction-for-tenants",
@@ -8029,7 +8029,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "salary-transparency-law",
@@ -8045,7 +8045,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sale-to-minor-complaint",
@@ -8061,7 +8061,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sales-tax-complaint",
@@ -8077,7 +8077,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "satellite-provider-complaint",
@@ -8093,7 +8093,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "scaffold-or-sidewalk-shed-complaint",
@@ -8109,7 +8109,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "scale-complaint",
@@ -8125,7 +8125,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "scale-dealer-or-repairer-complaint",
@@ -8141,7 +8141,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-bullying",
@@ -8157,7 +8157,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-bus-complaint",
@@ -8173,7 +8173,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-calendar-and-closures",
@@ -8189,7 +8189,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-construction",
@@ -8205,7 +8205,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-discipline-or-suspension-complaint",
@@ -8221,7 +8221,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-food-complaint",
@@ -8237,7 +8237,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-health-complaint",
@@ -8253,7 +8253,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-maintenance-complaint",
@@ -8269,7 +8269,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-parent-leadership-complaint",
@@ -8285,7 +8285,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-registration-complaint",
@@ -8301,7 +8301,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-safety-complaint",
@@ -8317,7 +8317,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-sexual-misconduct",
@@ -8333,7 +8333,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-special-education-complaint",
@@ -8349,7 +8349,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-teaching-and-learning-complaint",
@@ -8365,7 +8365,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-transfer-complaint",
@@ -8381,7 +8381,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "school-transportation",
@@ -8397,7 +8397,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "scrap-metal-processor-complaint",
@@ -8413,7 +8413,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "seastreak-ferry",
@@ -8429,7 +8429,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "second-avenue-subway-construction",
@@ -8445,7 +8445,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "self-storage-facility-complaint",
@@ -8461,7 +8461,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "septic-or-cesspool-complaint",
@@ -8477,7 +8477,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sewage-leak-or-odor-indoors",
@@ -8493,7 +8493,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sewer-backup",
@@ -8509,7 +8509,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sexual-assault",
@@ -8525,7 +8525,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "shared-e-scooter-program",
@@ -8541,7 +8541,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-cellar-door-complaint",
@@ -8557,7 +8557,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-collapsed",
@@ -8573,7 +8573,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-grating-complaint",
@@ -8589,7 +8589,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-repair-protest",
@@ -8605,7 +8605,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-seating",
@@ -8621,7 +8621,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-staircase-complaint",
@@ -8637,7 +8637,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-utility-hardware-complaint",
@@ -8653,7 +8653,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-valve-cover-complaint",
@@ -8669,7 +8669,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sidewalk-washing-complaint",
@@ -8685,7 +8685,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sign-hanger-complaint",
@@ -8701,7 +8701,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "single-occupancy-bathroom-complaint",
@@ -8717,7 +8717,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "site-safety-manager-complaint",
@@ -8733,7 +8733,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "skip-the-stuff",
@@ -8749,7 +8749,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "smoke-free-air-act-complaint",
@@ -8765,7 +8765,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "smoke-or-fumes",
@@ -8781,7 +8781,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "smoking-or-vaping-complaint",
@@ -8797,7 +8797,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "snap-complaint",
@@ -8813,7 +8813,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "snow-or-ice-on-building",
@@ -8829,7 +8829,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "snow-or-ice-on-sidewalk",
@@ -8845,7 +8845,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "snow-or-ice-on-street-or-highway",
@@ -8861,7 +8861,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "social-club-safety-complaint",
@@ -8877,7 +8877,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "social-security",
@@ -8893,7 +8893,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "social-security-fraud",
@@ -8909,7 +8909,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sodium-warning-complaint",
@@ -8925,7 +8925,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "solar-or-green-roof-non-compliance",
@@ -8941,7 +8941,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "solid-waste-transfer-station-complaint",
@@ -8957,7 +8957,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "special-natural-area-district-snad-complaint",
@@ -8973,7 +8973,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "speed-camera-complaint",
@@ -8989,7 +8989,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "speed-reducer-request",
@@ -9005,7 +9005,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sprinkler-system-complaint",
@@ -9021,7 +9021,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "squeegee-complaint",
@@ -9037,7 +9037,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "standing-water",
@@ -9053,7 +9053,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "state-court",
@@ -9069,7 +9069,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "state-parking-permit-for-people-with-disabilities",
@@ -9085,7 +9085,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "staten-island-ferry",
@@ -9101,7 +9101,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "staten-island-ferry-lost-and-found",
@@ -9117,7 +9117,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "staten-island-railway",
@@ -9133,7 +9133,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "stolen-property",
@@ -9149,7 +9149,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "stolen-vehicle",
@@ -9165,7 +9165,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "stop-work-order",
@@ -9181,7 +9181,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "storage-warehouse-complaint",
@@ -9197,7 +9197,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "store-air-conditioning-complaint",
@@ -9213,7 +9213,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "store-complaint",
@@ -9229,7 +9229,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "stray-or-abandoned-animal",
@@ -9245,7 +9245,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-con-game",
@@ -9261,7 +9261,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-flooding",
@@ -9277,7 +9277,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-light-complaint",
@@ -9293,7 +9293,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-plate-complaint",
@@ -9309,7 +9309,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-repair-complaint",
@@ -9325,7 +9325,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-resurfacing-request",
@@ -9341,7 +9341,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-sign-complaint",
@@ -9357,7 +9357,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-sweeping-complaint",
@@ -9373,7 +9373,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-utility-hardware-complaint",
@@ -9389,7 +9389,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "street-vendor-complaint",
@@ -9405,7 +9405,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "student-attendance-and-absence",
@@ -9421,7 +9421,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "subway-delay",
@@ -9440,7 +9440,7 @@
       "description"
     ],
     "automation": "adapter:mta-subway-delay",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "suicide",
@@ -9456,7 +9456,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "summer-meals-for-children",
@@ -9472,7 +9472,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "suspicious-package",
@@ -9488,7 +9488,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "suspicious-vehicle",
@@ -9504,7 +9504,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sweepstakes-complaint",
@@ -9520,7 +9520,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "sweet-odor-from-unknown-source",
@@ -9536,7 +9536,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tanning-establishment-complaint",
@@ -9552,7 +9552,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tattoo-parlor-complaint",
@@ -9568,7 +9568,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tax-fraud",
@@ -9584,7 +9584,7 @@
     "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tax-preparation-services-complaint",
@@ -9600,7 +9600,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "taxi-complaint",
@@ -9616,7 +9616,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "taxi-lost-and-found",
@@ -9632,7 +9632,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "taxpayer-advocate",
@@ -9644,11 +9644,11 @@
     "topic": "Housing & Buildings › Rental Property Owners",
     "channel": "agency-form",
     "officialUrl": "https://www.nyc.gov/site/finance/about/contact-by-email/contact-taxpayer-advocate.page",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "telemarketing-fraud",
@@ -9660,11 +9660,11 @@
     "topic": "Businesses & Consumers › Consumers",
     "channel": "external-site",
     "officialUrl": "https://reportfraud.ftc.gov/#/",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "telemarketing-texting-complaint",
@@ -9676,11 +9676,11 @@
     "topic": "Businesses & Consumers › Consumers",
     "channel": "external-site",
     "officialUrl": "https://consumercomplaints.fcc.gov/hc/en-us",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "telephone-pole-or-wire-complaint",
@@ -9696,7 +9696,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "terrorism",
@@ -9712,7 +9712,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "theft-of-service",
@@ -9728,7 +9728,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "ticket-scalping",
@@ -9740,11 +9740,11 @@
     "topic": "Culture & Recreation › Events",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=eff3d24d-d0d7-e811-a96d-000d3a1c5cc0&kasid=4a7a9fa1-5613-ed11-82e4-00224820a293",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "ticket-seller-complaint",
@@ -9760,7 +9760,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tobacco-product-sale-complaint",
@@ -9776,7 +9776,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tour-bus-complaint",
@@ -9792,7 +9792,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tour-guide-complaint",
@@ -9808,7 +9808,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tow-truck-complaint",
@@ -9824,7 +9824,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "toy-gun-sale",
@@ -9840,7 +9840,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "traffic-condition",
@@ -9852,11 +9852,11 @@
     "topic": "Sidewalks, Streets & Highways › Bridges & Tunnels",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=24efc8f6-4dda-e811-a96b-000d3a1c5716&kasid=202c7e2a-dd59-f111-bec7-0022482a4754",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "traffic-median-pedestrian-fence-complaint",
@@ -9872,7 +9872,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "traffic-or-bicycle-signal-complaint-or-request",
@@ -9888,7 +9888,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "traffic-trends",
@@ -9904,7 +9904,7 @@
     "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "transportation-for-older-adults",
@@ -9920,7 +9920,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "trash-or-debris-in-street",
@@ -9932,11 +9932,11 @@
     "topic": "Trash & Recycling › Cleaning",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=934e51a3-3f16-ec11-b6e5-0022481cc62d&kasid=cddc16db-3c8f-ec11-b400-000d3a19aba3",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "trash-recycling-or-compost-disposal-complaint",
@@ -9948,11 +9948,11 @@
     "topic": "Trash & Recycling › Collection & Disposal",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=854e51a3-3f16-ec11-b6e5-0022481cc62d&kasid=4c79b375-98a3-f011-bbd2-6045bdeb676c",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "trash-recycling-or-compost-storage-complaint",
@@ -9964,11 +9964,11 @@
     "topic": "Trash & Recycling › Collection & Disposal",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=a94e51a3-3f16-ec11-b6e5-0022481cc62d&kasid=61508eef-8cb7-f111-aaac-6045bdd9e2bb",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "travel-agency-complaint",
@@ -9984,7 +9984,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tree-destruction",
@@ -9996,11 +9996,11 @@
     "topic": "Housing & Buildings › Buildings & Property",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=41c53190-fcb9-e811-a965-000d3a1c5f15&kasid=e1b9b933-511d-f111-8341-6045bdf05ebe",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tree-planting",
@@ -10012,11 +10012,11 @@
     "topic": "Housing & Buildings › Tenants",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=975c008c-1ed6-e811-a96b-000d3a1c5716&kasid=3f03e887-a344-f111-88b4-000d3a11d166",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tree-pruning",
@@ -10028,11 +10028,11 @@
     "topic": "Culture & Recreation › Parks & Recreation",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=6e8865cc-dbd3-e811-a967-000d3a1c53e4&kasid=da245a42-d859-f111-bec7-0022482a4754",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tree-stump",
@@ -10044,11 +10044,11 @@
     "topic": "Culture & Recreation › Parks & Recreation",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=0d60c880-c728-eb11-a813-0022481ed70f&kasid=7aeeb501-9782-f011-b4cb-000d3a8cb9cb",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "trees-and-sidewalks-repair",
@@ -10060,11 +10060,11 @@
     "topic": "Housing & Buildings › Rental Property Owners",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=a6ce8631-00d6-e811-a96b-000d3a1c5716&kasid=6c6da6d1-4681-f111-ab0f-70a8a5911385",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "trespassing",
@@ -10076,11 +10076,11 @@
     "topic": "Housing & Buildings › Tenants",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=0d90b07b-d0d7-e811-a96d-000d3a1c5cc0&kasid=41aa861f-b79a-ee11-be36-6045bda95a1b",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "truck-route-complaint",
@@ -10092,11 +10092,11 @@
     "topic": null,
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=c3c7d759-44ad-e811-a97b-000d3a1618d5&kasid=73772ae7-dcb3-e811-a965-000d3a1c5f15",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "tunnels",
@@ -10108,11 +10108,11 @@
     "topic": "Sidewalks, Streets & Highways › Bridges & Tunnels",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=16dbb817-baae-e811-a96a-000d3a1c5096&kasid=6468d213-95e2-f011-8544-7c1e5269c651",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unemployment-insurance",
@@ -10124,11 +10124,11 @@
     "topic": "Benefits & Support › Cash & Expenses",
     "channel": "external-site",
     "officialUrl": "https://webapps.labor.ny.gov/dews/ui/fraud/report-fraud.shtm",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": true,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unleashed-dog",
@@ -10140,11 +10140,11 @@
     "topic": "Pets, Pests & Wildlife › Pets",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=781ebd97-bc86-e811-a960-000d3a35f53a&kasid=616adb35-766e-ed11-9562-002248243cd0",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unlicensed-business",
@@ -10160,7 +10160,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unlicensed-contractor",
@@ -10176,7 +10176,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unlocked-park-or-playground",
@@ -10188,11 +10188,11 @@
     "topic": "Culture & Recreation › Parks & Recreation",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=b5c7d759-44ad-e811-a97b-000d3a1618d5&kasid=e5642377-d804-f011-bae3-7c1e524927c0",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unsafe-construction-material-storage",
@@ -10208,7 +10208,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unsafe-highway-construction",
@@ -10220,11 +10220,11 @@
     "topic": "Public Safety › Safety & Crime",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=b9c7d759-44ad-e811-a97b-000d3a1618d5&kasid=b5b93a20-6bdd-ee11-904b-7c1e5201f2d4",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unsafe-new-building-structure",
@@ -10240,7 +10240,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unsafe-product",
@@ -10256,7 +10256,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unstable-building",
@@ -10272,7 +10272,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "unwanted-ad-or-menu",
@@ -10284,11 +10284,11 @@
     "topic": "Housing & Buildings › Tenants",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=f876f719-c2df-e811-a972-000d3a1c5096&kasid=8b114596-8d08-ef11-9f89-7c1e521563a6",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "used-goods-dealer-complaint",
@@ -10304,7 +10304,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "used-gun-dealer-complaint",
@@ -10320,7 +10320,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vacant-building-complaint",
@@ -10336,7 +10336,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vacant-lot-complaint",
@@ -10348,11 +10348,11 @@
     "topic": "Housing & Buildings › Buildings & Property",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=7b4e51a3-3f16-ec11-b6e5-0022481cc62d&kasid=196221a8-24a9-f011-bbd2-6045bdf06b4e",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vacate-order",
@@ -10368,7 +10368,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vandalism-in-a-park",
@@ -10380,11 +10380,11 @@
     "topic": "Culture & Recreation › Parks & Recreation",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=796193b4-756e-e811-a971-000d3a34ed47&kasid=6a2e5afe-e60c-ed11-82e4-000d3a58378d",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vehicle-accident",
@@ -10400,7 +10400,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vehicle-exhaust",
@@ -10412,11 +10412,11 @@
     "topic": "Environment › Air",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=8fc7d759-44ad-e811-a97b-000d3a1618d5&kasid=8ffebc0f-6e8d-eb11-a812-000d3a1cc1d6",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vehicle-registration-or-license-plate",
@@ -10432,7 +10432,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "vehicle-stored-on-residential-property-or-vacant-lot",
@@ -10448,7 +10448,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "ventilation-or-exhaust-system-complaint",
@@ -10464,7 +10464,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "verizon-telephone-internet-and-cable-service",
@@ -10476,11 +10476,11 @@
     "topic": "Housing & Buildings › Tenants",
     "channel": "external-site",
     "officialUrl": "https://www.verizon.com/support/residential/home",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "wall-complaint",
@@ -10496,7 +10496,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "wastewater-treatment-plant-complaint",
@@ -10508,11 +10508,11 @@
     "topic": "Environment › Water",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=ed2cc642-1cd2-e811-a96b-000d3a1c5716&kasid=e5942738-0565-f111-a825-70a8a545a701",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "wasting-water",
@@ -10524,11 +10524,11 @@
     "topic": "Environment › Water",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=d5bf8ce9-35d2-e811-a96b-000d3a1c5716&kasid=a8f54925-73d5-ed11-a7c5-000d3a1485b9",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "water-drainage-complaint",
@@ -10544,7 +10544,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "water-leak-in-a-building",
@@ -10556,11 +10556,11 @@
     "topic": "Environment › Water",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=4006425b-889d-e811-a963-000d3a1c53e4&kasid=b9508eef-8cb7-f111-aaac-6045bdd9e2bb",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "water-leak-on-street-or-sidewalk",
@@ -10572,11 +10572,11 @@
     "topic": "Sidewalks, Streets & Highways › Sidewalks",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=b6a51e09-4997-e811-a968-000d3a1c5096&kasid=b19e1c22-c99f-f011-b41b-7c1e52182639",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "water-main-break",
@@ -10588,11 +10588,11 @@
     "topic": "Sidewalks, Streets & Highways › Sidewalks",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=5fe7ebb1-4297-e811-a968-000d3a1c5096&kasid=b9d7c2d6-d7e0-f011-8543-7ced8d222272",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "water-meter-complaint",
@@ -10604,11 +10604,11 @@
     "topic": "Housing & Buildings › Tenants",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=1ec98a85-fed2-e811-a970-000d3a1c5096&kasid=31f007a3-9dfb-f011-8406-000d3a162e65",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "water-sampling-station-complaint",
@@ -10620,11 +10620,11 @@
     "topic": "Sidewalks, Streets & Highways › Sidewalks",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=9fc7d759-44ad-e811-a97b-000d3a1618d5&kasid=1006e71a-00af-e811-a96a-000d3a1c5096",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "waterway-complaint",
@@ -10636,11 +10636,11 @@
     "topic": "Environment › Water",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=93a5af45-8bd4-e811-a96a-000d3a1c5ec5&kasid=7538ffce-73a9-ed11-aad1-000d3a8a61aa",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "welder-complaint",
@@ -10656,7 +10656,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "wellness-check",
@@ -10672,7 +10672,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "wild-animal",
@@ -10684,11 +10684,11 @@
     "topic": "Pets, Pests & Wildlife › Pests & Wildlife",
     "channel": "nyc311-sr-form",
     "officialUrl": "https://portal.311.nyc.gov/servicerequest-create/?caid=f355a646-c3de-e811-a972-000d3a1c5096&kasid=15a02a36-1f30-f011-8c4e-7c1e527f9469",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "window-guard-complaint",
@@ -10704,7 +10704,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "worker-safety",
@@ -10716,11 +10716,11 @@
     "topic": "Employment › Employees",
     "channel": "external-site",
     "officialUrl": "https://www.osha.gov/workers/file-complaint",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "workers-compensation-fraud",
@@ -10732,11 +10732,11 @@
     "topic": "Employment › Employees",
     "channel": "external-site",
     "officialUrl": "https://ig.ny.gov/workers-comp-complaint",
-    "requiresLogin": null,
-    "hasCaptcha": null,
+    "requiresLogin": false,
+    "hasCaptcha": false,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "x-ray-machine-complaint",
@@ -10752,7 +10752,7 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "handoff",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   },
   {
     "id": "zombie-homes-initiative",
@@ -10768,6 +10768,6 @@
     "hasCaptcha": null,
     "requiredFields": null,
     "automation": "none",
-    "lastVerifiedAt": "2026-10-16T18:41:18.791Z"
+    "lastVerifiedAt": "2026-10-16T18:45:11.637Z"
   }
 ]
