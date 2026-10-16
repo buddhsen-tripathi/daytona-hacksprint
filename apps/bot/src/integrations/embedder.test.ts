@@ -1,10 +1,10 @@
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cosineSimilarity } from "../services/agent-memory.js";
 import { HASH_EMBED_DIM, createHashEmbedder, createOpenRouterEmbedder, hashEmbed } from "./embedder.js";
-import { OPENROUTER_EMBED_URL, OpenRouterError, __clearEmbedCacheForTests, embed } from "./openrouter.js";
+import { OPENROUTER_EMBED_URL, OpenRouterError, __clearEmbedCacheForTests, embed, embedCacheKey, validCachedVector } from "./openrouter.js";
 
 const vec = (seed: number, dim = 4) => Array.from({ length: dim }, (_, i) => seed + i / 10);
 /** Fake /embeddings: returns rows in REVERSE order (index field must be honoured). */
@@ -68,6 +68,41 @@ describe("openrouter embed()", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("treats empty / corrupt / wrong-dimension cache files as misses and deletes them (#24)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "embed-cache-"));
+    try {
+      const calls: string[][] = [];
+      vi.stubGlobal("fetch", fakeEmbeddings(calls));
+      const bad: Record<string, string> = { empty: "", blank: "[]", trunc: "[0.1, 0.2", junk: "{\"a\":1}", nan: "[0.1, \"x\", 0.3, 0.4]", short: "[0.1, 0.2]" };
+      for (const [text, body] of Object.entries(bad)) writeFileSync(join(dir, `${embedCacheKey("m", text)}.json`), body);
+      const texts = Object.keys(bad);
+      const out = await embed(texts, { apiKey: "k", model: "m", cacheDir: dir, dim: 4 });
+      expect(out).toEqual(texts.map((t) => vec(t.length)));
+      expect(calls).toEqual([texts]); // every bad file was a miss
+      await new Promise((r) => setTimeout(r, 30));
+      // rewritten with valid vectors (no stray temp files)
+      expect(readdirSync(dir).sort()).toEqual(texts.map((t) => `${embedCacheKey("m", t)}.json`).sort());
+      for (const t of texts) expect(JSON.parse(readFileSync(join(dir, `${embedCacheKey("m", t)}.json`), "utf8"))).toEqual(vec(t.length));
+      // a corrupt file is deleted even when the refetch fails
+      __clearEmbedCacheForTests();
+      writeFileSync(join(dir, `${embedCacheKey("m", "empty")}.json`), "");
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 500 })));
+      await expect(embed(["empty"], { apiKey: "k", model: "m", cacheDir: dir, dim: 4 })).rejects.toBeInstanceOf(OpenRouterError);
+      expect(existsSync(join(dir, `${embedCacheKey("m", "empty")}.json`))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("validCachedVector: non-empty finite numbers of the expected length", () => {
+    expect(validCachedVector([0.1, 0.2], 2)).toBe(true);
+    expect(validCachedVector([0.1, 0.2])).toBe(true);
+    expect(validCachedVector([], undefined)).toBe(false);
+    expect(validCachedVector([0.1], 2)).toBe(false);
+    expect(validCachedVector([0.1, null], 2)).toBe(false);
+    expect(validCachedVector({ length: 2 }, 2)).toBe(false);
   });
 
   it("throws typed errors (missing key, HTTP)", async () => {

@@ -73,7 +73,7 @@ export function createOpenRouterEmbedder(opts: OpenRouterEmbedderOptions = {}): 
     async embed(texts) {
       if (Date.now() < downUntil) return fallback.embed(texts);
       try {
-        const vectors = await embed(texts, { model, apiKey: opts.apiKey, cacheDir: opts.cacheDir, timeoutMs: opts.timeoutMs });
+        const vectors = await embed(texts, { model, apiKey: opts.apiKey, cacheDir: opts.cacheDir, timeoutMs: opts.timeoutMs, dim: dim || undefined });
         if (vectors[0]?.length) dim = vectors[0].length;
         lastError = null;
         return { model, vectors };

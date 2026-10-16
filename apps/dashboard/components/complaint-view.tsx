@@ -8,6 +8,7 @@ import { categoryLabel, categoryOfficial } from "@/lib/categories";
 import { SAFETY_COPY, fmtDateTime, fmtMs, fmtTime, humanState, pct, evidenceSrc } from "@/lib/format";
 import type { Actor, ComplaintDetail, ComplaintDraft, DuplicateCandidate, Evidence, FilingAttempt, Transition, WorkerEvent } from "@/lib/types";
 import { ApiDownBanner, Card, Empty, ExtLink, Label, LiveTick, Mono, Section, SkeletonRows, StatePill } from "./ui";
+import { MemoryPanel } from "./memory-panel";
 import { MapPinView } from "./map-pin";
 import { EvidenceGallery } from "./lightbox";
 
@@ -489,6 +490,7 @@ export function ComplaintView({ id, mock }: { id: string; mock: boolean }) {
             <Conversation c={c} />
           </Section>
           <Duplicates list={c.duplicates} asOf={d.duplicatesDataAsOf} reviewed={c.duplicateReviewed} />
+          <MemoryPanel mock={mock} />
         </div>
         <div className="col-span-12 space-y-4 lg:col-span-3">
           <Section no="B" title="Timeline">
