@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f3eee3;
+  --paper-2: #ebe4d5;
+  --card: #fbf9f4;
+  --ink: #17140f;
+  --ink-2: #4a4439;
+  --muted: #7b7366;
+  --rule: #ddd4c1;
+  --rule-2: #c6baa2;
+  --signal: #e4561b;
+  --signal-deep: #b8410f;
+  --signal-wash: #fbe5d8;
+  --go: #1e7a4c;
+  --go-wash: #dcefe2;
+  --stop: #be2a2f;
+  --stop-wash: #f7dddc;
+  --caution: #a8700f;
+  --caution-wash: #f7ebcc;
+  --transit: #1c4fb0;
+  --transit-wash: #dfe7f6;
+  --neutral-wash: #e9e3d6;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper2: var(--paper-2);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-rule2: var(--rule-2);
+  --color-signal: var(--signal);
+  --color-signal-deep: var(--signal-deep);
+  --color-signal-wash: var(--signal-wash);
+  --color-go: var(--go);
+  --color-go-wash: var(--go-wash);
+  --color-stop: var(--stop);
+  --color-stop-wash: var(--stop-wash);
+  --color-caution: var(--caution);
+  --color-caution-wash: var(--caution-wash);
+  --color-transit: var(--transit);
+  --color-transit-wash: var(--transit-wash);
+  --color-neutral-wash: var(--neutral-wash);
+  --font-display: var(--font-archivo);
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-jetbrains);
+}
+
+html {
+  background: var(--paper);
+}
+
+body {
+  background-color: var(--paper);
+  /* faint ledger grid, like municipal graph paper */
+  background-image:
+    linear-gradient(to right, rgb(23 20 15 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(23 20 15 / 0.035) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font-family: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--signal);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.font-wide {
+  font-stretch: 125%;
+}
+.font-narrow {
+  font-stretch: 75%;
+}
+
+/* Work-zone barrier stripe (DOT orange/white) */
+.hazard {
+  background-image: repeating-linear-gradient(-45deg, var(--signal) 0 10px, var(--card) 10px 20px);
+}
+/* Unknown outcome: amber/grey hatch — "we don't know, don't retry" */
+.hatch-unknown {
+  background-image: repeating-linear-gradient(-45deg, var(--caution-wash) 0 6px, #e6dfcf 6px 12px);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+.pulse-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise {
+  animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot, .rise { animation: none; }
+}

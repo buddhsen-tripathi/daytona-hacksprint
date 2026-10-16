@@ -1,0 +1,17 @@
+# IDE/editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local dependencies/build artifacts
+node_modules/
+dist/
+
+# Template project generated artifacts
+assets/node_modules/
+assets/dist/
+assets/.wrangler/
+assets/pnpm-lock.yaml

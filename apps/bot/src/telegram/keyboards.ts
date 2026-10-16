@@ -1,0 +1,62 @@
+/**
+ * Button sets (transport-agnostic OutboundButton rows) + conversion to grammY
+ * keyboards. Every callback is bound to a complaint id + draft version.
+ */
+import { InlineKeyboard, Keyboard } from "grammy";
+import type { ComplaintDraft, OutboundButton } from "../core/contracts.js";
+import { encodeCallback } from "../core/contracts.js";
+
+/** Telegram rejects URL buttons pointing at localhost / non-https hosts. */
+export function isButtonSafeUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && !/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function approvalButtons(d: ComplaintDraft, opts: { canApprove: boolean } = { canApprove: true }): OutboundButton[][] {
+  const rows: OutboundButton[][] = [];
+  if (opts.canApprove) rows.push([{ text: "✅ Approve and file", data: encodeCallback("approve", d.id, d.draftVersion) }]);
+  rows.push([
+    { text: "✏️ Edit details", data: encodeCallback("edit", d.id, d.draftVersion) },
+    { text: "❌ Cancel", data: encodeCallback("cancel", d.id, d.draftVersion) },
+  ]);
+  return rows;
+}
+
+export function duplicateButtons(d: ComplaintDraft, reviewUrl: string): OutboundButton[][] {
+  const review: OutboundButton = isButtonSafeUrl(reviewUrl)
+    ? { text: "🔎 Review existing request", url: reviewUrl }
+    : { text: "🔎 Review existing request", data: encodeCallback("dup_review", d.id, d.draftVersion) };
+  return [[review], [{ text: "➡️ Continue with new report", data: encodeCallback("dup_continue", d.id, d.draftVersion) }]];
+}
+
+export function trackingButtons(d: ComplaintDraft, receiptUrl: string | null): OutboundButton[][] {
+  const view: OutboundButton = isButtonSafeUrl(receiptUrl)
+    ? { text: "🧾 View official request", url: receiptUrl }
+    : { text: "🧾 View official request", data: encodeCallback("view_official", d.id, d.draftVersion) };
+  return [[{ text: "🔄 Check status", data: encodeCallback("status", d.id, d.draftVersion) }, view]];
+}
+
+export function linkButton(text: string, url: string): OutboundButton[][] {
+  return isButtonSafeUrl(url) ? [[{ text, url }]] : [];
+}
+
+export function toInlineKeyboard(rows: OutboundButton[][]): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  rows.forEach((row, i) => {
+    for (const b of row) {
+      if (b.url) kb.url(b.text, b.url);
+      else kb.text(b.text, b.data ?? "noop");
+    }
+    if (i < rows.length - 1) kb.row();
+  });
+  return kb;
+}
+
+export function locationKeyboard(): Keyboard {
+  return new Keyboard().requestLocation("📍 Share location").resized().oneTime();
+}
