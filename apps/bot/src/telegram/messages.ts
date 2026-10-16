@@ -2,7 +2,7 @@
  * All user-facing copy (design doc §6). Messages use Telegram HTML parse mode;
  * every interpolated user/LLM/public-data string goes through esc().
  */
-import type { ComplaintDraft, DuplicateCandidate, FilingOutcome, OfficialRequest } from "../core/contracts.js";
+import type { CatalogEntry, ComplaintDraft, DuplicateCandidate, FilingOutcome, OfficialRequest } from "../core/contracts.js";
 import { NYC311_CHECK_STATUS_URL, NYC311_REPORT_URL, emergencyText, getCategory, helpText, manualGuidance } from "../core/knowledge.js";
 
 export function esc(s: string | null | undefined): string {
@@ -16,7 +16,42 @@ export function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
+const CHANNEL_LABEL: Record<CatalogEntry["channel"], string> = {
+  "nyc311-sr-form": "NYC311 online form",
+  "agency-form": "the agency's own online form",
+  "external-site": "an outside organization's site",
+  "phone-only": "phone only",
+  "info-only": "information only",
+};
+
+/** "What you'll need": learned fields once #11 lands, else what each channel generally asks. */
+export function whatYoullNeed(e: CatalogEntry): string | null {
+  if (e.requiredFields?.length) return e.requiredFields.join(", ");
+  switch (e.channel) {
+    case "nyc311-sr-form":
+      return "the address or nearest intersection, when you saw it, and a short description. Contact details are optional for most NYC311 reports.";
+    case "agency-form":
+    case "external-site":
+      return "a short description of what happened, when and where; the form may ask for your contact details.";
+    default:
+      return null;
+  }
+}
+
 export const M = {
+  /** Router (#8): where this goes and how to file it, sent instead of generic NYC311 guidance. */
+  routeCard: (e: CatalogEntry) => {
+    const lines = [`This goes to <b>${esc(e.title)}</b>${e.agency ? ` (${esc(e.agency)})` : ""} — ${CHANNEL_LABEL[e.channel]}.`, "", esc(e.summary)];
+    const need = whatYoullNeed(e);
+    if (need) lines.push("", `<b>What you'll need:</b> ${esc(need)}`);
+    if (e.channel === "phone-only") lines.push("", "There's no online form for this one: call <b>311</b> (212-NEW-YORK from outside NYC).");
+    else if (e.channel === "info-only") lines.push("", "There's nothing to file for this one; the NYC311 page below has the official guidance.");
+    else if (e.hasCaptcha) lines.push("", "I can't file this one for you (the form has a CAPTCHA), but the button below opens the official form.");
+    else if (e.officialUrl === e.articleUrl) lines.push("", "I can't file this one for you yet. The button below opens the NYC311 page; tap its report button there to start the form.");
+    else lines.push("", "I can't file this one for you yet, but the button below opens the official form directly.");
+    return lines.join("\n");
+  },
+  routeChoice: () => "Which of these is it? Pick one and I'll give you the exact official link.",
   start: () =>
     [
       "Hey, I'm 311Relay 👋",

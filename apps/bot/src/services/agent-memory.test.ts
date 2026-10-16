@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Embedder, FilingAttempt, Store } from "../core/contracts.js";
-import { nowIso } from "../core/contracts.js";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { ComplaintDraft, Embedder, FilingAttempt, Store } from "../core/contracts.js";
+import { EMPTY_LOCATION, EMPTY_TRANSIT, nowIso } from "../core/contracts.js";
 import { createHashEmbedder } from "../integrations/embedder.js";
 import { createMemoryStore } from "../integrations/memory-store.js";
 import { createSurrealStore, type SurrealStore } from "../integrations/surrealdb.js";
-import { KEYWORD_RELEVANCE_SCALE, MEMORY_WEIGHTS, createAgentMemory, keywordOverlap, recencyDecay, scrubPii, tokenize } from "./agent-memory.js";
+import { KEYWORD_RELEVANCE_SCALE, MEMORY_WEIGHTS, createAgentMemory, hasPii, keywordOverlap, recencyDecay, scrubPii, tokenize } from "./agent-memory.js";
 
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
 const daysAgo = (d: number) => new Date(NOW - d * 24 * 3600_000).toISOString();
@@ -37,7 +37,40 @@ function attempt(id: string, complaintId: string): FilingAttempt {
   };
 }
 
-type Ctx = { store: Store; extraRelationCheck?: (memoryId: string, attemptId: string) => Promise<boolean> };
+function complaint(id: string, chatId: string, over: Partial<ComplaintDraft> = {}): ComplaintDraft {
+  const t = nowIso();
+  return {
+    id,
+    telegramChatId: chatId,
+    residentId: `res_${chatId}`,
+    status: "FILING",
+    category: "subway-delay",
+    triage: "SUPPORTED",
+    description: "A train delayed",
+    userMessages: [],
+    location: { ...EMPTY_LOCATION },
+    media: [],
+    classification: null,
+    transit: { ...EMPTY_TRANSIT, line: "A" },
+    missingFields: [],
+    needsEmergencyReferral: false,
+    confidence: 0.9,
+    duplicates: [],
+    duplicateReviewed: true,
+    draftVersion: 1,
+    approvedVersion: 1,
+    approvedAt: t,
+    activeAttemptId: null,
+    officialRequestNumber: null,
+    statusReason: null,
+    traceId: null,
+    createdAt: t,
+    updatedAt: t,
+    ...over,
+  };
+}
+
+type Ctx ={ store: Store; extraRelationCheck?: (memoryId: string, attemptId: string) => Promise<boolean> };
 
 function suite(name: string, make: () => Promise<Ctx & { close?: () => Promise<void> }>, embedder: Embedder | null = null) {
   describe(`agent memory (${name})`, () => {
@@ -117,18 +150,56 @@ function suite(name: string, make: () => Promise<Ctx & { close?: () => Promise<v
       expect(got[0]!.text).toBe("second version, reach me at [email] or [phone]");
     });
 
-    it("reflect writes an episodic lesson about the filing attempt (memory->about->filing_attempt)", async () => {
+    it("reflect writes a shared, category-scoped procedural lesson about the filing attempt (memory->about->filing_attempt)", async () => {
+      await ctx.store.createComplaint(complaint("cmp_reflect", "rider-reflect"));
       await ctx.store.createAttempt(attempt("att_reflect", "cmp_reflect"));
       const m = mem();
       await m.reflect("att_reflect", "The MTA form asked for the car number; ask before approval next time.", { field: "car_number" });
       await m.flush();
       const rows = await ctx.store.listMemory!({ about: { table: "filing_attempt", id: "att_reflect" } });
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ kind: "episodic", source: "attempt:att_reflect", category: "subway-delay", data: { field: "car_number", reflection: true, errorCode: "UNEXPECTED_REQUIRED_FIELD" } });
+      expect(rows[0]).toMatchObject({ kind: "procedural", chatId: null, source: "attempt:att_reflect", category: "subway-delay", data: { field: "car_number", reflection: true, errorCode: "UNEXPECTED_REQUIRED_FIELD" } });
       expect(rows[0]!.about).toContainEqual({ table: "filing_attempt", id: "att_reflect" });
       const recalled = await m.recall({ text: "car number", about: { table: "filing_attempt", id: "att_reflect" } });
       expect(recalled[0]?.source).toBe("attempt:att_reflect");
       if (ctx.extraRelationCheck) expect(await ctx.extraRelationCheck(rows[0]!.id, "att_reflect")).toBe(true);
+      // shared form knowledge: another resident's scoped recall sees it
+      const other = await m.recall({ text: "car number", scope: { chatId: "someone-else", category: "subway-delay" } });
+      expect(other.map((r) => r.source)).toContain("attempt:att_reflect");
+    });
+
+    it("reflect drops the lesson (with a warning) when the attempt can't be resolved: never an unscoped row", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const m = mem();
+        await m.reflect("att_missing", "The form asked for the car number.");
+        await m.flush();
+        expect(await ctx.store.listMemory!({ about: { table: "filing_attempt", id: "att_missing" } })).toEqual([]);
+        expect(warn.mock.calls.flat().join(" ")).toMatch(/reflect\(att_missing\).*dropped/);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("reflect refuses lessons with PII or the resident's own fields", async () => {
+      await ctx.store.createComplaint(complaint("cmp_reflect_pii", "rider-pii", { userMessages: ["the A train sat at Jay St for 40 minutes"], location: { ...EMPTY_LOCATION, rawInput: "Jay St-MetroTech" } }));
+      await ctx.store.createAttempt(attempt("att_reflect_pii", "cmp_reflect_pii"));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const m = mem();
+        for (const lesson of [
+          "Call the rider back at 212-555-0100 next time.",
+          "Email jane@example.com when the form changes.",
+          "Rider said: the A train sat at Jay St for 40 minutes.",
+          "Stations like Jay St-MetroTech need the platform.",
+        ]) await m.reflect("att_reflect_pii", lesson);
+        await m.reflect("att_reflect_pii", "Ask for the car number.", { contact: "jane@example.com" });
+        await m.flush();
+        expect(await ctx.store.listMemory!({ about: { table: "filing_attempt", id: "att_reflect_pii" } })).toEqual([]);
+        expect(warn).toHaveBeenCalledTimes(5);
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 }
@@ -200,5 +271,19 @@ describe("agent memory: pure helpers", () => {
   });
   it("scrubPii removes emails and phone numbers", () => {
     expect(scrubPii("mail a.b@c.io, call (718) 555-0199")).toBe("mail [email], call [phone]");
+    expect(scrubPii("Jane.Doe+311@Example.co.uk")).toBe("[email]");
+  });
+  it("scrubPii removes phone numbers without separators (10/11 digits, +1) (#24)", () => {
+    expect(scrubPii("call 2125550100")).toBe("call [phone]");
+    expect(scrubPii("call 12125550100 now")).toBe("call [phone] now");
+    expect(scrubPii("call +12125550100.")).toBe("call [phone].");
+    expect(scrubPii("+1 212 555 0100 or 212.555.0100")).toBe("[phone] or [phone]");
+    expect(hasPii("text me at 2125550100")).toBe(true);
+  });
+  it("scrubPii keeps case numbers and other digit runs that aren't phone numbers", () => {
+    for (const s of ["SR 31112345678 filed", "case 12345678", "request 311-12345678", "ref 20261016", "car 8123 at 14 St", "id 123456789012", "zip 10001"]) {
+      expect(scrubPii(s)).toBe(s);
+      expect(hasPii(s)).toBe(false);
+    }
   });
 });

@@ -229,13 +229,14 @@ async function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<
     return await Promise.race([
       p,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
+        timer = setTimeout(() => reject(Object.assign(new Error(`${what} timed out after ${ms} ms`), { name: "TimeoutError" })), ms);
       }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
   }
 }
+const isTimeout = (err: unknown) => err instanceof Error && err.name === "TimeoutError";
 
 /** Builds a multi-statement query with uniquely-named bindings. */
 class Batch {
@@ -302,25 +303,30 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       "define namespace",
     );
     await instance.use({ namespace, database });
-    await instance.query(schemaSql()).collect();
+    // #24: schema + vector-index setup share one connect budget, so a hung DEFINE never blocks boot past it.
+    const setupDeadline = Date.now() + connectTimeoutMs;
+    const left = () => Math.max(1, setupDeadline - Date.now());
+    const why = (err: unknown) =>
+      isTimeout(err) ? `index setup exceeded the ${connectTimeoutMs} ms connect budget (${(err as Error).message})` : (err as Error).message;
+    await withTimeout(instance.query(schemaSql()).collect(), left(), "define schema");
     try {
-      await withTimeout(instance.query(HNSW_SQL).collect(), connectTimeoutMs, "define hnsw");
+      await withTimeout(instance.query(HNSW_SQL).collect(), left(), "define hnsw");
       hnsw = true;
     } catch (err) {
       hnsw = false;
-      console.warn(`[surrealdb] HNSW index unavailable (exact cosine recall still works): ${(err as Error).message}`);
+      console.warn(`[surrealdb] HNSW index unavailable (exact cosine recall still works): ${why(err)}`);
     }
     knn = false;
     if (hnsw) {
       try {
         const probe = new Array<number>(HNSW_DIM).fill(0);
         probe[0] = 1;
-        await withTimeout(instance.query(`SELECT id FROM memory WHERE embedding_${HNSW_DIM} <|1,8|> $q LIMIT 1`, { q: probe }).collect(), connectTimeoutMs, "knn probe");
+        await withTimeout(instance.query(`SELECT id FROM memory WHERE embedding_${HNSW_DIM} <|1,8|> $q LIMIT 1`, { q: probe }).collect(), left(), "knn probe");
         // rows written before #22 have no annIndexed flag yet
-        await withTimeout(instance.query(`UPDATE memory SET annIndexed = type::is_array(embedding_${HNSW_DIM}) WHERE annIndexed = NONE RETURN NONE`).collect(), connectTimeoutMs, "annIndexed backfill");
+        await withTimeout(instance.query(`UPDATE memory SET annIndexed = type::is_array(embedding_${HNSW_DIM}) WHERE annIndexed = NONE RETURN NONE`).collect(), left(), "annIndexed backfill");
         knn = true;
       } catch (err) {
-        console.warn(`[surrealdb] KNN recall unavailable (exact cosine scan instead): ${(err as Error).message}`);
+        console.warn(`[surrealdb] KNN recall unavailable (exact cosine scan instead): ${why(err)}`);
       }
     }
     db = instance;

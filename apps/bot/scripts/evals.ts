@@ -14,6 +14,7 @@
  *   pnpm --filter @311relay/bot evals -- --skip-filing   # don't press "Approve" on approve-flow scenarios
  *   pnpm --filter @311relay/bot evals -- --api http://localhost:3399
  *   pnpm --filter @311relay/bot evals -- --only subway-delay-a-train --with-dry-run subway-delay-a-train
+ *   pnpm --filter @311relay/bot evals -- --routing       # #8 router: fixtures/routing-evals.json, top-1 / top-3 / latency
  *
  * Requires the bot API running (`pnpm --filter @311relay/bot dev`, or for a local copy next to the live bot:
  * `TELEGRAM_BOT_TOKEN= PORT_API=3399 pnpm --filter @311relay/bot start` + `--api http://localhost:3399`).
@@ -285,6 +286,82 @@ async function annotate(r: Result): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// Router evals (#8): each phrasing in fixtures/routing-evals.json goes through POST /api/event (fresh chat);
+// complaint.classification.route is scored top-1 (catalogId ∈ {expected} ∪ accept), top-3 ([catalogId,
+// ...alternatives] contains one) and latency (≤ 4 s). Targets: ≥ 90 % top-1 on `clear` cases, 100 % top-3.
+// ---------------------------------------------------------------------------
+type RoutingCase = { id: string; text: string; expected: string; accept: string[]; clear: boolean };
+type RoutingResult = RoutingCase & { got: string | null; choices: string[]; top1: boolean; top3: boolean; ms: number; traceId: string | null; chatId: string; error?: string };
+
+async function runRoutingSuite(): Promise<never> {
+  const { cases } = JSON.parse(readFileSync(resolve(REPO_ROOT, "fixtures/routing-evals.json"), "utf8")) as { cases: RoutingCase[] };
+  const selected = ONLY ? cases.filter((c) => ONLY.includes(c.id)) : cases;
+  const run = Date.now().toString(36);
+  console.log(`311Relay routing evals · ${selected.length} phrasings · API ${API} · Phoenix ${OFFLINE ? "offline" : (phoenixBaseUrl() ?? "disabled")}`);
+  try {
+    await http("/api/health");
+  } catch (err) {
+    if (err instanceof ApiDown) {
+      console.error(`\n✗ Bot API not reachable at ${API}. Start it first:  pnpm --filter @311relay/bot dev\n`);
+      process.exit(2);
+    }
+    throw err;
+  }
+  const results: RoutingResult[] = [];
+  for (const c of selected) {
+    const chatId = `eval-route-${run}-${c.id}`;
+    const t0 = Date.now();
+    try {
+      await send(chatId, { kind: "text", text: c.text } as EventBody);
+      const ms = Date.now() - t0;
+      const { complaints } = await http<{ complaints: ComplaintDraft[] }>(`/api/complaints?chatId=${encodeURIComponent(chatId)}&limit=1`);
+      const route = complaints[0]?.classification?.route ?? null;
+      const choices = [route?.catalogId, ...(route?.alternatives ?? [])].filter((x): x is string => !!x).slice(0, 3);
+      const ok = (id: string | null | undefined) => !!id && (id === c.expected || c.accept.includes(id));
+      results.push({ ...c, got: route?.catalogId ?? null, choices, top1: ok(route?.catalogId), top3: choices.some(ok), ms, traceId: complaints[0]?.traceId ?? null, chatId });
+    } catch (err) {
+      results.push({ ...c, got: null, choices: [], top1: false, top3: false, ms: Date.now() - t0, traceId: null, chatId, error: (err as Error).message });
+    }
+    const r = results.at(-1)!;
+    console.log(`  ${r.top1 ? "✓" : r.top3 ? "~" : "✗"} ${(r.ms / 1000).toFixed(1).padStart(5)}s  ${r.id.padEnd(46)} → ${r.got ?? "null"}${r.top1 ? "" : `  (choices: ${r.choices.join(", ") || "none"})`}${r.error ? `  ERROR ${r.error}` : ""}`);
+  }
+
+  const clear = results.filter((r) => r.clear);
+  const pct = (n: number, d: number) => (d ? (100 * n) / d : 0);
+  const top1Clear = pct(clear.filter((r) => r.top1).length, clear.length);
+  const top1All = pct(results.filter((r) => r.top1).length, results.length);
+  const top3All = pct(results.filter((r) => r.top3).length, results.length);
+  const sorted = results.map((r) => r.ms).sort((a, b) => a - b);
+  const p50 = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  const summary = { run, cases: results.length, clear: clear.length, top1Clear: +top1Clear.toFixed(1), top1All: +top1All.toFixed(1), top3All: +top3All.toFixed(1), p50Ms: p50, targetsMet: top1Clear >= 90 && top3All === 100 && p50 <= 4000 };
+  console.log(`\ntop-1 (clear): ${summary.top1Clear}% · top-1 (all): ${summary.top1All}% · top-3: ${summary.top3All}% · p50 ${(p50 / 1000).toFixed(1)} s · targets ${summary.targetsMet ? "met" : "NOT met"} (≥90% / 100% / ≤4 s)`);
+
+  if (!OFFLINE) {
+    let n = 0;
+    for (const r of results) {
+      const meta = { scenario: r.id, suite: "311relay-routing", expected: r.expected };
+      const anns = [
+        { name: "routing_top1", label: r.top1 ? "correct" : "incorrect", score: r.top1 ? 1 : 0, explanation: `expected ${r.expected}, got ${r.got ?? "null"}` },
+        { name: "routing_top3", label: r.top3 ? "in_top3" : "missed", score: r.top3 ? 1 : 0, explanation: `choices: ${r.choices.join(", ") || "none"}` },
+        { name: "routing_latency", label: r.ms <= 4000 ? "within_budget" : "slow", score: r.ms <= 4000 ? 1 : 0, explanation: `${r.ms} ms (budget 4000 ms)` },
+      ];
+      for (const a of anns) {
+        const ann = { ...a, metadata: meta };
+        if (r.traceId && (await logPhoenixAnnotation({ traceId: r.traceId }, ann, { retries: 8, retryDelayMs: 1500 }))) n++;
+        if (await logPhoenixAnnotation({ sessionId: r.chatId }, ann, { retries: 2, retryDelayMs: 1000 })) n++;
+      }
+    }
+    console.log(`phoenix: ${n} annotations`);
+  }
+  const out = resolve(RUNS_DIR, `routing-evals-${run}.json`);
+  mkdirSync(RUNS_DIR, { recursive: true });
+  writeFileSync(out, `${JSON.stringify({ summary, results }, null, 2)}\n`);
+  console.log(`results → ${out}`);
+  process.exit(summary.targetsMet ? 0 : 1);
+}
+
+if (flag("routing")) await runRoutingSuite();
+
 const scenarios = loadScenarios();
 if (DRY_RUN) {
   const target = scenarios.find((s) => s.id === DRY_RUN);

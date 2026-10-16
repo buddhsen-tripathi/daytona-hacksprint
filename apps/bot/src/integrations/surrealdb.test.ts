@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { Surreal } from "surrealdb";
 import type { ComplaintDraft, DuplicateCandidate, FilingAttempt } from "../core/contracts.js";
 import { CATEGORIES, EMPTY_LOCATION, nowIso } from "../core/contracts.js";
 import { StoreError, createSurrealStore, type SurrealStore } from "./surrealdb.js";
@@ -189,4 +190,52 @@ describe("SurrealStore (embedded mem://)", () => {
     const [cats] = await store.query<[unknown[]]>("SELECT * FROM complaint_category");
     expect(cats.length).toBe(Object.keys(CATEGORIES).length);
   });
+});
+
+describe("SurrealStore init: schema + vector-index setup inside the connect budget (#24)", () => {
+  /** Every query whose SQL matches `hang` never answers. Patched by hand: vi.spyOn awaits the returned (thenable) Query, which would run every query twice. */
+  async function withHungQuery(hang: RegExp, fn: () => Promise<void>) {
+    const proto = Surreal.prototype as { query: Surreal["query"] };
+    const original = proto.query;
+    proto.query = function (this: Surreal, ...args: Parameters<Surreal["query"]>) {
+      if (typeof args[0] === "string" && hang.test(args[0])) return { collect: () => new Promise(() => {}) } as unknown as ReturnType<Surreal["query"]>;
+      return original.apply(this, args);
+    } as Surreal["query"];
+    try {
+      await fn();
+    } finally {
+      delete (proto as { query?: unknown }).query; // inherited from SurrealQueryable
+      if (proto.query !== original) proto.query = original;
+    }
+  }
+
+  it("a hung HNSW DEFINE times out within the budget, warns clearly, and the store still works (exact cosine)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = createSurrealStore({ url: "mem://", isolated: true, connectTimeoutMs: 1500 });
+    try {
+      await withHungQuery(/ HNSW /, async () => {
+        const t0 = Date.now();
+        await store.init();
+        expect(Date.now() - t0).toBeLessThan(5000);
+      });
+      expect(store.vectorIndex).toBe(false);
+      expect(store.knnRecall).toBe(false);
+      expect(warn.mock.calls.flat().join(" ")).toMatch(/HNSW index unavailable.*exceeded the 1500 ms connect budget.*define hnsw timed out/);
+      await store.createComplaint(draft({ id: "cmp_hnsw_hang" }));
+      expect((await store.getComplaint("cmp_hnsw_hang"))?.id).toBe("cmp_hnsw_hang");
+    } finally {
+      warn.mockRestore();
+      await store.close();
+    }
+  }, 15_000);
+
+  it("a hung schema DEFINE fails init within the budget (callers fall back to the in-memory store)", async () => {
+    const store = createSurrealStore({ url: "mem://", isolated: true, connectTimeoutMs: 1000 });
+    await withHungQuery(/DEFINE TABLE IF NOT EXISTS resident /, async () => {
+      const t0 = Date.now();
+      await expect(store.init()).rejects.toThrow(/define schema timed out after/);
+      expect(Date.now() - t0).toBeLessThan(5000);
+    });
+    await store.close().catch(() => {});
+  }, 15_000);
 });

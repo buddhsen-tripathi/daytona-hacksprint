@@ -230,6 +230,20 @@ export const EMPTY_TRANSIT: TransitDetails = { line: null, direction: null, stat
 // ---------------------------------------------------------------------------
 // Classification (LLM output, Zod-validated; backend re-validates category)
 // ---------------------------------------------------------------------------
+/** Stage 2 of the router: the LLM's pick among retrieved catalog candidates. The catalog is the allowlist. */
+export const CatalogRoute = z.object({
+  /** A CatalogEntry id, or null when no candidate fits (EMERGENCY / UNCLEAR / nothing matches). */
+  catalogId: z.string().nullable(),
+  /** 0..1 for catalogId; < ROUTE_CONFIDENCE_THRESHOLD ⇒ ask "Which of these is it?" with the top 3. */
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  /** Up to 3 other candidate ids, best first. */
+  alternatives: z.array(z.string()),
+});
+export type CatalogRoute = z.infer<typeof CatalogRoute>;
+
+export const ROUTE_CONFIDENCE_THRESHOLD = 0.6;
+
 export const ClassificationResult = z.object({
   triage: TriageOutcome,
   /** Required when triage === SUPPORTED. */
@@ -248,8 +262,11 @@ export const ClassificationResult = z.object({
   clarifyingQuestion: z.string().nullable(),
   /** Transit details extracted from the text for subway categories; null when not applicable or not mentioned. Never invented. */
   transit: TransitDetails.nullable().optional(),
+  /** Two-stage router (#8): the NYC311 catalog entry this report belongs to. Optional for older rows / fallbacks. */
+  route: CatalogRoute.nullable().optional(),
 });
 export type ClassificationResult = z.infer<typeof ClassificationResult>;
+
 
 export const CLASSIFY_CONFIDENCE_THRESHOLD = 0.6;
 
@@ -625,6 +642,7 @@ export const CallbackAction = z.enum([
   "set_direction", // subway: data `set_direction:<id>:<version>:d=0|1` (MTA form direction option index)
   "set_time", // subway: data `set_time:<id>:<version>:now|later`
   "answer_q", // live worker question: data `answer_q:<id>:<version>:<questionId>:<optionIndex>`
+  "route_pick", // router (#8) "Which of these is it?": data `route_pick:<id>:<version>:<i>` (index into route choices; ids can exceed Telegram's 64-byte limit)
 ]);
 export type CallbackAction = z.infer<typeof CallbackAction>;
 
@@ -731,9 +749,9 @@ export type IssueLinks = {
 // labels); never contact fields or a resident's free-typed answer.
 // ---------------------------------------------------------------------------
 export const MemoryKind = z.enum([
-  "episodic", // what happened: drafts ready for approval, filing outcomes, live questions + answers, reflections
+  "episodic", // what happened: drafts ready for approval, filing outcomes, live questions + answers
   "semantic", // facts about the world: categories, agencies, required fields
-  "procedural", // how to do things: form recipes, ask-before-approval rules
+  "procedural", // how to do things: form recipes, ask-before-approval rules, reflection lessons (#24)
 ]);
 export type MemoryKind = z.infer<typeof MemoryKind>;
 
@@ -832,10 +850,16 @@ export interface AgentMemory {
   remember(item: MemoryItem): Promise<string>;
   /** Scored recall: score = 0.5·relevance + 0.3·recency + 0.2·importance, highest first, with the breakdown. */
   recall(q: MemoryRecallQuery): Promise<ScoredMemory[]>;
-  /** Reflexion-style lesson after an attempt: episodic item, source `attempt:<id>`, about→filing_attempt. */
+  /**
+   * Reflexion-style lesson after an attempt: shared, category-scoped procedural item (chatId null), source
+   * `attempt:<id>`, about→filing_attempt. Dropped with a warning if the attempt/category can't be resolved or the
+   * lesson carries PII or quotes a resident field (#24).
+   */
   reflect(attemptId: string, lesson: string, data?: Record<string, unknown>): Promise<void>;
   /** Resolves when every in-flight remember() has settled (tests / scripts). */
   flush(): Promise<void>;
+  /** Fire-and-forget: embed `text` now so a later recall() for the same text is served from cache. Never throws. */
+  warm?(text: string): void;
 }
 
 /** Text → vectors. `model` labels the vectors so different models are never compared. */
@@ -905,6 +929,10 @@ export interface Store {
   listMemoryNeedingEmbedding?(args: { model: string; limit: number }): Promise<{ id: string; text: string; embedModel: string | null }[]>;
   /** #22: replace one row's vector (re-embedding); everything else on the row is unchanged. */
   setMemoryEmbedding?(id: string, embedding: number[], embedModel: string): Promise<void>;
+  /** Post-mortem repair proposals (#13). Optional so existing stores/test doubles keep compiling. */
+  saveRepairProposal?(p: RepairProposal): Promise<RepairProposal>;
+  getRepairProposal?(id: string): Promise<RepairProposal | null>;
+  listRepairProposals?(args?: { status?: RepairProposal["status"]; limit?: number }): Promise<RepairProposal[]>;
 }
 
 export interface SandboxHandle {
@@ -997,3 +1025,43 @@ export function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: 
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
+
+// ---------------------------------------------------------------------------
+// Post-mortem self-repair (#13). Additive. A failed/ambiguous attempt is
+// diagnosed by the LLM into a RepairProposal; proposals are applied only after
+// human approval, except `requiredField` additions with confidence >= 0.9.
+
+export const RepairCause = z.enum(["missing_required_field", "selector_changed", "new_step", "confirmation_pattern", "captcha", "unknown"]);
+export type RepairCause = z.infer<typeof RepairCause>;
+
+export const RepairChange = z.object({
+  kind: z.enum(["requiredField", "recipeStep", "confirmRegex", "questionText"]),
+  /** Previous value (null when the change is an addition). */
+  before: z.string().nullable(),
+  after: z.string(),
+  /** Evidence ids (Evidence.id) backing this change. */
+  evidence: z.array(z.string()),
+});
+export type RepairChange = z.infer<typeof RepairChange>;
+
+/** Strict LLM output for the post-mortem diagnosis. */
+export const RepairDiagnosis = z.object({
+  cause: RepairCause,
+  proposedChanges: z.array(RepairChange),
+  confidence: z.number().min(0).max(1),
+});
+export type RepairDiagnosis = z.infer<typeof RepairDiagnosis>;
+
+export const RepairProposal = RepairDiagnosis.extend({
+  id: z.string(),
+  attemptId: z.string(),
+  complaintId: z.string(),
+  category: CategoryId,
+  status: z.enum(["pending", "approved", "rejected"]),
+  createdAt: z.string(),
+  decidedAt: z.string().nullable(),
+});
+export type RepairProposal = z.infer<typeof RepairProposal>;
+
+/** Auto-apply threshold for `requiredField` additions (never for anything affecting submit). */
+export const REPAIR_AUTO_APPLY_CONFIDENCE = 0.9;
