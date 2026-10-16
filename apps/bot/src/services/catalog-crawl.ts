@@ -25,8 +25,20 @@ export type RawCard = { title: string | null; text: string; links: RawLink[] };
 /**
  * `emergencyBanner`: the page shows the red "Call 911" .divTable banner (stripped from card text).
  * Absent on articles cached before #28.
+ * `extractionFailed`: the article body (.ka-content) never rendered; see isExtractionFailed().
  */
-export type RawArticle = { kaNumber: string; title: string; cards: RawCard[]; emergencyBanner?: boolean };
+export type RawArticle = { kaNumber: string; title: string; cards: RawCard[]; emergencyBanner?: boolean; extractionFailed?: boolean };
+
+/**
+ * A fetch that yielded nothing usable: flagged by the crawler, no title, or no card text/links and no
+ * "Call 911" banner (a bare emergency page is legitimately empty). Such articles are kept out of the
+ * snapshot/DB and re-fetched on the next run instead of being cached as `info-only` forever (#28).
+ */
+export function isExtractionFailed(raw: RawArticle): boolean {
+  if (raw.extractionFailed || !raw.title?.trim()) return true;
+  const hasContent = raw.cards.some((c) => c.text.trim() || c.links.length > 0);
+  return !hasContent && !raw.emergencyBanner;
+}
 /** Result of opening an official link once (GET only). */
 export type LandingProbe = { finalUrl: string; hasCaptcha: boolean; requiresLogin: boolean };
 
@@ -319,6 +331,39 @@ export function assignUniqueIds(entries: CatalogEntry[]): CatalogEntry[] {
   const seen = new Map<string, number>();
   for (const e of entries) seen.set(e.id, (seen.get(e.id) ?? 0) + 1);
   return entries.map((e) => ((seen.get(e.id) ?? 0) > 1 ? { ...e, id: `${e.id}-${e.kaNumber.toLowerCase()}` } : e));
+}
+
+/**
+ * Carry ids forward by KA number from the previous snapshot so a retitled article keeps its id (#28).
+ * A previous id wins unless another KA already claims it; a fresh slug that collides with a carried
+ * id gets the KA suffix, as in assignUniqueIds.
+ */
+export function carryForwardIds(entries: CatalogEntry[], previous: Pick<CatalogEntry, "id" | "kaNumber">[]): CatalogEntry[] {
+  const prevId = new Map<string, string>();
+  const claimed = new Map<string, number>();
+  for (const p of previous) {
+    if (prevId.has(p.kaNumber)) continue;
+    prevId.set(p.kaNumber, p.id);
+    claimed.set(p.id, (claimed.get(p.id) ?? 0) + 1);
+  }
+  const kas = new Set(entries.map((e) => e.kaNumber));
+  const taken = new Set<string>();
+  const carried = entries.map((e) => {
+    const id = prevId.get(e.kaNumber);
+    if (id && claimed.get(id) === 1 && !taken.has(id)) {
+      taken.add(id);
+      return { ...e, id };
+    }
+    return null;
+  });
+  // Ids held by a previous KA that is still crawled stay reserved for it.
+  for (const [ka, id] of prevId) if (kas.has(ka)) taken.add(id);
+  return entries.map((e, i) => {
+    if (carried[i]) return carried[i]!;
+    const id = taken.has(e.id) ? `${e.id}-${e.kaNumber.toLowerCase()}` : e.id;
+    taken.add(id);
+    return { ...e, id };
+  });
 }
 
 /**
