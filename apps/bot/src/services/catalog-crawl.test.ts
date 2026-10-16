@@ -12,6 +12,7 @@ import {
   filingScore,
   isEmergencyArticle,
   isGenericNav,
+  mergeCatalog,
   parseServiceRequestCall,
   type RawArticle,
   serviceRequestUrl,
@@ -112,7 +113,8 @@ describe("buildCatalogEntry", () => {
     expect(e.officialUrl).toBe(`https://portal.311.nyc.gov/servicerequest-create/?caid=${CAID}&kasid=${KASID}`);
     expect(e.agency).toBe("NYPD");
     expect(e.automation).toBe("handoff");
-    expect(e.hasCaptcha).toBe(false);
+    // Page 1 of an SR form shows no CAPTCHA; a later step might → unknown (#28).
+    expect(e.hasCaptcha).toBeNull();
     expect(e.requiresLogin).toBe(true);
   });
 
@@ -168,6 +170,17 @@ describe("fileableCatalogEntries", () => {
     expect(e.automation).toBe("adapter:mta-subway-delay");
     expect(e.requiredFields).toEqual(["transit", "description"]);
     expect(e.lastVerifiedAt).toBe(NOW);
+  });
+});
+
+describe("mergeCatalog (#28)", () => {
+  it("dedupes by KA number, keeping the fileable row", () => {
+    const fileable = fileableCatalogEntries(NOW);
+    const ka = fileable[0].kaNumber;
+    const base = buildCatalogEntry(srArticle("NYPD"), { topic: null, summary: null, probe: null, now: NOW });
+    const merged = mergeCatalog(fileable, [{ ...base, id: "buses-and-subways", kaNumber: ka }, base]);
+    expect(merged.filter((e) => e.kaNumber === ka).map((e) => e.id)).toEqual([fileable[0].id]);
+    expect(merged.map((e) => e.id)).toContain("noise-from-bar-club-or-restaurant");
   });
 });
 

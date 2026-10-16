@@ -26,6 +26,7 @@ import {
   assignUniqueIds,
   buildCatalogEntry,
   fileableCatalogEntries,
+  mergeCatalog,
   PORTAL,
   probeTarget,
   type LandingProbe,
@@ -248,8 +249,7 @@ try {
     }),
   );
   const fileable = fileableCatalogEntries(now);
-  const taken = new Set(fileable.map((e) => e.id));
-  const entries: CatalogEntry[] = [...fileable, ...crawled.filter((e) => !taken.has(e.id))].sort((a, b) => a.id.localeCompare(b.id));
+  const entries: CatalogEntry[] = mergeCatalog(fileable, crawled);
 
   writeCache("catalog.draft.json", entries);
   if (LIMIT === Infinity) {

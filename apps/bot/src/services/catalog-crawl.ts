@@ -280,7 +280,9 @@ export function buildCatalogEntry(raw: RawArticle, ctx: BuildContext): CatalogEn
     channel,
     officialUrl,
     requiresLogin: probed ? probed.requiresLogin : null,
-    hasCaptcha: probed ? probed.hasCaptcha : null,
+    // The probe only loads page 1 of an NYC311 SR form; a CAPTCHA (if any) would sit on a later step, so
+    // "none on page 1" proves nothing. Keep only a positive finding until the full flow is probed.
+    hasCaptcha: probed ? (channel === "nyc311-sr-form" && !probed.hasCaptcha ? null : probed.hasCaptcha) : null,
     requiredFields: null,
     automation: emergency || channel === "phone-only" || channel === "info-only" ? "none" : "handoff",
     lastVerifiedAt: ctx.now,
@@ -295,6 +297,18 @@ export function firstSentences(text: string, max = 240): string {
   const cut = t.slice(0, max);
   const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
   return end > 60 ? cut.slice(0, end + 1) : `${cut.trimEnd()}…`;
+}
+
+/** Fileable rows first; a crawled row whose id or KA number is already taken is dropped (KA-01014). Sorted by id. */
+export function mergeCatalog(fileable: CatalogEntry[], crawled: CatalogEntry[]): CatalogEntry[] {
+  const ids = new Set(fileable.map((e) => e.id));
+  const kas = new Set(fileable.map((e) => e.kaNumber));
+  const rest = crawled.filter((e) => {
+    if (ids.has(e.id) || kas.has(e.kaNumber)) return false;
+    kas.add(e.kaNumber);
+    return true;
+  });
+  return [...fileable, ...rest].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** Slugs must be unique: on a clash append the KA number ("noise-ka-01234"). */
