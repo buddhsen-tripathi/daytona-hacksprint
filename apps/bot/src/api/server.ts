@@ -295,11 +295,11 @@ async function sameIssueOf(store: Store, complaintId: string): Promise<{ origina
   }
 }
 
-/** A proposal plus the evidence rows it cites (ids, type, step, summary, /api/evidence/... reference). */
+/** A proposal plus the evidence rows it cites (same shape as GET /api/complaints/:id evidence) and the attempt outcome. */
 async function withRepairEvidence(store: Store, p: RepairProposal) {
   const cited = new Set(p.proposedChanges.flatMap((c) => c.evidence));
   const attempt = await store.getAttempt(p.attemptId).catch(() => null);
-  const evidence = (attempt?.evidence ?? []).filter((e) => cited.has(e.id)).map((e) => ({ id: e.id, type: e.type, step: e.step, summary: e.summary, storageReference: e.storageReference, mime: e.mime }));
+  const evidence = (attempt?.evidence ?? []).filter((e) => cited.has(e.id));
   return { ...p, evidence, traceId: attempt?.traceId ?? null, outcome: attempt?.outcome ?? null, errorCode: attempt?.errorCode ?? null };
 }
 

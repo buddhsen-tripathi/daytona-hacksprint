@@ -1,112 +1,225 @@
 "use client";
 
 import Link from "next/link";
-import { withMock } from "@/lib/api";
+import { useState } from "react";
+import { asList, usePoll, withMock } from "@/lib/api";
 import { fmtAgo } from "@/lib/format";
-import { Card, Empty, Label, Mono, Section } from "./ui";
+import type { Evidence, RepairProposal } from "@/lib/types";
+import { EvidenceGallery } from "./lightbox";
+import { ApiDownBanner, Card, Empty, Label, Mono, Section } from "./ui";
 
-/** Post-mortem repair proposal (#13). Placeholder shape until the bot exposes /api/repairs. */
-type RepairProposal = {
-  id: string;
-  categoryId: string;
-  attemptId: string;
-  complaintId: string;
-  failure: string;
-  diagnosis: string;
-  change: string;
-  screenshots: { caption: string }[];
-  createdAt: string;
-};
+/** GET /api/repairs row (#13): the proposal plus the evidence it cites and the attempt's outcome. */
+type RepairRow = RepairProposal & { evidence: Evidence[]; traceId: string | null; outcome: string | null; errorCode: string | null };
 
-const MOCK_REPAIRS: RepairProposal[] = [
+const shot = (id: string, attemptId: string, complaintId: string, summary: string): Evidence => ({
+  id,
+  attemptId,
+  complaintId,
+  type: "screenshot",
+  step: "validate",
+  summary,
+  storageReference: "",
+  mime: "image/png",
+  createdAt: "2026-10-16T08:10:00Z",
+});
+
+const MOCK_REPAIRS: RepairRow[] = [
   {
     id: "rep_7a1",
-    categoryId: "mta-bus-complaint",
+    category: "subway-delay",
     attemptId: "att_ho91",
     complaintId: "mock-needs",
-    failure: "NEW_REQUIRED_FIELD",
-    diagnosis: "The MTA form now requires a bus direction before the description step.",
-    change: "Add `direction` to requiredFields and ask the rider for it before approval.",
-    screenshots: [{ caption: "form step 2: direction (required)" }, { caption: "validation error after submit" }],
+    cause: "missing_required_field",
+    confidence: 0.82,
+    proposedChanges: [{ kind: "requiredField", before: null, after: "Cross Street 2", evidence: ["ev_m1"] }],
+    status: "pending",
     createdAt: "2026-10-16T08:10:00Z",
+    decidedAt: null,
+    evidence: [shot("ev_m1", "att_ho91", "mock-needs", "Validation error: 'Cross Street 2 is required'")],
+    traceId: null,
+    outcome: "HUMAN_ACTION_REQUIRED",
+    errorCode: "UNEXPECTED_REQUIRED_FIELD",
   },
   {
     id: "rep_7a2",
-    categoryId: "noise-from-neighbor",
+    category: "subway-delay",
     attemptId: "att_n0i5",
     complaintId: "mock-handoff",
-    failure: "CAPTCHA",
-    diagnosis: "portal.311.nyc.gov presented a CAPTCHA on the review step.",
-    change: "Set hasCaptcha=true and keep automation at handoff.",
-    screenshots: [{ caption: "CAPTCHA on review step" }],
+    cause: "confirmation_pattern",
+    confidence: 0.6,
+    proposedChanges: [{ kind: "confirmRegex", before: "Service Request #", after: "SR Number", evidence: ["ev_m2"] }],
+    status: "pending",
     createdAt: "2026-10-16T07:42:00Z",
+    decidedAt: null,
+    evidence: [shot("ev_m2", "att_n0i5", "mock-handoff", "Confirmation page without a recognised SR number")],
+    traceId: null,
+    outcome: "SUBMISSION_UNKNOWN",
+    errorCode: "NO_CONFIRMATION",
   },
 ];
 
+const KIND_NOTE: Record<RepairProposal["proposedChanges"][number]["kind"], string> = {
+  requiredField: "approve ⇒ added to the category's required fields (asked up front next time)",
+  recipeStep: "proposal only: recipe steps are not applied automatically",
+  confirmRegex: "proposal only: affects submit verification, never applied automatically",
+  questionText: "proposal only",
+};
+
+function ChangeLine({ c }: { c: RepairProposal["proposedChanges"][number] }) {
+  return (
+    <li className="text-[13px]">
+      <span className="mr-2 font-mono text-[10.5px] font-semibold uppercase text-signal-deep">{c.kind}</span>
+      {c.before ? (
+        <>
+          <span className="line-through text-muted">{c.before}</span> → <strong>{c.after}</strong>
+        </>
+      ) : (
+        <>
+          + <strong>{c.after}</strong>
+        </>
+      )}
+      <div className="font-mono text-[10.5px] text-muted">
+        {KIND_NOTE[c.kind]} · evidence {c.evidence.join(", ")}
+      </div>
+    </li>
+  );
+}
+
+function RepairCard({ r, mock, onDecided }: { r: RepairRow; mock: boolean; onDecided: (r: RepairRow) => void }) {
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const pending = r.status === "pending";
+
+  async function decide(action: "approve" | "reject") {
+    if (mock) {
+      onDecided({ ...r, status: action === "approve" ? "approved" : "rejected", decidedAt: new Date().toISOString() });
+      return;
+    }
+    setBusy(action);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/bot/api/repairs/${encodeURIComponent(r.id)}/${action}`, { method: "POST" });
+      const j = (await res.json().catch(() => ({}))) as { repair?: RepairRow; error?: string; message?: string };
+      if (!res.ok || !j.repair) throw new Error(j.message ?? j.error ?? `HTTP ${res.status}`);
+      onDecided(j.repair);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[12px] font-bold">{r.id}</span>
+        <span className="rounded-[3px] border border-caution/50 px-1.5 py-px font-mono text-[10.5px] font-semibold uppercase text-caution">{r.cause}</span>
+        {r.errorCode && <span className="font-mono text-[10.5px] text-muted">{r.outcome}/{r.errorCode}</span>}
+        <Link href={withMock(`/catalog/${encodeURIComponent(r.category)}`, mock)} className="font-mono text-[11px] hover:underline">
+          {r.category}
+        </Link>
+        <Link href={withMock(`/complaints/${encodeURIComponent(r.complaintId)}`, mock)} className="font-mono text-[11px] text-muted hover:underline">
+          {r.attemptId} → {r.complaintId}
+        </Link>
+        <span className="ml-auto font-mono text-[10.5px] text-muted">
+          confidence {Math.round(r.confidence * 100)}% · {fmtAgo(r.createdAt)}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div>
+          <Label>Proposed changes</Label>
+          <ul className="mt-1 space-y-2">
+            {r.proposedChanges.map((c, i) => (
+              <ChangeLine key={i} c={c} />
+            ))}
+          </ul>
+          {r.applied && r.applied.length > 0 && (
+            <div className="mt-3 font-mono text-[11px] text-signal-deep">
+              applied{r.decidedBy === "auto" ? " automatically" : ""}: {r.applied.join(", ")}
+            </div>
+          )}
+        </div>
+        <div>
+          <Label>Screenshots</Label>
+          <div className="mt-1">
+            <EvidenceGallery items={r.evidence} />
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-rule pt-3">
+        {pending ? (
+          <>
+            <button
+              type="button"
+              disabled={busy != null}
+              onClick={() => decide("approve")}
+              className="border border-ink px-3 py-1 font-wide text-[11px] font-bold uppercase tracking-[0.1em] hover:bg-ink hover:text-paper disabled:opacity-50"
+            >
+              {busy === "approve" ? "Approving…" : "Approve"}
+            </button>
+            <button
+              type="button"
+              disabled={busy != null}
+              onClick={() => decide("reject")}
+              className="border border-rule2 px-3 py-1 font-wide text-[11px] font-bold uppercase tracking-[0.1em] text-ink2 hover:border-ink disabled:opacity-50"
+            >
+              {busy === "reject" ? "Rejecting…" : "Reject"}
+            </button>
+          </>
+        ) : (
+          <Mono className="text-[11px]">
+            {r.status} {r.decidedBy ? `by ${r.decidedBy}` : ""} {r.decidedAt ? fmtAgo(r.decidedAt) : ""}
+          </Mono>
+        )}
+        {err && <span className="font-mono text-[11px] text-caution">{err}</span>}
+      </div>
+    </Card>
+  );
+}
+
 export function RepairsView({ mock }: { mock: boolean }) {
-  const repairs = mock ? MOCK_REPAIRS : [];
+  const poll = usePoll<unknown>(mock ? null : "/api/repairs?limit=200", { mock, intervalMs: 5000 });
+  const [local, setLocal] = useState<Record<string, RepairRow>>({});
+  const fetched = mock ? MOCK_REPAIRS : asList<RepairRow>(poll.data, "repairs");
+  const all = fetched.map((r) => (local[r.id] && local[r.id]!.status !== "pending" ? local[r.id]! : r));
+  const pending = all.filter((r) => r.status === "pending");
+  const decided = all.filter((r) => r.status !== "pending");
+  const onDecided = (r: RepairRow) => setLocal((m) => ({ ...m, [r.id]: r }));
+
   return (
     <div>
       <div className="rise mb-6">
         <div className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-signal-deep">Failed runs → proposed fixes</div>
         <h1 className="font-wide mt-1 text-[40px] leading-[0.95] font-black tracking-tight">Repairs queue</h1>
         <p className="mt-2 max-w-xl text-[13px] text-ink2">
-          Post-mortem proposals from failed filing attempts. Nothing changes until a human approves; this view is read-only until the repairs API lands.
+          Post-mortem proposals from failed filing attempts. Nothing changes until a human approves, except new required fields diagnosed with ≥ 90% confidence. Approving applies required-field changes only; nothing that affects submit is ever applied automatically.
         </p>
       </div>
-      <Section no="01" title="Pending proposals" aside={<Mono className="text-[10.5px]">{repairs.length} pending</Mono>}>
-        {repairs.length === 0 ? (
-          <Empty title="No pending repairs" hint={mock ? undefined : "The repairs API (#13) is not available yet. Add ?mock=1 to preview."} />
+      {!mock && poll.error && <ApiDownBanner error={poll.error} onMockHref="/repairs?mock=1" />}
+      <Section no="01" title="Pending proposals" aside={<Mono className="text-[10.5px]">{pending.length} pending</Mono>}>
+        {pending.length === 0 ? (
+          <Empty title="No pending repairs" hint={!mock && poll.loading ? "Loading…" : "Failed or ambiguous filing attempts are diagnosed here automatically."} />
         ) : (
           <ul className="space-y-4">
-            {repairs.map((r) => (
+            {pending.map((r) => (
               <li key={r.id}>
-                <Card className="p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[12px] font-bold">{r.id}</span>
-                    <span className="rounded-[3px] border border-caution/50 px-1.5 py-px font-mono text-[10.5px] font-semibold uppercase text-caution">{r.failure}</span>
-                    <Link href={withMock(`/catalog/${encodeURIComponent(r.categoryId)}`, mock)} className="font-mono text-[11px] hover:underline">
-                      {r.categoryId}
-                    </Link>
-                    <Link href={withMock(`/complaints/${encodeURIComponent(r.complaintId)}`, mock)} className="font-mono text-[11px] text-muted hover:underline">
-                      {r.attemptId} → {r.complaintId}
-                    </Link>
-                    <span className="ml-auto font-mono text-[10.5px] text-muted">{fmtAgo(r.createdAt)}</span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                      <Label>Diagnosis</Label>
-                      <p className="mt-1 text-[13px]">{r.diagnosis}</p>
-                      <div className="mt-3">
-                        <Label>Proposed change</Label>
-                        <p className="mt-1 text-[13px]">{r.change}</p>
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Screenshots</Label>
-                      <div className="mt-1 grid grid-cols-2 gap-2">
-                        {r.screenshots.map((s) => (
-                          <figure key={s.caption} className="flex aspect-video items-end border border-dashed border-rule2 bg-paper2 p-1.5">
-                            <figcaption className="font-mono text-[10px] text-muted">{s.caption}</figcaption>
-                          </figure>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex gap-2 border-t border-rule pt-3">
-                    <button type="button" disabled title="repairs API not available yet" className="cursor-not-allowed border border-ink/40 px-3 py-1 font-wide text-[11px] font-bold uppercase tracking-[0.1em] text-muted">
-                      Approve
-                    </button>
-                    <button type="button" disabled title="repairs API not available yet" className="cursor-not-allowed border border-rule2 px-3 py-1 font-wide text-[11px] font-bold uppercase tracking-[0.1em] text-muted">
-                      Reject
-                    </button>
-                  </div>
-                </Card>
+                <RepairCard r={r} mock={mock} onDecided={onDecided} />
               </li>
             ))}
           </ul>
         )}
       </Section>
+      {decided.length > 0 && (
+        <Section no="02" title="Decided" aside={<Mono className="text-[10.5px]">{decided.length}</Mono>}>
+          <ul className="space-y-4">
+            {decided.map((r) => (
+              <li key={r.id}>
+                <RepairCard r={r} mock={mock} onDecided={onDecided} />
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
     </div>
   );
 }

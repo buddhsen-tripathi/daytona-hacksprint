@@ -8,6 +8,7 @@ import type {
 } from "@bot/core/contracts";
 
 export type { ComplaintDraft, ComplaintState, Evidence, FilingAttempt, OfficialRequest, WorkflowPattern };
+export type { RepairProposal } from "@bot/core/contracts";
 export type { DuplicateCandidate, WorkerEvent, FilingErrorCode, CategoryId } from "@bot/core/contracts";
 
 export type Actor = "user" | "system" | "llm";
