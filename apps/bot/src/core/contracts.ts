@@ -226,6 +226,20 @@ export const EMPTY_TRANSIT: TransitDetails = { line: null, direction: null, stat
 // ---------------------------------------------------------------------------
 // Classification (LLM output, Zod-validated; backend re-validates category)
 // ---------------------------------------------------------------------------
+/** Stage 2 of the router: the LLM's pick among retrieved catalog candidates. The catalog is the allowlist. */
+export const CatalogRoute = z.object({
+  /** A CatalogEntry id, or null when no candidate fits (EMERGENCY / UNCLEAR / nothing matches). */
+  catalogId: z.string().nullable(),
+  /** 0..1 for catalogId; < ROUTE_CONFIDENCE_THRESHOLD ⇒ ask "Which of these is it?" with the top 3. */
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  /** Up to 3 other candidate ids, best first. */
+  alternatives: z.array(z.string()),
+});
+export type CatalogRoute = z.infer<typeof CatalogRoute>;
+
+export const ROUTE_CONFIDENCE_THRESHOLD = 0.6;
+
 export const ClassificationResult = z.object({
   triage: TriageOutcome,
   /** Required when triage === SUPPORTED. */
@@ -244,8 +258,11 @@ export const ClassificationResult = z.object({
   clarifyingQuestion: z.string().nullable(),
   /** Transit details extracted from the text for subway categories; null when not applicable or not mentioned. Never invented. */
   transit: TransitDetails.nullable().optional(),
+  /** Two-stage router (#8): the NYC311 catalog entry this report belongs to. Optional for older rows / fallbacks. */
+  route: CatalogRoute.nullable().optional(),
 });
 export type ClassificationResult = z.infer<typeof ClassificationResult>;
+
 
 export const CLASSIFY_CONFIDENCE_THRESHOLD = 0.6;
 
