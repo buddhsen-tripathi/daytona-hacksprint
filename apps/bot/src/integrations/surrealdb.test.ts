@@ -209,6 +209,22 @@ describe("SurrealStore (embedded mem://)", () => {
     await store.query("DELETE complaint_category WHERE catalog = true");
   });
 
+  it("repair proposals (#13): upsert, get, list by status (newest first), reset clears them", async () => {
+    const base = { cause: "missing_required_field" as const, confidence: 0.7, attemptId: "att_1", complaintId: "cmp_1", category: "subway-delay" as const, decidedAt: null };
+    const change = { kind: "requiredField" as const, before: null, after: "Cross Street 2", evidence: ["ev_1"] };
+    await store.saveRepairProposal!({ ...base, id: "rep_a", proposedChanges: [change], status: "pending", createdAt: "2026-10-16T10:00:00.000Z" });
+    await store.saveRepairProposal!({ ...base, id: "rep_b", proposedChanges: [], status: "rejected", createdAt: "2026-10-16T11:00:00.000Z" });
+    expect(await store.getRepairProposal!("rep_a")).toMatchObject({ id: "rep_a", proposedChanges: [change], decidedAt: null });
+    expect(await store.getRepairProposal!("rep_missing")).toBeNull();
+    expect((await store.listRepairProposals!()).map((p) => p.id)).toEqual(["rep_b", "rep_a"]);
+    expect((await store.listRepairProposals!({ status: "pending" })).map((p) => p.id)).toEqual(["rep_a"]);
+    await store.saveRepairProposal!({ ...base, id: "rep_a", proposedChanges: [change], status: "approved", createdAt: "2026-10-16T10:00:00.000Z", decidedAt: "2026-10-16T12:00:00.000Z", decidedBy: "operator", applied: ["Cross Street 2"] });
+    expect(await store.listRepairProposals!({ status: "pending" })).toEqual([]);
+    expect(await store.getRepairProposal!("rep_a")).toMatchObject({ status: "approved", applied: ["Cross Street 2"] });
+    await store.reset();
+    expect(await store.listRepairProposals!()).toEqual([]);
+  });
+
   it("reset clears data but keeps categories", async () => {
     await store.reset();
     expect(await store.listComplaints()).toEqual([]);

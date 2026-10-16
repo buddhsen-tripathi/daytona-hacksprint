@@ -13,6 +13,7 @@ import type {
   FilingTarget,
   MemoryRecord,
   OfficialRequest,
+  RepairProposal,
   Resident,
   Store,
   WorkflowPattern,
@@ -55,6 +56,7 @@ export function createMemoryStore(): MemoryStore {
   const joinedTo = (originalId: string) => [...sameIssue.entries()].filter(([, o]) => o === originalId).map(([s]) => s);
   const memories = new Map<string, MemoryRecord>();
   const catalog = new Map<string, CatalogEntry>();
+  const repairs = new Map<string, RepairProposal>();
   const learnedSchemas = new Map<string, Pick<CatalogEntry, "requiredFields" | "formSchema">>();
 
   const store: MemoryStore = {
@@ -229,6 +231,24 @@ export function createMemoryStore(): MemoryStore {
       learnedSchemas.set(id, clone({ requiredFields: learned.requiredFields, formSchema: learned.formSchema }));
       const row = catalog.get(id);
       if (row) catalog.set(id, clone({ ...row, ...learned }));
+    },
+
+    // -- post-mortem repair proposals (#13)
+    async saveRepairProposal(p) {
+      repairs.set(p.id, clone(p));
+      return clone(p);
+    },
+    async getRepairProposal(id) {
+      const p = repairs.get(id);
+      return p ? clone(p) : null;
+    },
+    async listRepairProposals(args) {
+      return clone(
+        [...repairs.values()]
+          .filter((p) => !args?.status || p.status === args.status)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .slice(0, args?.limit ?? 100),
+      );
     },
 
     // -- agent memory (#4): same semantics as the SurrealQL in surrealdb.ts (shared helpers in services/agent-memory.ts)
