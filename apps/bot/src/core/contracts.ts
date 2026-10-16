@@ -729,9 +729,9 @@ export type IssueLinks = {
 // labels); never contact fields or a resident's free-typed answer.
 // ---------------------------------------------------------------------------
 export const MemoryKind = z.enum([
-  "episodic", // what happened: drafts ready for approval, filing outcomes, live questions + answers, reflections
+  "episodic", // what happened: drafts ready for approval, filing outcomes, live questions + answers
   "semantic", // facts about the world: categories, agencies, required fields
-  "procedural", // how to do things: form recipes, ask-before-approval rules
+  "procedural", // how to do things: form recipes, ask-before-approval rules, reflection lessons (#24)
 ]);
 export type MemoryKind = z.infer<typeof MemoryKind>;
 
@@ -830,7 +830,11 @@ export interface AgentMemory {
   remember(item: MemoryItem): Promise<string>;
   /** Scored recall: score = 0.5·relevance + 0.3·recency + 0.2·importance, highest first, with the breakdown. */
   recall(q: MemoryRecallQuery): Promise<ScoredMemory[]>;
-  /** Reflexion-style lesson after an attempt: episodic item, source `attempt:<id>`, about→filing_attempt. */
+  /**
+   * Reflexion-style lesson after an attempt: shared, category-scoped procedural item (chatId null), source
+   * `attempt:<id>`, about→filing_attempt. Dropped with a warning if the attempt/category can't be resolved or the
+   * lesson carries PII or quotes a resident field (#24).
+   */
   reflect(attemptId: string, lesson: string, data?: Record<string, unknown>): Promise<void>;
   /** Resolves when every in-flight remember() has settled (tests / scripts). */
   flush(): Promise<void>;

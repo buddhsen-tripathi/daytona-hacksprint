@@ -53,11 +53,19 @@ const DEFAULT_GEO_RADIUS_M = 100;
 // ---------------------------------------------------------------------------
 const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
 
+const PII_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]"],
+  [/(?:\+?1[-.\s]?)?\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g, "[phone]"],
+];
+
+/** True if `scrubPii` would redact something (an email or phone number). */
+export function hasPii(text: string): boolean {
+  return PII_PATTERNS.some(([re]) => text.search(re) !== -1);
+}
+
 /** Last line of defence: no emails / phone numbers in memory text. */
 export function scrubPii(text: string): string {
-  return text
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
-    .replace(/(?:\+?1[-.\s]?)?\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g, "[phone]")
+  return PII_PATTERNS.reduce((t, [re, label]) => t.replace(re, label), text)
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, MAX_MEMORY_TEXT);
@@ -425,18 +433,29 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
     },
 
     async reflect(attemptId, lesson, data) {
+      // #24: a lesson is shared, category-scoped procedural memory (how this form behaves), never a resident's item.
+      // No resolvable attempt/category ⇒ no write (an unscoped row would be recalled for everyone); PII ⇒ no write.
       const attempt = await store.getAttempt(attemptId).catch(() => null);
       const complaint = attempt ? await store.getComplaint(attempt.complaintId).catch(() => null) : null;
+      const category = attempt?.category ?? complaint?.category ?? null;
+      if (!attempt || !category) {
+        console.warn(`[memory] reflect(${attemptId}): attempt or its category not found; lesson dropped (lessons are category-scoped)`);
+        return;
+      }
+      const leak = reflectionLeak(lesson, data, complaint);
+      if (leak) {
+        console.warn(`[memory] reflect(${attemptId}): lesson dropped, it contains ${leak} (lessons are shared and must be PII-free)`);
+        return;
+      }
       await memory.remember({
-        kind: "episodic",
+        kind: "procedural",
         text: lesson,
-        category: attempt?.category ?? null,
-        chatId: complaint?.telegramChatId ?? null,
-        line: complaint?.transit?.line ?? null,
+        category,
+        chatId: null,
         importance: 0.7,
-        data: { ...(data ?? {}), reflection: true, outcome: attempt?.outcome ?? null, errorCode: attempt?.errorCode ?? null },
+        data: { ...(data ?? {}), reflection: true, outcome: attempt.outcome ?? null, errorCode: attempt.errorCode ?? null },
         source: `attempt:${attemptId}`,
-        about: [{ table: "filing_attempt", id: attemptId }, ...(attempt ? [{ table: "complaint" as const, id: attempt.complaintId }] : [])],
+        about: [{ table: "filing_attempt", id: attemptId }, { table: "complaint", id: attempt.complaintId }],
       });
     },
 
@@ -485,6 +504,25 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
 // codes. Never contact fields, never a resident's free-typed answer.
 // ---------------------------------------------------------------------------
 const categoryLabel = (id: string | null | undefined) => (id ? (getCategory(id as never)?.label ?? id) : "Report");
+
+/** Free text shorter than this is too generic to count as quoting the resident (e.g. "uptown"). */
+const QUOTE_MIN_CHARS = 12;
+
+/** Why a reflection lesson may not be stored as shared memory (PII, or a resident field quoted verbatim), else null. */
+export function reflectionLeak(lesson: string, data: Record<string, unknown> | undefined, complaint: ComplaintDraft | null): string | null {
+  const dataText = data ? JSON.stringify(data) : "";
+  if (hasPii(lesson) || hasPii(dataText)) return "an email or phone number";
+  if (!complaint) return null;
+  const hay = `${lesson}\n${dataText}`.toLowerCase();
+  const quoted = (v: string | null | undefined, min: number) => {
+    const t = v?.trim().toLowerCase() ?? "";
+    return t.length >= min && hay.includes(t);
+  };
+  if (quoted(complaint.telegramChatId, 4) || quoted(complaint.officialRequestNumber, 4)) return "a resident identifier";
+  if (quoted(complaint.location.address, 4) || quoted(complaint.location.rawInput, 4)) return "the resident's location";
+  if ([...complaint.userMessages, ...Object.values(complaint.extraFields ?? {})].some((m) => quoted(m, QUOTE_MIN_CHARS))) return "the resident's own words";
+  return null;
+}
 
 function transitFacts(t: ComplaintDraft["transit"]): string[] {
   if (!t) return [];
