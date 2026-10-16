@@ -62,8 +62,12 @@ export async function startBot(bot: Bot): Promise<{ mode: "polling" | "webhook";
       });
     } catch (err) {
       const is409 = typeof err === "object" && err !== null && (err as { error_code?: number }).error_code === 409;
-      if (is409 && attempt < 20) {
-        const waitMs = Math.min(5_000 * attempt, 30_000);
+      if (is409 && attempt < 10) {
+        // Fully stop grammY's internal loop before starting again, otherwise two loops in this
+        // process fight each other forever. Wait long enough for a killed predecessor's 30 s
+        // long poll to expire on Telegram's side.
+        await bot.stop().catch(() => {});
+        const waitMs = 35_000;
         console.warn(`[telegram] 409 conflict (another getUpdates consumer); retrying in ${waitMs / 1000}s`);
         await new Promise((r) => setTimeout(r, waitMs));
         return poll(attempt + 1);
