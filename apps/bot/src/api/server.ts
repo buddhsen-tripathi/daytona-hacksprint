@@ -121,6 +121,7 @@ export function createApiServer(deps: ApiDeps): Server {
               return hit ? json(res, 200, { entry: hit, source }) : json(res, 404, { error: "catalog entry not found" });
             }
             return json(res, 200, { entries, count: entries.length, source });
+          }
           case "memory": {
             // What the agent recalls and why: { items: ScoredMemory[] } with score breakdowns (UI in #14).
             const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 10) || 10));
