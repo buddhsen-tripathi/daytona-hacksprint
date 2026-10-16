@@ -1,0 +1,21 @@
+{
+  "name": "different line (C vs A) at the same station",
+  "original": {
+    "line": "C",
+    "direction": "Downtown & Brooklyn",
+    "station": "14 St",
+    "description": "The C train was held at 14 St for about 25 minutes with no announcements.",
+    "incidentMinutesAgo": 30,
+    "reportedMinutesAgo": 25
+  },
+  "incoming": {
+    "line": "A",
+    "direction": "downtown",
+    "station": "14 St",
+    "description": "The A train was held at 14 St for about 25 minutes with no announcements.",
+    "incidentMinutesAgo": 20
+  },
+  "expect": "none",
+  "reason": "line",
+  "category": "subway-delay"
+}

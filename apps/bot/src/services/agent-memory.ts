@@ -351,7 +351,7 @@ export function readyForApprovalItem(d: ComplaintDraft): MemoryItem {
     line: d.transit?.line ?? null,
     geo: geoOf(d),
     importance: 0.5,
-    data: { complaintId: d.id, draftVersion: d.draftVersion, status: d.status, incidentTime: d.transit?.incidentTime ?? null, photos: d.media.length, borough: d.location.borough ?? d.transit?.borough ?? null },
+    data: { complaintId: d.id, draftVersion: d.draftVersion, status: d.status, incidentTime: d.transit?.incidentTime ?? null, direction: d.transit?.direction ?? null, photos: d.media.length, borough: d.location.borough ?? d.transit?.borough ?? null },
     source: `complaint:${d.id}`,
     about: [{ table: "complaint", id: d.id }, ...(d.category ? [{ table: "complaint_category" as const, id: d.category }] : [])],
   };
