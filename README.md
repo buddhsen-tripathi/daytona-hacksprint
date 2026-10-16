@@ -1,5 +1,7 @@
 # 311Relay
 
+[![CI](https://github.com/buddhsen-tripathi/daytona-hacksprint/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/buddhsen-tripathi/daytona-hacksprint/actions/workflows/ci.yml)
+
 **See something. Send it. Track it.**
 
 311Relay is a Telegram agent for reporting problems where they actually have to be reported. Drop a photo or describe what's wrong; 311Relay works out where it must be filed, fills the official form in a real browser, and verifies the result with a session recording and the official reference.
@@ -57,6 +59,12 @@ Without a Telegram token you can still drive the whole flow:
 pnpm demo -- --scenario subway --no-filing   # intake → transit → live MTA alert → draft card + payload preview
 pnpm demo -- --scenario subway               # dry run against the real MTA form (needs Daytona + Anchor)
 pnpm --filter @311relay/bot evals            # the evaluation scenarios, results pushed to Phoenix
+```
+
+Before opening a PR, run what CI runs (typecheck, worker build, bot tests; no `.env` or keys needed):
+
+```bash
+pnpm check
 ```
 
 ## Real filing targets
