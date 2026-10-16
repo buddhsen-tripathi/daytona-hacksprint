@@ -2,13 +2,15 @@
  * Read-mostly JSON API for the dashboard (+ scripted event endpoint POST /api/event and the
  * optional Telegram webhook). node:http, CORS *.
  */
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
-import type { CategoryId, Store, Tracer } from "../core/contracts.js";
-import { CATEGORIES, InboundEvent } from "../core/contracts.js";
+import type { AgentMemory, CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
+import { CATEGORIES, InboundEvent, MemoryKind } from "../core/contracts.js";
+import { createAgentMemory, recallForComplaintCached } from "../services/agent-memory.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
-import { env, hasTelegram } from "../integrations/env.js";
+import { env, hasTelegram, REPO_ROOT } from "../integrations/env.js";
 import { resolveEvidencePath } from "../services/evidence-registry.js";
 import type { WebhookHandler } from "../telegram/bot.js";
 import { capturedQuestions, createCaptureTransport } from "./capture-transport.js";
@@ -17,6 +19,8 @@ export type ApiDeps = {
   store: Store;
   tracer: Tracer;
   orchestrator: Orchestrator;
+  /** Agent memory (#4) for GET /api/memory. Absent ⇒ keyword-only recall over the store. */
+  memory?: AgentMemory | null;
   /** Set when Telegram runs in webhook mode. Read lazily so the bot can start after the server. */
   getWebhook?: () => WebhookHandler | null;
 };
@@ -40,6 +44,7 @@ async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<string
 
 export function createApiServer(deps: ApiDeps): Server {
   const { store, orchestrator } = deps;
+  const memory = deps.memory ?? createAgentMemory({ store });
   const started = new Date().toISOString();
 
   return createServer(async (req, res) => {
@@ -76,7 +81,8 @@ export function createApiServer(deps: ApiDeps): Server {
               const evidence = attempts.flatMap((a) => a.evidence);
               const traceUrl = c.traceId ? deps.tracer.traceUrl(c.traceId) : null;
               const transitions = await listTransitions(store, c.id);
-              return json(res, 200, { complaint: redactComplaint(c), attempts, evidence, transitions, traceUrl, sessionUrl: deps.tracer.sessionUrl(c.telegramChatId) });
+              const sameIssue = await sameIssueOf(store, c.id);
+              return json(res, 200, { complaint: redactComplaint(c), attempts, evidence, transitions, sameIssue, traceUrl, sessionUrl: deps.tracer.sessionUrl(c.telegramChatId) });
             }
             const list = await store.listComplaints({ chatId: url.searchParams.get("chatId") ?? undefined, limit: Number(url.searchParams.get("limit") ?? 100) });
             return json(res, 200, { complaints: list.map(redactComplaint) });
@@ -101,6 +107,34 @@ export function createApiServer(deps: ApiDeps): Server {
           case "graph": {
             const g = await store.graph({ complaintId: url.searchParams.get("complaintId") ?? undefined });
             return json(res, 200, { ...g, patterns: await allPatterns(store) });
+          }
+          case "catalog": {
+            // NYC311 catalog (#7): SurrealDB rows, else the committed snapshot. ?q= filters title/summary/agency/topic.
+            let entries = (await store.listCatalog?.()) ?? [];
+            const source = entries.length ? "store" : "snapshot";
+            if (!entries.length) entries = readCatalogSnapshot();
+            const q = url.searchParams.get("q")?.trim().toLowerCase();
+            if (q) entries = entries.filter((e) => [e.title, e.summary, e.agency ?? "", e.topic ?? ""].some((v) => v.toLowerCase().includes(q)));
+            if (seg[2]) {
+              const hit = entries.find((e) => e.id === decodeURIComponent(seg[2]));
+              return hit ? json(res, 200, { entry: hit, source }) : json(res, 404, { error: "catalog entry not found" });
+            }
+            return json(res, 200, { entries, count: entries.length, source });
+          }
+          case "memory": {
+            // What the agent recalls and why: { items: ScoredMemory[] } with score breakdowns (UI in #14).
+            const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 10) || 10));
+            const complaintId = url.searchParams.get("complaintId");
+            if (complaintId) {
+              const c = await store.getComplaint(complaintId);
+              if (!c) return json(res, 404, { error: "complaint not found" });
+              // cached: true ⇒ answered from the recall run right after the approval card was sent (#22)
+              const { query, items, cached } = await recallForComplaintCached(memory, c, limit);
+              return json(res, 200, { complaintId: c.id, query, items, cached });
+            }
+            const kind = MemoryKind.safeParse(url.searchParams.get("kind"));
+            const items = await memory.recall({ text: url.searchParams.get("q") ?? undefined, kind: kind.success ? kind.data : undefined, limit });
+            return json(res, 200, { items });
           }
           case "workflow-patterns":
             return json(res, 200, { patterns: await allPatterns(store) });
@@ -174,6 +208,23 @@ async function listTransitions(store: Store, complaintId: string): Promise<Trans
   return [];
 }
 
+/**
+ * #5 cluster for the dashboard (UI in #14): the original this complaint belongs to (itself when others joined it),
+ * its supporters' complaint ids, and the reports the resident said are different. Complaint ids only.
+ */
+async function sameIssueOf(store: Store, complaintId: string): Promise<{ originalId: string | null; supporters: number; joined: string[]; notSameAs: string[] } | null> {
+  if (!store.getIssueLinks) return null;
+  try {
+    const own = await store.getIssueLinks(complaintId);
+    const originalId = own.sameIssueAs ?? (own.joined.length ? complaintId : null);
+    const cluster = originalId && originalId !== complaintId ? await store.getIssueLinks(originalId) : own;
+    return { originalId, supporters: originalId ? cluster.supporters : 0, joined: originalId ? cluster.joined : [], notSameAs: own.notSameAs };
+  } catch (err) {
+    console.warn("[api] getIssueLinks failed:", (err as Error).message);
+    return null;
+  }
+}
+
 async function allPatterns(store: Store) {
   const combos = (["real"] as const).flatMap((target) => (Object.keys(CATEGORIES) as CategoryId[]).map((category) => ({ target, category })));
   const lists = await Promise.all(combos.map((c) => store.getWorkflowPatterns(c).catch(() => [])));
@@ -191,4 +242,9 @@ export function startApiServer(deps: ApiDeps, port = env.PORT_API): Promise<Serv
     server.once("error", reject);
     server.listen(port, () => resolveP(server));
   });
+}
+
+function readCatalogSnapshot(): CatalogEntry[] {
+  const p = resolve(REPO_ROOT, "fixtures/nyc311-catalog.json");
+  return existsSync(p) ? (JSON.parse(readFileSync(p, "utf8")) as CatalogEntry[]) : [];
 }

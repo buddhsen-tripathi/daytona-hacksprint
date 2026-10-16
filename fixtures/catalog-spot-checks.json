@@ -1,0 +1,140 @@
+{
+  "_note": "15 entries hand-verified against portal.311.nyc.gov on 2026-10-16 (article page + where its Report/File link leads). Checked by apps/bot/src/services/catalog-spot-checks.test.ts.",
+  "entries": [
+    {
+      "id": "noise-from-neighbor",
+      "kaNumber": "KA-01017",
+      "channel": "nyc311-sr-form",
+      "agency": "NYPD",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
+      "hasCaptcha": false
+    },
+    {
+      "id": "illegal-parking",
+      "kaNumber": "KA-01986",
+      "channel": "nyc311-sr-form",
+      "agency": "NYPD",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
+      "hasCaptcha": false
+    },
+    {
+      "id": "apartment-maintenance-complaint",
+      "kaNumber": "KA-01074",
+      "channel": "nyc311-sr-form",
+      "agency": "HPD",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://portal.311.nyc.gov/article/?kanumber=KA-01074",
+      "hasCaptcha": null
+    },
+    {
+      "id": "fireworks-complaint",
+      "kaNumber": "KA-02249",
+      "channel": "nyc311-sr-form",
+      "agency": "NYPD",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
+      "hasCaptcha": false
+    },
+    {
+      "id": "bridges",
+      "kaNumber": "KA-01079",
+      "channel": "nyc311-sr-form",
+      "agency": "DOT",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
+      "hasCaptcha": false
+    },
+    {
+      "id": "subway-delay",
+      "kaNumber": "KA-01014",
+      "channel": "external-site",
+      "agency": "MTA",
+      "automation": "adapter:mta-subway-delay",
+      "officialUrlPrefix": "https://contact.mta.info/s/customer-feedback",
+      "hasCaptcha": false
+    },
+    {
+      "id": "buses-and-subways",
+      "kaNumber": "KA-01014",
+      "channel": "external-site",
+      "agency": "MTA",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://contact.mta.info/s/qf-sc",
+      "hasCaptcha": null
+    },
+    {
+      "id": "abandoned-vehicle",
+      "kaNumber": "KA-02130",
+      "channel": "nyc311-sr-form",
+      "agency": "NYPD",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://portal.311.nyc.gov/servicerequest-create/?",
+      "hasCaptcha": false
+    },
+    {
+      "id": "advertising-sign-complaint",
+      "kaNumber": "KA-01903",
+      "channel": "nyc311-sr-form",
+      "agency": "DOB",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://portal.311.nyc.gov/article/?kanumber=KA-01903",
+      "hasCaptcha": null
+    },
+    {
+      "id": "adult-day-care",
+      "kaNumber": "KA-02547",
+      "channel": "agency-form",
+      "agency": "DFTA",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://www.nyc.gov/site/dfta/community-partners/social-adult-day-care-sadc-inquiry-form.page",
+      "hasCaptcha": true
+    },
+    {
+      "id": "access-a-ride",
+      "kaNumber": "KA-02352",
+      "channel": "external-site",
+      "agency": "MTA",
+      "automation": "handoff",
+      "officialUrlPrefix": "https://new.mta.info/accessibility/paratransit/commendations-complaints-or-suggestions",
+      "hasCaptcha": false
+    },
+    {
+      "id": "air-conditioner-in-danger-of-falling",
+      "kaNumber": "KA-01908",
+      "channel": "phone-only",
+      "agency": "DOB",
+      "automation": "none",
+      "officialUrlPrefix": null,
+      "hasCaptcha": null
+    },
+    {
+      "id": "agency-charges-collected-by-the-department-of-finance",
+      "kaNumber": "KA-02246",
+      "channel": "phone-only",
+      "agency": "DOF",
+      "automation": "none",
+      "officialUrlPrefix": null,
+      "hasCaptcha": null
+    },
+    {
+      "id": "accident-with-injury",
+      "kaNumber": "KA-01513",
+      "channel": "info-only",
+      "agency": null,
+      "automation": "none",
+      "officialUrlPrefix": null,
+      "hasCaptcha": null
+    },
+    {
+      "id": "affordable-housing-fee-fraud",
+      "kaNumber": "KA-01113",
+      "channel": "phone-only",
+      "agency": "HPD",
+      "automation": "none",
+      "officialUrlPrefix": null,
+      "hasCaptcha": null
+    }
+  ]
+}

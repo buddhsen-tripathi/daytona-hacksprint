@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { __resetTracingForTests, createTracer, redact, redactString, spanKindFor, type TracerOptions } from "./arize.js";
+import { createAgentMemory } from "../services/agent-memory.js";
+import { createHashEmbedder } from "./embedder.js";
+import { createMemoryStore } from "./memory-store.js";
 
 type Processor = NonNullable<TracerOptions["spanProcessors"]>[number];
 type Ended = Parameters<Processor["onEnd"]>[0];
@@ -91,6 +94,24 @@ describe("arize tracer", () => {
     expect(s.attributes["radius"]).toBe(50);
   });
 
+  it("agent memory: memory.remember (TOOL) and memory.recall (RETRIEVER, recalled items + scores as documents)", async () => {
+    const cap = capture();
+    const t = createTracer({ spanProcessors: [cap.processor], endpoint: null });
+    const memory = createAgentMemory({ store: createMemoryStore(), embedder: createHashEmbedder(), tracer: t });
+    await memory.remember({ id: "mem_t1", kind: "episodic", text: "A train delay near 14 St", category: "subway-delay", chatId: "rider-1", source: "complaint:cmp_t1" });
+    const got = await memory.recall({ text: "A train delay", scope: { chatId: "rider-1" } });
+    const w = cap.byName("memory.remember");
+    expect(w.attributes["openinference.span.kind"]).toBe("TOOL");
+    expect(w.attributes["tool.name"]).toBe("memory.remember");
+    expect(w.attributes["memory.embed_model"]).toBe("local/hash-bow-256");
+    const r = cap.byName("memory.recall");
+    expect(r.attributes["openinference.span.kind"]).toBe("RETRIEVER");
+    expect(r.attributes["retrieval.documents.0.document.id"]).toBe("mem_t1");
+    expect(r.attributes["retrieval.documents.0.document.score"]).toBe(got[0]!.score);
+    expect(String(r.attributes["retrieval.documents.0.document.metadata"])).toContain("relevanceKind");
+    expect(String(r.attributes["input.value"])).not.toContain("rider-1");
+  });
+
   it("records tool attributes and error status", async () => {
     const cap = capture();
     const t = createTracer({ spanProcessors: [cap.processor], endpoint: null });
@@ -133,6 +154,8 @@ describe("arize tracer", () => {
     expect(spanKindFor("user.approve")).toBe("CHAIN");
     expect(spanKindFor("surrealdb.persist")).toBe("CHAIN");
     expect(spanKindFor("something.else")).toBe("CHAIN");
+    expect(spanKindFor("memory.recall")).toBe("RETRIEVER");
+    expect(spanKindFor("memory.remember")).toBe("TOOL");
   });
 
   it("redacts secrets, contacts and paths", () => {

@@ -2,13 +2,53 @@
   {
     "id": "subway-delay-a-train",
     "scenario": "Clear subway delay (MTA)",
-    "expectedBehavior": "SUPPORTED/subway-delay with transit extracted (line A, downtown, 14 St, ~25 min); no location question; no NYC311 duplicate check",
+    "expectedBehavior": "SUPPORTED/subway-delay with transit extracted (line A, downtown, 14 St, 25 min); \"this morning\" is not a time, so the bot may ask when; no location question; stops at the approval card with the MTA alert line",
     "clear": true,
-    "skipEvals": true,
     "inputText": "A train delayed 25 min at 14 St downtown this morning",
     "imageFixture": null,
     "location": null,
-    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "A", "directionIncludes": "down", "stationIncludes": "14", "delayMinutes": 25 } }
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "A", "directionIncludes": "down", "stationIncludes": "14", "delayMinutes": 25 }, "asks": [], "mayAsk": ["time"] }
+  },
+  {
+    "id": "subway-a-direction-ambiguous",
+    "scenario": "A train, direction ambiguous (\"Manhattan-bound\" on the A)",
+    "expectedBehavior": "Asks which way the A was going with the MTA form's two options (Manhattan-bound matches neither); the resident taps Uptown; stops at the card",
+    "clear": false,
+    "inputText": "The A train has been sitting at Jay St-MetroTech for 15 minutes, Manhattan-bound.",
+    "imageFixture": null,
+    "location": null,
+    "followUps": { "direction": "Uptown" },
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "A", "directionIncludes": "manhattan", "stationIncludes": "jay", "delayMinutes": 15, "directionResolvedIncludes": "uptown" }, "asks": ["direction"], "mayAsk": ["time"] }
+  },
+  {
+    "id": "subway-a-toward-inwood",
+    "scenario": "A train \"toward Inwood\"",
+    "expectedBehavior": "\"toward Inwood\" resolves to Uptown (Inwood-207 St) without a direction question; stops at the card",
+    "clear": true,
+    "inputText": "A train toward Inwood stuck at 59 St-Columbus Circle, 10 minutes late.",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "A", "directionIncludes": "inwood", "stationIncludes": "59", "delayMinutes": 10 }, "asks": [], "mayAsk": ["time"] }
+  },
+  {
+    "id": "subway-7-manhattan-bound",
+    "scenario": "7 train Manhattan-bound",
+    "expectedBehavior": "\"Manhattan-bound\" resolves on the 7 (Manhattan (34 St-Hudson Yards)); may ask when it happened; stops at the card",
+    "clear": true,
+    "inputText": "7 train Manhattan-bound, delayed about 15 minutes at 74 St-Broadway",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "7", "directionIncludes": "manhattan", "stationIncludes": "74", "delayMinutes": 15 }, "asks": [], "mayAsk": ["time"] }
+  },
+  {
+    "id": "subway-time-830-this-morning",
+    "scenario": "F train, time given as \"around 8:30 this morning\"",
+    "expectedBehavior": "Extracts 08:30 today (New York) as the incident time and asks nothing; stops at the card",
+    "clear": true,
+    "inputText": "The F train was delayed about 20 minutes at Jay St around 8:30 this morning, going downtown",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "F", "directionIncludes": "downtown", "stationIncludes": "jay", "delayMinutes": 20, "timeLocal": "08:30" }, "asks": [], "mayAsk": [] }
   },
   {
     "id": "repaired-patch-photo",
@@ -85,11 +125,10 @@
     "scenario": "User cancels a subway delay draft",
     "expectedBehavior": "Do not submit (user sends /cancel at READY_FOR_APPROVAL)",
     "clear": false,
-    "skipEvals": true,
     "inputText": "The 7 train has been stuck outside Queensboro Plaza for 20 minutes, Manhattan-bound.",
     "imageFixture": null,
     "location": null,
     "flow": { "afterDraft": "cancel" },
-    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false }
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "7", "directionIncludes": "manhattan", "stationIncludes": "queensboro", "delayMinutes": 20 }, "asks": [], "mayAsk": ["time"] }
   }
 ]

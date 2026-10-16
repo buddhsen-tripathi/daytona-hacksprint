@@ -9,6 +9,7 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
+  AgentMemory,
   Classifier,
   ClassificationResult,
   ComplaintDraft,
@@ -50,28 +51,41 @@ import { canTransition, transition } from "./state-machine.js";
 import { OPEN_STATES, createComplaintService, fmtIncidentTime, lineLabel } from "../services/complaints.js";
 import { getActiveAlertsForLine, isDelayAlert, type MtaAlertsResult } from "../integrations/mta-alerts.js";
 import { M, esc } from "../telegram/messages.js";
-import { approvalButtons, duplicateButtons, isButtonSafeUrl, linkButton, trackingButtons } from "../telegram/keyboards.js";
+import { approvalButtons, duplicateButtons, isButtonSafeUrl, linkButton, sameIssueButtons, trackingButtons } from "../telegram/keyboards.js";
 import type { FilingService, StatusService } from "../integrations/fallbacks.js";
 import { RUNS_DIR } from "../integrations/env.js";
 import { resolveEvidencePath } from "../services/evidence-registry.js";
 import {
-  ASK_KIND,
   MACHINERY_FIELDS,
+  NOT_RAISED,
   RELATED_DEFAULTS,
+  SAME_ISSUE,
+  type SameIssueChoice,
+  type SameIssueMatch,
+  findSameIssue,
+  sameIssueChoiceItem,
+  sameIssueLabel,
+  sameIssueQueryText,
+  sameIssuePrompt,
+  sameIssueStatus,
   type AskHint,
-  askHints,
   askPrompt,
   fieldValue,
   memoryCardLine,
   parseLearnedAnswer,
+  readAskPatterns,
+  readRelated,
   relatedCardLines,
 } from "../services/memory.js";
+import { readyForApprovalItem, recallAfterCard } from "../services/agent-memory.js";
 
 export type { FilingService, StatusService } from "../integrations/fallbacks.js";
 
 export type OrchestratorDeps = {
   store: Store;
   tracer: Tracer;
+  /** Agent memory (#4). Absent ⇒ no memory writes (reads fall back to the store). */
+  memory?: AgentMemory | null;
   classifier: Classifier;
   location: LocationService;
   duplicates: DuplicateService;
@@ -127,6 +141,7 @@ export function looksLikeAddress(text: string): boolean {
 
 export function createOrchestrator(deps: OrchestratorDeps) {
   const { store, tracer, classifier, location, duplicates, filing } = deps;
+  const memory = deps.memory ?? null;
   const target: FilingTarget = "real";
   const mediaRoot = deps.mediaDir ?? resolve(RUNS_DIR, "media");
   const maxPerHour = deps.maxFilingsPerHour ?? 6;
@@ -269,16 +284,10 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     try {
       return await tracer.span("surrealdb.read_context", { "query.kind": "workflow_pattern", "openinference.span.kind": "RETRIEVER", "filing.target": route.target, "complaint.category": route.category }, async (set, oi) => {
         oi.input(route);
-        const patterns = await store.getWorkflowPatterns(route);
-        const hints = askHints(patterns);
+        const { patterns, hints, docs } = await readAskPatterns(store, memory, route);
         set("patterns.count", patterns.length);
         set("patterns.ask_before_approval", hints.length);
-        oi.retriever(
-          patterns.slice(0, 10).map((p) => {
-            const h = p.hint as { field?: unknown; count?: unknown };
-            return { id: p.id, content: `${p.kind}: ${p.description}`, score: p.kind === ASK_KIND ? 1 : 0.3, metadata: { kind: p.kind, field: h.field ?? null, count: h.count ?? null, observedInAttemptId: p.observedInAttemptId } };
-          }),
-        );
+        oi.retriever(docs);
         return hints;
       });
     } catch (err) {
@@ -353,14 +362,12 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     try {
       const r = await tracer.span("surrealdb.read_context", { "query.kind": "related_complaints", "openinference.span.kind": "RETRIEVER", "complaint.id": draft.id, "complaint.category": draft.category, "transit.line": line ?? "" }, async (set, oi) => {
         oi.input({ category: q.category, line, lat: lat != null ? Number(lat.toFixed(4)) : null, lon: lon != null ? Number(lon.toFixed(4)) : null, radiusMeters: q.radiusMeters, sinceMs: q.sinceMs, othersSinceMs: q.othersSinceMs });
-        const res = await store.findRelatedComplaints!(q);
+        // #22: the card never waits for recall (embedding the draft text); recallAfterCard() decorates afterwards
+        const { related: res, docs } = await readRelated(store, null, q, readyForApprovalItem(draft).text);
         set("related.mine", res.mine.length);
         set("related.others_reports", res.others.reports);
         set("related.others_residents", res.others.residents);
-        oi.retriever([
-          ...res.mine.map((m) => ({ id: m.id, content: `your ${m.status} report at ${m.createdAt}${m.officialRequestNumber ? ` (SR ${m.officialRequestNumber})` : ""}`, score: 1, metadata: { status: m.status, distanceMeters: m.distanceMeters } })),
-          ...res.others.ids.map((id) => ({ id, content: "another resident's report (same category, same line / nearby)", score: 0.8 })),
-        ]);
+        oi.retriever(docs);
         return res;
       });
       const ids = [...r.mine.map((m) => m.id), ...r.others.ids];
@@ -370,6 +377,56 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       console.warn("[orchestrator] related complaints unavailable:", (err as Error).message);
       return [];
     }
+  }
+
+  // ------------------------------------- #5 same issue already raised by another resident
+  const SAME_ISSUE_REASON = "same issue as ";
+  /** The original a DUPLICATE_REVIEW draft was matched to (set by our own code in statusReason, never by a callback). */
+  const sameIssueOriginal = (d: ComplaintDraft) => (d.status === "DUPLICATE_REVIEW" && d.statusReason?.startsWith(SAME_ISSUE_REASON) ? d.statusReason.slice(SAME_ISSUE_REASON.length) : null);
+
+  /** Episodic memory recall across residents (RETRIEVER span; the match is documented without any resident ids). */
+  async function sameIssueCheck(draft: ComplaintDraft): Promise<SameIssueMatch | null> {
+    if (!memory || !draft.category || draft.sameIssueAs) return null;
+    try {
+      return await tracer.span("memory.same_issue", { "openinference.span.kind": "RETRIEVER", "complaint.id": draft.id, "complaint.category": draft.category, "transit.line": draft.transit?.line ?? "", "same_issue.threshold": SAME_ISSUE.threshold }, async (set, oi) => {
+        const m = await findSameIssue({ store, memory }, draft);
+        set("same_issue.matched", !!m);
+        if (m) {
+          set("same_issue.score", m.breakdown.score);
+          set("same_issue.recent_reporters", m.recentReporters);
+          set("same_issue.supporters", m.supporters);
+          oi.retriever([{ id: m.originalId, content: sameIssueLabel(m), score: m.breakdown.score, metadata: { memoryId: m.memoryId, status: m.status, timeBucket: m.timeBucket, ...m.breakdown } }]);
+        }
+        return m;
+      });
+    } catch (err) {
+      console.warn("[orchestrator] same-issue check unavailable:", (err as Error).message);
+      return null;
+    }
+  }
+
+  function rememberChoice(draft: ComplaintDraft, originalId: string, choice: SameIssueChoice) {
+    if (memory) void memory.remember(sameIssueChoiceItem(draft, originalId, choice)).catch((e) => console.warn("[orchestrator] memory (same issue):", (e as Error).message));
+  }
+
+  /** "Add me to the existing report": a lightweight complaint in TRACKING, linked ->same_issue_as-> the original. Nothing is filed. */
+  async function joinSameIssue(ctx: Ctx, draft: ComplaintDraft, originalId: string) {
+    const original = await store.getComplaint(originalId);
+    if (!original || NOT_RAISED.includes(original.status)) {
+      await store.linkNotSameIssue?.(draft.id, originalId).catch(() => null);
+      return void (await advance(ctx, draft, [M.sameIssueGone()]));
+    }
+    let supporters = 0;
+    draft = await tracer.span("user.same_issue_join", { "complaint.id": draft.id, "same_issue.original_id": originalId }, async (set) => {
+      let d = await store.saveComplaint({ ...draft, sameIssueAs: originalId, duplicateReviewed: true });
+      d = await transition(store, d, "TRACKING", { reason: `joined existing report ${originalId} (same issue)`, actor: "user" });
+      supporters = (await store.linkSameIssue?.(d.id, originalId).catch((e) => (console.warn("[orchestrator] linkSameIssue:", (e as Error).message), 0))) ?? 0;
+      set("same_issue.supporters", supporters);
+      return d;
+    });
+    rememberChoice(draft, originalId, "join");
+    const label = sameIssueLabel({ category: original.category!, line: original.transit?.line ?? null, direction: original.transit?.direction ?? null, station: original.transit?.station ?? null });
+    await send(ctx, { text: M.sameIssueJoined(label, sameIssueStatus({ status: original.status, officialRequestNumber: original.officialRequestNumber, category: original.category! }), supporters) });
   }
 
   // ------------------------------------------------------------ the pipeline
@@ -400,6 +457,14 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const hints = await loadAskHints(draft);
     const asked = await askLearned(ctx, draft, hints, prefix);
     if (asked) return asked;
+
+    // [memory #5] Already raised by another resident? Ask before the approval card (join it, or file a new one).
+    const same = await sameIssueCheck(draft);
+    if (same) {
+      draft = await complaints.moveTo(draft, "DUPLICATE_REVIEW", `${SAME_ISSUE_REASON}${same.originalId}`);
+      await send(ctx, { text: [...prefix, sameIssuePrompt(same)].join("\n\n"), buttons: sameIssueButtons(draft) });
+      return draft;
+    }
 
     // Complete → duplicate check (once per location/category). Not for categories without Open Data (subway → MTA).
     const notes: string[] = [...prefix];
@@ -459,12 +524,16 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         contextLines,
       });
       oi.output({ category: draft.category, version: draft.draftVersion, photos: draft.media.length, transit: draft.transit ?? null });
+      // [memory] episodic: this draft reached READY_FOR_APPROVAL (neutral description + transit facts; upserted per complaint; never blocks the card)
+      if (memory) void memory.remember(readyForApprovalItem(draft)).catch((e) => console.warn("[orchestrator] memory (ready):", (e as Error).message));
       return s;
     });
     const parts = [...notes, summary];
     const blocked = needsName(ctx.resident, draft.category);
     if (blocked) parts.push(M.needName());
     await send(ctx, { text: parts.join("\n\n"), buttons: approvalButtons(draft, { canApprove: !blocked }) });
+    // [memory] #22: recall after the card (memory.recall span + /api/memory cache); never awaited
+    if (memory) void recallAfterCard(memory, draft);
     return draft;
   }
 
@@ -503,6 +572,9 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const hadCategory = draft.category;
     const applied = complaints.applyClassification(draft, result);
     draft = applied.draft;
+    // #5/#22: start embedding the same-issue query now (fire-and-forget) so the duplicate gate that runs
+    // just before the card finds the vector in cache instead of waiting on OpenRouter.
+    if (draft.category && memory?.warm) memory.warm(sameIssueQueryText(draft));
     // Deterministic fallback for short answers to the line/direction question ("the A", "downtown").
     if (input.text && requiredFieldsFor(draft.category).includes("transit") && missingTransit(draft.transit).length && applied.decision.kind === "CONTINUE") {
       const hints = transitHintsFromText(input.text);
@@ -703,7 +775,14 @@ export function createOrchestrator(deps: OrchestratorDeps) {
           Promise.all([store.listComplaints({ chatId: ctx.chatId, limit: 20 }), store.listOfficialRequests(ctx.chatId)]),
         );
         const visible = list.filter((c) => c.status !== "CANCELLED" || c.officialRequestNumber);
-        await send(ctx, { text: M.myReports(visible, reqs) });
+        // #5: joined issues show the original's status (never anything about its resident)
+        const supported: Record<string, string> = {};
+        for (const c of visible.slice(0, 5)) {
+          if (!c.sameIssueAs) continue;
+          const o = await store.getComplaint(c.sameIssueAs).catch(() => null);
+          if (o?.category) supported[c.id] = sameIssueStatus({ status: o.status, officialRequestNumber: o.officialRequestNumber, category: o.category });
+        }
+        await send(ctx, { text: M.myReports(visible, reqs, supported) });
         return;
       }
       case "status": {
@@ -825,11 +904,36 @@ export function createOrchestrator(deps: OrchestratorDeps) {
           await send(ctx, { text: M.draftChanged() });
           return void (await advance(ctx, draft));
         }
+        const sameAs = sameIssueOriginal(draft);
+        if (sameAs) {
+          // #5 "It's different — file a new one": remember it (->not_same_as->) so we don't ask about that report again.
+          await store.linkNotSameIssue?.(draft.id, sameAs).catch((e) => console.warn("[orchestrator] linkNotSameIssue:", (e as Error).message));
+          rememberChoice(draft, sameAs, "different");
+          if (isOpenDataBacked(draft.category) && !draft.duplicateReviewed) return void (await advance(ctx, draft, [M.sameIssueDifferent()]));
+          draft = await tracer.span("user.same_issue_different", { "complaint.id": draft.id, "same_issue.original_id": sameAs }, async () =>
+            transition(store, { ...draft!, duplicateReviewed: true }, "READY_FOR_APPROVAL", { reason: `user said it's different from ${sameAs}`, actor: "user" }),
+          );
+          await presentDraft(ctx, draft, [M.sameIssueDifferent()], "user");
+          return;
+        }
         draft = { ...draft, duplicateReviewed: true };
         draft = await tracer.span("user.duplicate_continue", { "complaint.id": draft.id }, async () =>
           transition(store, draft!, "READY_FOR_APPROVAL", { reason: "user chose to continue despite duplicates", actor: "user" }),
         );
         await presentDraft(ctx, draft, [], "user");
+        return;
+      }
+      case "dup_join": {
+        const originalId = sameIssueOriginal(draft);
+        if (!originalId) {
+          await send(ctx, { text: draft.sameIssueAs ? "You're already added to that report. /myreports shows its status." : `This report is ${M_status(draft)}.` });
+          return;
+        }
+        if (cb.version !== draft.draftVersion) {
+          await send(ctx, { text: M.draftChanged() });
+          return void (await advance(ctx, draft));
+        }
+        await joinSameIssue(ctx, draft, originalId);
         return;
       }
       case "status": {

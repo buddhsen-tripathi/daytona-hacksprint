@@ -16,6 +16,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type {
+  AgentMemory,
   BrowserProvider,
   BrowserSessionInfo,
   CategoryId,
@@ -36,10 +37,12 @@ import type {
   WorkerEvent,
   WorkerQuestion,
   WorkerResult,
+  WorkflowPattern,
 } from "../core/contracts.js";
 import { CATEGORIES, DEFAULT_QUESTION_TIMEOUT_MS, nowIso, questionFromEvent, shortId } from "../core/contracts.js";
 import { transition } from "../core/state-machine.js";
 import { askFromOutcome, recordAskPattern } from "./memory.js";
+import { askPatternItem, filingOutcomeItem, liveQuestionItem } from "./agent-memory.js";
 import { RUNS_DIR, env } from "../integrations/env.js";
 import { isRealOnly } from "../core/knowledge.js";
 import { registerEvidenceFile } from "./evidence-registry.js";
@@ -71,6 +74,8 @@ type WorkerStep = WorkerEvent["step"];
 export type FilingServiceDeps = {
   store: Store;
   tracer: Tracer;
+  /** Agent memory (#4): filing outcomes, live questions + answers, learned ask-before-approval rules. Absent ⇒ no memory writes. */
+  memory?: AgentMemory | null;
   /** Either naming is accepted (integrations/index.ts passes `sandbox` / `browser`). */
   sandboxProvider?: SandboxProvider | null;
   sandbox?: SandboxProvider | null;
@@ -254,6 +259,7 @@ export function previewPayload(complaint: ComplaintDraft, resident: Resident, _c
 
 export function createFilingService(deps: FilingServiceDeps): FilingService {
   const { store, tracer } = deps;
+  const memory = deps.memory ?? null;
   const sandboxProvider = deps.sandboxProvider ?? deps.sandbox ?? null;
   const browserProvider = deps.browserProvider ?? deps.browser ?? null;
   const register = deps.evidenceRegistry?.registerEvidenceFile ?? registerEvidenceFile;
@@ -522,6 +528,8 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
                 progress("▶️ Got your answer — continuing in the same browser");
               }
               qoi.output({ answered: Boolean(answer), optionIndex: answer?.optionIndex ?? null, optionLabel: answer?.optionIndex !== undefined ? (q.options?.[answer.optionIndex] ?? null) : null, freeTextChars: answer && answer.optionIndex === undefined ? answer.value.length : null, waitedMs });
+              // [memory] episodic: the question + how it was answered (option label / typed length only); never blocks the browser
+              if (memory) void memory.remember(liveQuestionItem({ complaint, attemptId: attempt.id, question: q, answer, waitedMs })).catch((e) => console.warn("[filing] memory (question):", (e as Error).message));
             })
             .catch((err) => console.warn("[filing] ask_resident failed:", (err as Error).message));
         };
@@ -679,8 +687,19 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         .recordWorkflowPattern({ id: shortId("wp"), target, category, kind: p.kind, description: p.description, hint: p.hint, observedInAttemptId: attempt.id, outcome: status, createdAt: nowIso() })
         .catch(() => {});
       // ---- [memory] ask-before-approval: learn which field the form stalled on (services/memory.ts) ----
+      const learned: WorkflowPattern[] = [];
       for (const observation of askFromOutcome(status, v.errorCode, result)) {
-        await recordAskPattern(store, { target, category, observation, attemptId: attempt.id, outcome: status }).catch((e) => console.warn("[filing] recordAskPattern:", (e as Error).message));
+        const lp = await recordAskPattern(store, { target, category, observation, attemptId: attempt.id, outcome: status }).catch((e) => void console.warn("[filing] recordAskPattern:", (e as Error).message));
+        if (lp) learned.push(lp);
+      }
+      // agent memory: the outcome (episodic) + learned ask-before-approval rules (procedural).
+      // Fire-and-forget like the other write points: embedding can take up to its 20 s timeout and must
+      // never delay the outcome message (memory.flush() drains these in tests / scripts).
+      if (memory) {
+        const dryRun = status === "HUMAN_ACTION_REQUIRED" && !v.errorCode && isRealOnly(category);
+        void memory.remember(filingOutcomeItem({ complaint: current, attempt, status, errorCode: v.errorCode, officialRequestNumber: sr, dryRun })).catch((e) => console.warn("[filing] memory (outcome):", (e as Error).message));
+        for (const lp of learned) void memory.remember(askPatternItem(lp)).catch((e) => console.warn("[filing] memory (pattern):", (e as Error).message));
+        set("memory.writes", 1 + learned.length);
       }
       // ---- [/memory] ----
       oi.output({ attemptId: attempt.id, status, sr, pattern: p.kind, evidence: attempt.evidence.length, timing: attempt.timing });
