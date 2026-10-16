@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>Static official form with CAPTCHA (test fixture)</title></head>
+  <body>
+    <h1>Report a problem</h1>
+    <form id="f" onsubmit="window.__submitted = true; event.preventDefault();">
+      <label for="desc">Describe the problem</label>
+      <textarea id="desc" name="desc" required></textarea>
+      <div class="g-recaptcha" data-sitekey="test-site-key"></div>
+      <button type="submit">Submit</button>
+    </form>
+    <script>window.__submitted = false;</script>
+  </body>
+</html>

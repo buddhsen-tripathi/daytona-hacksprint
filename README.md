@@ -82,6 +82,15 @@ Before opening a PR, run what CI runs (typecheck, worker build, bot tests; no `.
 pnpm check
 ```
 
+## Deploy (Render + Vercel)
+
+The bot is a long-running Node process (Telegram long polling, CDP bridge during filings), so it runs on **Render**; the dashboard runs on **Vercel**.
+
+1. **Render → New → Blueprint**, pick this repo. `render.yaml` creates `relay-bot` (Starter + 1 GB disk for `.runs/`) and `relay-phoenix` (Phoenix with login, own disk). Fill in the `sync: false` values when prompted; `OPERATOR_API_TOKEN` is generated.
+2. Stop any local bot using the same `TELEGRAM_BOT_TOKEN` (one poller per token). Never scale `relay-bot` above one instance.
+3. Open `relay-phoenix`'s URL, log in as `admin@localhost` with `PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD`, create a system API key, then set `PHOENIX_COLLECTOR_ENDPOINT` (that URL) and `PHOENIX_API_KEY` on `relay-bot`.
+4. **Vercel → Add New → Project**, import this repo, root directory `apps/dashboard`. Env: `BOT_API_URL` (the `relay-bot` URL), `OPERATOR_API_TOKEN` (same value as on Render), `DASHBOARD_PASSWORD`.
+
 ## Real filing targets
 
 - **Subway delay → MTA Customer Feedback wizard** (`contact.mta.info`). Full automation, but a dry run unless `ALLOW_REAL_SUBMIT=1` (see below).

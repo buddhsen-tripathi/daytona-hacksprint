@@ -365,6 +365,21 @@ export type Resident = z.infer<typeof Resident>;
 export const FilingTarget = z.literal("real");
 export type FilingTarget = z.infer<typeof FilingTarget>;
 
+/**
+ * Declarative form recipe (#9) run by the worker's recipe adapter (apps/worker/src/adapters/recipe.ts documents the
+ * step grammar and validates it strictly). Stored in procedural memory / fixtures/recipes/<categoryId>.json.
+ */
+export const FormRecipe = z.object({
+  id: z.string(),
+  /** Must equal FilingPayload.category. */
+  categoryId: z.string().regex(/^[a-z0-9-]+$/),
+  version: z.number(),
+  description: z.string().optional(),
+  /** One key per step: open | click | choose | continue | inspect | pick | fill | when | submitIf | confirm. */
+  steps: z.array(z.record(z.string(), z.unknown())).min(1),
+});
+export type FormRecipe = z.infer<typeof FormRecipe>;
+
 /** Written to /work/payload.json inside the sandbox. Contains NO secrets except the ephemeral CDP URL. */
 export const FilingPayload = z.object({
   attemptId: z.string(),
@@ -372,6 +387,13 @@ export const FilingPayload = z.object({
   approvedVersion: z.number(),
   target: FilingTarget,
   category: CategoryId,
+  /**
+   * Optional (#9): how the worker should file this category, as in CatalogEntry.automation. Absent ⇒ the worker's
+   * registry default for `category` (subway-delay → adapter:mta-subway-delay). "handoff" ⇒ open formUrl, prefill, never submit.
+   */
+  automation: CatalogAutomation.optional(),
+  /** Optional (#9): the recipe for `automation: "adapter:recipe"`. */
+  recipe: FormRecipe.optional(),
   /** Absolute URL the worker is allowed to open first (allowlist root). */
   formUrl: z.string().url(),
   /** Hostnames the worker may navigate within. Anything else ⇒ HUMAN_ACTION_REQUIRED. */
@@ -446,6 +468,7 @@ export const FilingErrorCode = z.enum([
   "BROWSER_ERROR",
   "WORKER_CRASH",
   "SANDBOX_ERROR",
+  "NO_ADAPTER", // #9: the worker has no adapter for this category/automation; nothing was opened
 ]);
 export type FilingErrorCode = z.infer<typeof FilingErrorCode>;
 

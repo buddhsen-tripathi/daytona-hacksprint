@@ -100,6 +100,17 @@ describe("operator API auth over HTTP", () => {
     expect(authed).toContain("rider-1");
   });
 
+  it("POST /api/event: 401 without the token, so nobody can act (or approve) as another chat", async () => {
+    process.env.OPERATOR_API_TOKEN = TOKEN;
+    const body = JSON.stringify({ chatId: "rider-1", kind: "callback", data: "approve:cmp_a:1" });
+    for (const p of ["/api/event", "/api/demo/event"]) {
+      const res = await fetch(base + p, { method: "POST", headers: { "content-type": "application/json" }, body });
+      expect(res.status, p).toBe(401);
+    }
+    const wrong = await fetch(`${base}/api/event`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer nope" }, body });
+    expect(wrong.status).toBe(401);
+  });
+
   it("token unset: loopback callers are trusted (local dev default)", async () => {
     delete process.env.OPERATOR_API_TOKEN;
     expect((await fetch(`${base}/api/complaints`)).status).toBe(200);

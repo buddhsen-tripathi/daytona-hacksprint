@@ -5,7 +5,8 @@
  * Auth (#23): with OPERATOR_API_TOKEN set, GET /api/* needs `Authorization: Bearer <token>`; with it unset,
  * only loopback callers are trusted (local dev). /api/health is always open. An untrusted caller may still
  * read GET /api/memory?complaintId=… (the complaint id acts as a capability), with chat ids / contact fields
- * redacted. Everything else ⇒ 401 JSON. POST /api/event and /telegram/webhook are unchanged.
+ * redacted. Everything else ⇒ 401 JSON. POST /api/event needs the same operator check (it can act as any chat,
+ * including an approve tap). /telegram/webhook is guarded by TELEGRAM_WEBHOOK_SECRET.
  * POST /api/repairs/:id/approve|reject (#13) uses the same operator check (401 otherwise).
  */
 import { timingSafeEqual } from "node:crypto";
@@ -227,6 +228,9 @@ export function createApiServer(deps: ApiDeps): Server {
 
       // POST /api/event (legacy alias: /api/demo/event).
       if (req.method === "POST" && (seg[1] === "event" || (seg[1] === "demo" && seg[2] === "event"))) {
+        if (!isOperator(req)) {
+          return json(res, 401, { error: "unauthorized", message: "Authorization: Bearer <OPERATOR_API_TOKEN> required" });
+        }
         const body = JSON.parse((await readBody(req)) || "{}");
         const parsed = InboundEvent.safeParse({ updateId: `api-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, username: null, ...body });
         if (!parsed.success) return json(res, 400, { error: "invalid InboundEvent", issues: parsed.error.issues });
