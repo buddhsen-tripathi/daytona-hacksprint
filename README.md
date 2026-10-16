@@ -1,5 +1,7 @@
 # 311Relay
 
+[![CI](https://github.com/buddhsen-tripathi/daytona-hacksprint/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/buddhsen-tripathi/daytona-hacksprint/actions/workflows/ci.yml)
+
 **See something. Send it. Track it.**
 
 311Relay is a Telegram agent for reporting problems where they actually have to be reported. Drop a photo or describe what's wrong; 311Relay works out where it must be filed, fills the official form in a real browser, and verifies the result with a session recording and the official reference.
@@ -72,6 +74,12 @@ By default the subway scenarios answer the bot's follow-ups and **stop at the ap
 TELEGRAM_BOT_TOKEN= PORT_API=3399 pnpm --filter @311relay/bot start          # a local API next to the live bot
 pnpm --filter @311relay/bot evals -- --api http://localhost:3399 --offline
 pnpm --filter @311relay/bot evals -- --api http://localhost:3399 --only subway-delay-a-train --with-dry-run subway-delay-a-train
+```
+
+Before opening a PR, run what CI runs (typecheck, worker build, bot tests; no `.env` or keys needed):
+
+```bash
+pnpm check
 ```
 
 ## Real filing targets
