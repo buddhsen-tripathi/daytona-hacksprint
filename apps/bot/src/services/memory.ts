@@ -12,8 +12,14 @@
  *    the related-complaint query (memory store) and the card lines.
  *
  * Nothing here invents a value: every answer stored comes from the resident.
+ *
+ * C. Reads through AgentMemory (#4): `readAskPatterns` / `readRelated` keep the
+ *    store queries as the structural filter (so behaviour is unchanged) and use
+ *    `memory.recall()` to rank/explain them; the RETRIEVER span documents carry
+ *    the recall score + breakdown. These are the orchestrator's only memory reads.
  */
 import type {
+  AgentMemory,
   CategoryId,
   ComplaintDraft,
   FilingErrorCode,
@@ -23,6 +29,7 @@ import type {
   RelatedComplaints,
   RelatedComplaintsQuery,
   Resident,
+  ScoredMemory,
   Store,
   WorkerResult,
   WorkflowPattern,
@@ -344,4 +351,78 @@ export function relatedCardLines(q: Pick<RelatedComplaintsQuery, "category" | "l
     out.push(`👥 ${n} ${who} reported ${esc(issueLabel(q.category, q.line, true))}${near} ${span}.`);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// C. reads through AgentMemory (structural filter from the store, ranking + explanation from recall)
+// ---------------------------------------------------------------------------
+export type RetrieverDoc = { id: string; content: string; score?: number; metadata?: Record<string, unknown> };
+
+/** Recall must never hold up the approval card: past the budget we answer from the store alone. */
+export const RECALL_BUDGET_MS = 2500;
+
+async function recallWithin(memory: AgentMemory | null | undefined, q: Parameters<AgentMemory["recall"]>[0]): Promise<ScoredMemory[]> {
+  if (!memory) return [];
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([memory.recall(q), new Promise<ScoredMemory[]>((r) => (timer = setTimeout(() => r([]), RECALL_BUDGET_MS)))]);
+  } catch (err) {
+    console.warn("[memory] recall failed:", (err as Error).message);
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const explain = (m: ScoredMemory | undefined) => (m ? { memory: { id: m.id, text: m.text, score: m.score, breakdown: m.breakdown } } : {});
+
+/** A. ask-before-approval hints for a route: patterns from the store; scores from procedural memory. */
+export async function readAskPatterns(
+  store: Store,
+  memory: AgentMemory | null | undefined,
+  route: { target: FilingTarget; category: CategoryId },
+): Promise<{ patterns: WorkflowPattern[]; hints: AskHint[]; docs: RetrieverDoc[] }> {
+  const [patterns, recalled] = await Promise.all([store.getWorkflowPatterns(route), recallWithin(memory, { kind: "procedural", scope: { category: route.category }, limit: 50 })]);
+  const byPattern = new Map<string, ScoredMemory>();
+  for (const m of recalled) {
+    const id = (m.data as { patternId?: unknown }).patternId;
+    if (typeof id === "string" && !byPattern.has(id)) byPattern.set(id, m);
+  }
+  const docs = patterns.slice(0, 10).map((p) => {
+    const h = p.hint as { field?: unknown; count?: unknown };
+    const m = byPattern.get(p.id);
+    return { id: p.id, content: `${p.kind}: ${p.description}`, score: m?.score ?? (p.kind === ASK_KIND ? 1 : 0.3), metadata: { kind: p.kind, field: h.field ?? null, count: h.count ?? null, observedInAttemptId: p.observedInAttemptId, ...explain(m) } };
+  });
+  return { patterns, hints: askHints(patterns), docs };
+}
+
+/**
+ * B. Remembered issues: the store's related-complaint query decides WHAT is related (unchanged); recall over the
+ * resident's own episodic memory (scope.chatId — never other residents' items) ranks and explains "mine".
+ * Other residents stay counts only.
+ */
+export async function readRelated(
+  store: Store,
+  memory: AgentMemory | null | undefined,
+  q: RelatedComplaintsQuery,
+  queryText: string,
+): Promise<{ related: RelatedComplaints; docs: RetrieverDoc[] }> {
+  const geo = !q.line && q.lat != null && q.lon != null ? { lat: q.lat, lon: q.lon, radiusMeters: q.radiusMeters ?? RELATED_DEFAULTS.radiusMeters } : null;
+  const [related, recalled] = await Promise.all([
+    store.findRelatedComplaints!(q),
+    recallWithin(memory, { text: queryText, kind: "episodic", scope: { chatId: q.chatId, category: q.category, line: q.line ?? null, geo }, sinceMs: q.sinceMs ?? RELATED_DEFAULTS.sinceMs, limit: 30 }),
+  ]);
+  const byComplaint = new Map<string, ScoredMemory>();
+  for (const m of recalled) {
+    const id = (m.data as { complaintId?: unknown }).complaintId;
+    if (typeof id === "string" && m.chatId === q.chatId && !byComplaint.has(id)) byComplaint.set(id, m);
+  }
+  const docs: RetrieverDoc[] = [
+    ...related.mine.map((m) => {
+      const s = byComplaint.get(m.id);
+      return { id: m.id, content: `your ${m.status} report at ${m.createdAt}${m.officialRequestNumber ? ` (SR ${m.officialRequestNumber})` : ""}`, score: s?.score ?? 1, metadata: { status: m.status, distanceMeters: m.distanceMeters, ...explain(s) } };
+    }),
+    ...related.others.ids.map((id) => ({ id, content: "another resident's report (same category, same line / nearby)", score: 0.8 })),
+  ];
+  return { related, docs };
 }
