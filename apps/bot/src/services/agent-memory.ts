@@ -5,7 +5,7 @@
  *   score = 0.5·relevance + 0.3·recency + 0.2·importance
  *
  *   relevance  cosine(query, item) when both have embeddings from the same model,
- *              else keyword overlap (share of query terms found in the item),
+ *              else 0.6 · Jaccard(query terms, item terms) (on the cosine scale, #22),
  *              0 when the query has no text
  *   recency    0.5^(age / 7 days)
  *   importance 0..1, set at write time
