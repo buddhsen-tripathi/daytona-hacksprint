@@ -171,10 +171,14 @@ switch (scenario) {
     break;
   case "subway": {
     let msgs = await say("The A train sat at 14 St for 25 minutes this morning around 8:30, downtown, no announcements");
-    for (let i = 0; i < 3 && !findButton(msgs, "approve"); i++) {
+    for (let i = 0; i < 4 && !findButton(msgs, "approve"); i++) {
       const last = stripHtml(msgs[msgs.length - 1]?.text ?? "");
+      const dir = findButton(msgs, "set_direction");
+      const time = findButton(msgs, "set_time");
       if (/which line/i.test(last)) msgs = await say("The A train");
+      else if (dir) msgs = await say("Downtown");
       else if (/which direction/i.test(last)) msgs = await say("Downtown");
+      else if (time) msgs = await tap(`${time.split(":").slice(0, 3).join(":")}:now`);
       else break;
     }
     const asked = transport.messages.some((m) => m.requestLocation || /share the location|nearest intersection/i.test(m.text));

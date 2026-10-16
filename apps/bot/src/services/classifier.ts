@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { CATEGORIES, CLASSIFY_CONFIDENCE_THRESHOLD, CategoryId, ClassificationResult, SUBWAY_LINES } from "../core/contracts.js";
 import { sanitizeTransit } from "./complaints.js";
+import { nycIso } from "../core/knowledge.js";
 import type { Classifier } from "../core/contracts.js";
 import { chatJson, OpenRouterError } from "../integrations/openrouter.js";
 import type { ChatMessage, ContentPart, ChatUsage } from "../integrations/openrouter.js";
@@ -38,7 +39,7 @@ SUBWAY DELAYS ("subway-delay"):
   - "line": the canonical line exactly as one of ${JSON.stringify(SUBWAY_LINES)} — "A train" ⇒ "A", "the 7" ⇒ "7", "L" ⇒ "L", "42nd St shuttle" ⇒ "S-42 Street Shuttle".
   - "direction": as the resident said it, e.g. "downtown", "uptown", "Manhattan-bound", "toward Coney Island".
   - "station": the station they named, e.g. "14 St" or "Jay St-MetroTech"; "borough" only if stated.
-  - "incidentTime": ISO 8601 with the New York UTC offset if a time was given, using the current New York date/time given in the user message for words like "today", "this morning", "just now" (e.g. "this morning at 8:30" ⇒ today's date at 08:30 local, like "2026-10-16T08:30:00-04:00"); null if no time was given.
+  - "incidentTime": ISO 8601 with the New York UTC offset if a time was given, using the current New York date/time given in the user message for words like "today", "this morning", "just now" (e.g. "this morning at 8:30" ⇒ today's date at 08:30 local, like "2026-10-16T08:30:00-04:00"). If the resident indicates it is happening now or just happened ("atm", "right now", "currently", "just now", "is delayed", "I'm stuck", present tense with no other time), set incidentTime to the "now" value given in the user message. Otherwise null.
   - "delayMinutes": number if stated ("25 minutes" ⇒ 25), else null.
 - For subway-delay the description is the resident's experience in neutral terms (line, direction, station, how long, what happened), from their words only.
 
@@ -96,7 +97,7 @@ export function buildUserText(input: ClassifyInput, imageCount: number, skipped:
   lines.push(`Latest message from the resident: ${input.text && input.text.trim() ? input.text.trim() : "(no text)"}`);
   lines.push(`Photos attached: ${imageCount}${skipped ? ` (${skipped} could not be read)` : ""}`);
   lines.push(`Location already provided by the resident: ${input.locationKnown ? "yes" : "no"} (do not ask for it)`);
-  lines.push(`Current date/time in New York: ${nycNow()}`);
+  lines.push(`Current date/time in New York: ${nycNow()}`, `now: ${nycIso()}`);
   lines.push("", "Classify this report.");
   return lines.join("\n");
 }

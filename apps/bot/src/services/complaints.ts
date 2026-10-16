@@ -104,6 +104,8 @@ export function createComplaintService(store: Store) {
         transit,
         updatedAt: nowIso(),
       };
+      // Subway: the text sent to the MTA is composed deterministically from the resident's own words + facts.
+      if (requiredFieldsFor(nextCategory).includes("transit")) after.description = composeSubwayDescription(after);
       const next = svc.computeMissing(reconcile(draft, after));
       let decision: TriageDecision;
       if (triage === "EMERGENCY") decision = { kind: "EMERGENCY" };
@@ -122,7 +124,9 @@ export function createComplaintService(store: Store) {
     /** Merge user-provided transit details (deterministic answers to the line/direction questions). */
     setTransit(draft: ComplaintDraft, patch: Partial<TransitDetails>): ComplaintDraft {
       const merged = mergeTransit(draft.transit, { line: null, direction: null, station: null, borough: null, incidentTime: null, delayMinutes: null, ...patch });
-      return svc.computeMissing(reconcile(draft, { ...draft, transit: merged, updatedAt: nowIso() }));
+      const after: ComplaintDraft = { ...draft, transit: merged, updatedAt: nowIso() };
+      if (requiredFieldsFor(after.category).includes("transit")) after.description = composeSubwayDescription(after);
+      return svc.computeMissing(reconcile(draft, after));
     },
 
     setDescription(draft: ComplaintDraft, description: string): ComplaintDraft {
@@ -225,6 +229,46 @@ export function sanitizeTransit(t: TransitDetails | null | undefined): TransitDe
   };
 }
 
+/** Messages that describe the issue: the first one always; later ones only if they're more than a short answer. */
+export function residentWords(messages: string[]): string[] {
+  const out: string[] = [];
+  messages.forEach((raw, i) => {
+    const m = raw.trim().replace(/\s+/g, " ");
+    if (!m || m.startsWith("/")) return;
+    if (i > 0 && m.split(" ").length < 4) return;
+    if (!out.includes(m)) out.push(m);
+  });
+  return out;
+}
+
+/**
+ * The MTA "Tell us more" text: the resident's own words verbatim in quotes, then the facts they gave
+ * (canonical line/direction, station, time, delay), then attribution. Nothing invented.
+ */
+export function composeSubwayDescription(draft: Pick<ComplaintDraft, "userMessages" | "transit" | "description">): string {
+  const words = residentWords(draft.userMessages);
+  const t = draft.transit;
+  const quote = words.length ? `"${words.join(" ")}"` : draft.description.trim() ? `"${draft.description.trim()}"` : "";
+  const when = t?.incidentTime ? fmtObserved(t.incidentTime) : null;
+  const facts = [
+    t?.line ? `Line: ${t.line}` : null,
+    t?.direction ? `Direction: ${t.direction}` : null,
+    t?.station ? `Nearest station: ${t.station}` : null,
+    when ? `Observed: ${when}` : null,
+    t?.delayMinutes ? `Delay: ~${t.delayMinutes} min` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return [quote, facts, "Reported through 311Relay on behalf of the rider."].filter(Boolean).join("\n\n").slice(0, 4000);
+}
+
+/** "Oct 16, 2026, 8:30 AM" (New York time). */
+function fmtObserved(iso: string): string | null {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+}
+
 /** "8:30 AM, Oct 16" in New York time. */
 export function fmtIncidentTime(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -253,7 +297,7 @@ function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string
     `<b>Line &amp; direction:</b> ${esc(lineDir)}`,
     `<b>Station:</b> ${station}`,
     `<b>When:</b> ${esc(when)}`,
-    `<b>Description:</b> ${esc(draft.description || "-")}`,
+    `<b>Sent to the MTA exactly as written:</b>\n<i>${esc(draft.description || "-")}</i>`,
     `<b>Where it's filed:</b> ${esc(cat?.officialLabel ?? "MTA Customer Feedback")}`,
   ];
   if (opts.contactName) lines.push(`<b>Contact name:</b> ${esc(opts.contactName)}`);

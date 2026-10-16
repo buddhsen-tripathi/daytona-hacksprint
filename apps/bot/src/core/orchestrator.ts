@@ -27,7 +27,7 @@ import type {
   Tracer,
   Transport,
 } from "./contracts.js";
-import { PortalMode as PortalModeSchema, decodeCallback, nowIso, shortId } from "./contracts.js";
+import { PortalMode as PortalModeSchema, decodeCallback, encodeCallback, nowIso, shortId } from "./contracts.js";
 import {
   NYC311_CHECK_STATUS_URL,
   NYC311_REPORT_URL,
@@ -36,12 +36,16 @@ import {
   isOpenDataBacked,
   isRealOnly,
   missingTransit,
+  mtaDirectionOptions,
+  nycIso,
+  parseIncidentTime,
   requiredFieldsFor,
+  resolveDirection,
   requiresContactName,
   transitHintsFromText,
 } from "./knowledge.js";
 import { canTransition, transition } from "./state-machine.js";
-import { OPEN_STATES, createComplaintService, lineLabel } from "../services/complaints.js";
+import { OPEN_STATES, createComplaintService, fmtIncidentTime, lineLabel } from "../services/complaints.js";
 import { getActiveAlertsForLine, isDelayAlert, type MtaAlertsResult } from "../integrations/mta-alerts.js";
 import { M, esc } from "../telegram/messages.js";
 import { approvalButtons, duplicateButtons, isButtonSafeUrl, linkButton, trackingButtons } from "../telegram/keyboards.js";
@@ -143,6 +147,58 @@ export function createOrchestrator(deps: OrchestratorDeps) {
   }
 
   const fetchAlerts = deps.mtaAlerts ?? ((line: string) => getActiveAlertsForLine(line));
+  /** Subway drafts we already asked "When did this happen?" (asked once; then we continue without a time). */
+  const timeAsked = new Set<string>();
+
+  const needsTransit = (d: ComplaintDraft) => requiredFieldsFor(d.category).includes("transit");
+  /** The line is known but the direction is not (yet) one of the MTA form's two options for it. */
+  function directionUnresolved(d: ComplaintDraft): boolean {
+    const opts = mtaDirectionOptions(d.transit?.line);
+    return !!opts && !opts.includes(d.transit?.direction ?? "");
+  }
+
+  /**
+   * Subway: resolve line → direction (in the MTA form's own terms) → time, one question at a time.
+   * Returns the updated draft, or null when a question was sent (draft is in NEEDS_INFORMATION).
+   */
+  async function resolveTransit(ctx: Ctx, draft: ComplaintDraft, prefix: string[]): Promise<ComplaintDraft | null> {
+    const t = draft.transit;
+    if (!t?.line) {
+      draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: transit line");
+      await send(ctx, { text: [...prefix, M.askTransit(["line"])].join("\n\n") });
+      return null;
+    }
+    const opts = mtaDirectionOptions(t.line);
+    if (opts && !opts.includes(t.direction ?? "")) {
+      const hit = resolveDirection(t.line, t.direction);
+      if (hit) draft = complaints.setTransit(draft, { direction: hit });
+      else {
+        draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: direction");
+        await send(ctx, {
+          text: [...prefix, M.askDirection(t.line, t.direction)].join("\n\n"),
+          buttons: opts.map((label, i) => [{ text: label, data: `${encodeCallback("set_direction", draft.id, draft.draftVersion)}:d=${i}` }]),
+        });
+        return null;
+      }
+    } else if (!opts && !t.direction?.trim()) {
+      draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: transit direction");
+      await send(ctx, { text: [...prefix, M.askTransit(["direction"])].join("\n\n") });
+      return null;
+    }
+    if (!draft.transit?.incidentTime && !timeAsked.has(draft.id)) {
+      timeAsked.add(draft.id);
+      draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: time");
+      await send(ctx, {
+        text: [...prefix, M.askTime()].join("\n\n"),
+        buttons: [
+          [{ text: "Just now", data: `${encodeCallback("set_time", draft.id, draft.draftVersion)}:now` }],
+          [{ text: "Earlier today — I'll type the time", data: `${encodeCallback("set_time", draft.id, draft.draftVersion)}:later` }],
+        ],
+      });
+      return null;
+    }
+    return draft;
+  }
 
   /** Live MTA alert corroboration for subway categories (the analogue of the Open Data duplicate check). */
   async function mtaAlertLine(draft: ComplaintDraft): Promise<string | null> {
@@ -180,11 +236,10 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       await send(ctx, { text: [...prefix, draft.missingFields.includes("category") ? M.clarify(q) : M.needDescription()].join("\n\n") });
       return draft;
     }
-    if (draft.missingFields.includes("transit")) {
-      const missing = missingTransit(draft.transit);
-      draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", `missing: transit ${missing.join("+")}`);
-      await send(ctx, { text: [...prefix, M.askTransit(missing)].join("\n\n") });
-      return draft;
+    if (needsTransit(draft)) {
+      const resolved = await resolveTransit(ctx, draft, prefix);
+      if (!resolved) return (await store.getComplaint(draft.id)) ?? draft;
+      draft = resolved;
     }
     if (draft.missingFields.includes("location")) {
       draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: location");
@@ -391,6 +446,29 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const trimmed = text.trim();
     if (!trimmed) return;
     let draft = await openOrNewDraft(ctx);
+    // Subway: direct answers to our own direction / time questions are resolved deterministically (no LLM round trip).
+    if (draft.status === "NEEDS_INFORMATION" && needsTransit(draft) && draft.transit?.line) {
+      if (draft.statusReason === "missing: direction" && directionUnresolved(draft)) {
+        const hit = resolveDirection(draft.transit.line, trimmed);
+        if (hit) {
+          draft = await store.saveComplaint(complaints.setTransit(draft, { direction: hit }));
+          await advance(ctx, draft, [M.directionSet(hit)]);
+          return;
+        }
+      }
+      if (draft.statusReason === "missing: time" && !draft.transit.incidentTime) {
+        const iso = parseIncidentTime(trimmed);
+        if (iso) {
+          draft = await store.saveComplaint(complaints.setTransit(draft, { incidentTime: iso }));
+          await advance(ctx, draft, [M.timeSet(fmtIncidentTime(iso) ?? trimmed)]);
+          return;
+        }
+        if (/^(skip|no|not sure|don'?t know|idk|dunno|unknown)\b/i.test(trimmed)) {
+          await advance(ctx, draft);
+          return;
+        }
+      }
+    }
     const lacksLocation = !draft.location.userConfirmed || draft.location.withinNyc === false || draft.statusReason === "user requested edit";
     // Subway reports mention stations ("at 14 St") that look like addresses: they are transit details, not a 311 location.
     const wantsLocation = draft.category ? requiredFieldsFor(draft.category).includes("location") : !looksLikeTransit(trimmed);
@@ -639,6 +717,36 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         }
         const url = r?.receiptUrl && !/^DEMO-/.test(sr) ? r.receiptUrl : NYC311_CHECK_STATUS_URL;
         await send(ctx, { text: `Service request <b>${sr}</b>\n${url}` });
+        return;
+      }
+      case "set_direction":
+      case "set_time": {
+        if (!OPEN_STATES.includes(draft.status) || !needsTransit(draft) || !draft.transit?.line) {
+          await send(ctx, { text: `This report is ${M_status(draft)}.` });
+          return;
+        }
+        if (cb.version !== draft.draftVersion) {
+          await send(ctx, { text: M.draftChanged() });
+          return void (await advance(ctx, draft));
+        }
+        const suffix = ev.data.split(":").slice(3).join(":");
+        if (cb.action === "set_direction") {
+          const opts = mtaDirectionOptions(draft.transit.line);
+          const idx = Number(/^d=(\d)$/.exec(suffix)?.[1] ?? -1);
+          const label = opts?.[idx];
+          if (!label) return void (await advance(ctx, draft));
+          draft = await store.saveComplaint(complaints.setTransit(draft, { direction: label }));
+          await advance(ctx, draft, [M.directionSet(label)]);
+          return;
+        }
+        if (suffix === "now") {
+          const iso = nycIso();
+          draft = await store.saveComplaint(complaints.setTransit(draft, { incidentTime: iso }));
+          await advance(ctx, draft, [M.timeSet(fmtIncidentTime(iso) ?? "just now")]);
+          return;
+        }
+        draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: time");
+        await send(ctx, { text: M.askTimeTyped() });
         return;
       }
       case "retry_location":

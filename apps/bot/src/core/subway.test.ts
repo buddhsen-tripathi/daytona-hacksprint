@@ -157,3 +157,121 @@ describe("MTA receipts + alerts", () => {
     expect(routeIdsForLine("7")).toEqual(["7", "7X"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Direction in the MTA form's own terms + incident time + composed description
+// ---------------------------------------------------------------------------
+import { MTA_DIRECTIONS, parseIncidentTime, resolveDirection } from "./knowledge.js";
+import { composeSubwayDescription } from "../services/complaints.js";
+import { createOrchestrator } from "./orchestrator.js";
+import { createCaptureTransport } from "../api/capture-transport.js";
+import { createBoundsLocationService, createNoopTracer, createUnavailableDuplicateService, createUnavailableFilingService } from "../integrations/fallbacks.js";
+import type { Classifier } from "./contracts.js";
+
+describe("MTA direction resolution", () => {
+  it("maps what riders say to exactly one MTA option, or asks", () => {
+    expect(resolveDirection("A", "downtown")).toBe("Downtown & Queens");
+    expect(resolveDirection("A", "southbound")).toBe("Downtown & Queens");
+    expect(resolveDirection("A", "toward Inwood")).toBe("Uptown (Inwood-207 St)");
+    expect(resolveDirection("A", "Manhattan-bound")).toBeNull();
+    expect(resolveDirection("A", "towards Manhattan")).toBeNull();
+    expect(resolveDirection("7", "Manhattan-bound")).toBe("Manhattan (34 St-Hudson Yards)");
+    expect(resolveDirection("L", "to Brooklyn")).toBe("Brooklyn (Canarsie-Rockaway Pkwy)");
+    expect(resolveDirection("A", null)).toBeNull();
+  });
+  it("every option label resolves to itself (the worker gets an exact label)", () => {
+    for (const [line, opts] of Object.entries(MTA_DIRECTIONS)) for (const o of opts) expect(resolveDirection(line, o)).toBe(o);
+  });
+});
+
+describe("incident time", () => {
+  const now = new Date("2026-10-16T16:47:00Z"); // 12:47 PM New York (EDT)
+  it("parses typed times today in New York, never in the future", () => {
+    expect(parseIncidentTime("just now", now)).toBe("2026-10-16T12:47:00-04:00");
+    expect(parseIncidentTime("8:30", now)).toBe("2026-10-16T08:30:00-04:00");
+    expect(parseIncidentTime("around 8 this morning", now)).toBe("2026-10-16T08:00:00-04:00");
+    expect(parseIncidentTime("12:15pm", now)).toBe("2026-10-16T12:15:00-04:00");
+    expect(parseIncidentTime("11:30", now)).toBe("2026-10-16T11:30:00-04:00");
+    expect(parseIncidentTime("5pm", now)).toBeNull();
+    expect(parseIncidentTime("yesterday at 8", now)).toBeNull();
+    expect(parseIncidentTime("it was bad", now)).toBeNull();
+  });
+});
+
+describe("composed MTA description", () => {
+  it("quotes the rider verbatim, adds only facts they gave, and attributes", () => {
+    const text = composeSubwayDescription({
+      userMessages: ["A train delayed towards Manhattan, sat 20 minutes at Jay St", "Downtown"],
+      description: "",
+      transit: T({ line: "A", direction: "Downtown & Queens", station: "Jay St-MetroTech", incidentTime: "2026-10-16T08:30:00-04:00", delayMinutes: 20 }),
+    });
+    expect(text).toBe(
+      '"A train delayed towards Manhattan, sat 20 minutes at Jay St"\n\nLine: A · Direction: Downtown & Queens · Nearest station: Jay St-MetroTech · Observed: Oct 16, 2026, 8:30 AM · Delay: ~20 min\n\nReported through 311Relay on behalf of the rider.',
+    );
+  });
+});
+
+describe("orchestrator: subway direction + time before approval", () => {
+  it("asks for the direction in MTA terms with two buttons, then the time, then shows the card", async () => {
+    const store = createMemoryStore();
+    const transport = createCaptureTransport();
+    const classifier: Classifier = {
+      async classify() {
+        return { result: subway(T({ line: "A", direction: "Manhattan-bound", incidentTime: null }), "The A train was delayed towards Manhattan."), model: "fake", usage: { promptTokens: null, completionTokens: null } };
+      },
+    };
+    const o = createOrchestrator({
+      store,
+      tracer: createNoopTracer(),
+      classifier,
+      location: createBoundsLocationService(),
+      duplicates: createUnavailableDuplicateService(),
+      filing: createUnavailableFilingService(),
+      transport,
+      mtaAlerts: async () => ({ alerts: [], fetchedAt: null, source: "mta" }),
+    });
+    let n = 0;
+    const ev = (e: Record<string, unknown>) => o.handle({ chatId: "c1", updateId: `u${++n}`, username: null, ...e } as never);
+    await ev({ kind: "text", text: "A train delayed towards Manhattan" });
+    let last = transport.messages[transport.messages.length - 1]!;
+    expect(last.text).toContain("Which way was the A going? The MTA form lists:");
+    expect(last.buttons?.map((r) => r[0]!.text)).toEqual(["Uptown (Inwood-207 St)", "Downtown & Queens"]);
+    expect(transport.messages.some((m) => m.requestLocation)).toBe(false);
+    await ev({ kind: "callback", data: last.buttons![1]![0]!.data!, messageId: null });
+    last = transport.messages[transport.messages.length - 1]!;
+    expect(last.text).toContain("When did this happen?");
+    const timeNow = last.buttons!.flat().find((b) => b.data?.endsWith(":now"))!.data!;
+    await ev({ kind: "callback", data: timeNow, messageId: null });
+    last = transport.messages[transport.messages.length - 1]!;
+    expect(last.text).toContain("Line &amp; direction:</b> A train, Downtown &amp; Queens");
+    expect(last.text).toContain('"A train delayed towards Manhattan"');
+    expect(last.text).toContain("Reported through 311Relay on behalf of the rider.");
+    expect(last.buttons?.flat().some((b) => b.data?.startsWith("approve:"))).toBe(true);
+    const d = (await store.listComplaints({ chatId: "c1" }))[0]!;
+    expect(d.status).toBe("READY_FOR_APPROVAL");
+    expect(d.transit).toMatchObject({ line: "A", direction: "Downtown & Queens" });
+    expect(d.transit?.incidentTime).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:00-0[45]:00$/);
+    expect(d.description).toContain("Direction: Downtown & Queens");
+  });
+
+  it("accepts a typed direction answer", async () => {
+    const store = createMemoryStore();
+    const transport = createCaptureTransport();
+    let calls = 0;
+    const classifier: Classifier = {
+      async classify() {
+        calls++;
+        return { result: subway(T({ line: "A", direction: "Manhattan-bound", incidentTime: "2026-10-16T08:30:00-04:00" })), model: "fake", usage: { promptTokens: null, completionTokens: null } };
+      },
+    };
+    const o = createOrchestrator({ store, tracer: createNoopTracer(), classifier, location: createBoundsLocationService(), duplicates: createUnavailableDuplicateService(), filing: createUnavailableFilingService(), transport, mtaAlerts: async () => ({ alerts: [], fetchedAt: null, source: "mta" }) });
+    let n = 0;
+    await o.handle({ chatId: "c2", updateId: `v${++n}`, username: null, kind: "text", text: "A train delayed towards Manhattan at 8:30" });
+    await o.handle({ chatId: "c2", updateId: `v${++n}`, username: null, kind: "text", text: "uptown" });
+    expect(calls).toBe(1);
+    const d = (await store.listComplaints({ chatId: "c2" }))[0]!;
+    expect(d.status).toBe("READY_FOR_APPROVAL");
+    expect(d.transit?.direction).toBe("Uptown (Inwood-207 St)");
+    expect(d.description.startsWith('"A train delayed towards Manhattan at 8:30"')).toBe(true);
+  });
+});

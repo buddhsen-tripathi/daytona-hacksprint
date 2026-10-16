@@ -87,6 +87,12 @@ export const M = {
   // ---- subway-delay (MTA Customer Feedback) ----
   askTransit: (missing: ("line" | "direction")[]) =>
     missing.includes("line") ? "Which line was it? (for example A, 7 or L)" : "Which direction were you heading — uptown or downtown, or which terminal?",
+  askDirection: (line: string, said: string | null) =>
+    `Which way was the ${esc(/^[0-9A-Z]$/.test(line) ? line : line)} going? The MTA form lists:${said ? `\n<i>(“${esc(said)}” doesn't clearly match one of them.)</i>` : ""}`,
+  directionSet: (label: string) => `Got it: <b>${esc(label)}</b>.`,
+  askTime: () => "When did this happen?",
+  askTimeTyped: () => "What time was it? For example <code>8:30 am</code>.",
+  timeSet: (when: string) => `Got it: <b>${esc(when)}</b>.`,
   noDuplicateCheckMta: () => "Subway complaints go straight to the MTA, so there's no NYC311 duplicate check.",
   mtaAlert: (header: string) => `🚇 <b>MTA currently reports:</b> ${esc(header)}`,
   noMtaAlert: (line: string) => `No active MTA delay alert for the ${esc(line)} right now (you can still file).`,

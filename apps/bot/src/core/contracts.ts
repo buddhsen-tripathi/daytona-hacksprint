@@ -544,6 +544,8 @@ export const CallbackAction = z.enum([
   "view_official",
   "confirm_location",
   "retry_location",
+  "set_direction", // subway: data `set_direction:<id>:<version>:d=0|1` (MTA form direction option index)
+  "set_time", // subway: data `set_time:<id>:<version>:now|later`
 ]);
 export type CallbackAction = z.infer<typeof CallbackAction>;
 

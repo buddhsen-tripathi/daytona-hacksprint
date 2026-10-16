@@ -218,3 +218,125 @@ export function manualGuidance(triage: TriageOutcome | ClassificationResult["tri
   );
   return lines.join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// MTA Customer Feedback: direction options per line, in the form's own terms
+// (apps/worker/docs/mta-subway-delay-wizard.md "Direction options per line"; the "<line> Train-" prefix stripped).
+// ---------------------------------------------------------------------------
+export const MTA_DIRECTIONS: Record<string, [string, string]> = {
+  "1": ["Downtown (South Ferry)", "Uptown & The Bronx"],
+  "2": ["Downtown & Brooklyn", "Uptown & The Bronx"],
+  "3": ["Downtown & Brooklyn", "Uptown (Harlem-148 St)"],
+  "4": ["Uptown & The Bronx", "Downtown & Brooklyn"],
+  "5": ["Uptown & The Bronx", "Downtown & Brooklyn"],
+  "6": ["Uptown & The Bronx", "Downtown (Brooklyn Bridge-City Hall)"],
+  "7": ["Queens (Flushing-Main St)", "Manhattan (34 St-Hudson Yards)"],
+  A: ["Uptown (Inwood-207 St)", "Downtown & Queens"],
+  C: ["Downtown & Brooklyn", "Uptown (168 St)"],
+  E: ["Downtown (World Trade Ctr)", "Uptown & Queens"],
+  B: ["Downtown & Brooklyn", "Uptown & The Bronx"],
+  D: ["Downtown & Brooklyn", "Uptown & The Bronx"],
+  F: ["Downtown & Brooklyn", "Uptown & Queens"],
+  M: ["Uptown & Forest Hills-71 Av", "Downtown & Middle Village-Metropolitan Av"],
+  N: ["Downtown & Brooklyn", "Uptown & Queens"],
+  Q: ["Downtown & Brooklyn", "Uptown (96 St)"],
+  R: ["Downtown & Brooklyn", "Uptown & Queens"],
+  W: ["Whitehall St-South Ferry", "Astoria-Ditmars Blvd"],
+  G: ["Brooklyn (Church Av)", "Queens (Court Sq)"],
+  L: ["Brooklyn (Canarsie-Rockaway Pkwy)", "Manhattan (8 Av)"],
+  J: ["Queens (Jamaica Ctr-Parsons/Archer)", "Manhattan (Broad St)"],
+  Z: ["Broad St", "Jamaica Ctr-Parsons/Archer"],
+  "S-42 Street Shuttle": ["Times Sq-42 St", "Grand Central-42 St"],
+  "S-Franklin Av Shuttle": ["Franklin Av", "Prospect Park"],
+  "S-Rockaway Park Shuttle": ["Rockaway Park-Beach 116 St", "Broad Channel"],
+  "Staten Island Railway": ["Tottenville", "St. George"],
+};
+
+export function mtaDirectionOptions(line: string | null | undefined): [string, string] | null {
+  return line ? (MTA_DIRECTIONS[line] ?? null) : null;
+}
+
+// Same tokenizer/synonyms as the worker's matchDirection (apps/worker/src/adapters/mta-subway-delay.ts).
+const DIR_STOP = new Set(["the", "to", "toward", "towards", "train", "trains", "line", "bound", "going", "heading", "headed", "direction", "in", "on", "at", "st", "av", "ave", "avs", "street", "avenue", "and", "of", "from", "into", "a", "an", "way", "side", "service", "-", "&"]);
+const DIR_SYN: Record<string, string> = { northbound: "uptown", north: "uptown", up: "uptown", southbound: "downtown", south: "downtown", down: "downtown", center: "ctr", centre: "ctr", square: "sq", wtc: "ctr", bx: "bronx", bk: "brooklyn", bklyn: "brooklyn", city: "manhattan" };
+
+export function directionTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/-bound\b/g, " ")
+    .replace(/(\d+)(st|nd|rd|th)\b/g, "$1")
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t && !DIR_STOP.has(t))
+    .map((t) => DIR_SYN[t] ?? t);
+}
+
+/**
+ * Map what the resident said to exactly one of the MTA form's direction options for the line.
+ * Unique best token overlap wins; zero overlap or a tie ⇒ null (ask the resident).
+ * "Manhattan" only matches when an option mentions Manhattan (7, L, J); on the A it is ambiguous.
+ */
+export function resolveDirection(line: string | null | undefined, said: string | null | undefined): string | null {
+  const options = mtaDirectionOptions(line);
+  if (!options || !said?.trim()) return null;
+  const exact = options.find((o) => o.toLowerCase() === said.trim().toLowerCase());
+  if (exact) return exact;
+  const want = new Set(directionTokens(said));
+  if (!want.size) return null;
+  const scored = options.map((o) => {
+    const have = new Set(directionTokens(o));
+    let score = 0;
+    for (const t of want) if (have.has(t)) score++;
+    return { o, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  if (scored[0]!.score === 0 || scored[0]!.score === scored[1]!.score) return null;
+  return scored[0]!.o;
+}
+
+// ---------------------------------------------------------------------------
+// Incident time (New York local), always stored as ISO with the NY UTC offset.
+// ---------------------------------------------------------------------------
+function nyParts(d: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "longOffset" })
+      .formatToParts(d)
+      .map((x) => [x.type, x.value]),
+  ) as Record<string, string>;
+  const offset = (p.timeZoneName ?? "GMT-05:00").replace("GMT", "") || "+00:00";
+  return { y: p.year!, m: p.month!, d: p.day!, h: Number(p.hour), min: Number(p.minute), offset: offset === "" ? "+00:00" : offset };
+}
+
+/** "2026-10-16T12:47:00-04:00" */
+export function nycIso(d: Date = new Date()): string {
+  const p = nyParts(d);
+  return `${p.y}-${p.m}-${p.d}T${String(p.h).padStart(2, "0")}:${String(p.min).padStart(2, "0")}:00${p.offset}`;
+}
+
+/**
+ * Deterministic parse of a typed incident time, today in New York: "just now", "8:30", "8:30 am",
+ * "around 8 this morning", "2pm". Returns null when unclear or in the future. Never guesses a date.
+ */
+export function parseIncidentTime(text: string, now: Date = new Date()): string | null {
+  const t = text.toLowerCase();
+  if (/\b(just now|right now|now|atm|at the moment|currently|still)\b/.test(t) && !/\d/.test(t)) return nycIso(now);
+  if (/\byesterday|last (night|week)|\bago\b/.test(t)) return null;
+  const m = /\b(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?)?|\b(\d{1,2})\s*(a\.?m\.?|p\.?m\.?)|\b(?:at|around|about|by|~)\s*(\d{1,2})\b(?!\s*(?:min|minute|hour|hr))/.exec(t);
+  if (!m) return null;
+  const hour = Number(m[1] ?? m[4] ?? m[6]);
+  const minute = Number(m[2] ?? 0);
+  const mer = (m[3] ?? m[5] ?? "").replace(/\./g, "");
+  if (hour > 23 || minute > 59) return null;
+  const p = nyParts(now);
+  const nowMin = p.h * 60 + p.min;
+  let candidates: number[];
+  if (hour > 12) candidates = [hour];
+  else if (mer === "am") candidates = [hour % 12];
+  else if (mer === "pm") candidates = [(hour % 12) + 12];
+  else if (/morning/.test(t)) candidates = [hour % 12];
+  else if (/afternoon|evening|tonight/.test(t)) candidates = [(hour % 12) + 12];
+  else candidates = [hour % 12, (hour % 12) + 12];
+  const past = candidates.map((h) => h * 60 + minute).filter((x) => x <= nowMin + 5);
+  if (!past.length) return null;
+  const best = Math.max(...past);
+  return `${p.y}-${p.m}-${p.d}T${String(Math.floor(best / 60)).padStart(2, "0")}:${String(best % 60).padStart(2, "0")}:00${p.offset}`;
+}
