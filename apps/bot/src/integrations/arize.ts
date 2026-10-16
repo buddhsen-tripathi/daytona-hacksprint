@@ -259,7 +259,7 @@ export function createTracer(opts: TracerOptions = {}): PhoenixTracer {
     return {
       set(k, v) {
         if (SENSITIVE_KEY.test(k)) return;
-        span.setAttribute(k, typeof v === "string" ? redactString(v) : v);
+        span.setAttribute(k, typeof v === "string" ? redactString(v) : Array.isArray(v) ? v.map((s) => redactString(String(s))) : v);
       },
       input(value) {
         setAll(
