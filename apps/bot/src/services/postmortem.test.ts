@@ -25,6 +25,12 @@ describe("postmortem (#13)", () => {
     expect(shouldPostmortem({ ...clean, workerEvents: [{ ts: "t", step: "fill", level: "info", message: "question" }] })).toBe(true);
   });
 
+  it("a dry-run stop (HUMAN_ACTION_REQUIRED, no error code) never triggers, even after a live question", () => {
+    const dry = { ...crossStreet2Attempt, outcome: "HUMAN_ACTION_REQUIRED" as const, errorCode: null };
+    expect(shouldPostmortem({ ...dry, workerEvents: [] })).toBe(false);
+    expect(shouldPostmortem({ ...dry, workerEvents: [{ ts: "t", step: "fill", level: "info", message: "question" }] })).toBe(false);
+  });
+
   it("gathers evidence ids, events and the form_schema from events", () => {
     const ev = gatherEvidence(crossStreet2Attempt);
     expect(ev.evidence.map((e) => e.id)).toEqual(["ev_validate_shot", "ev_schema_json"]);

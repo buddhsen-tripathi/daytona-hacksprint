@@ -44,8 +44,12 @@ function askedLiveQuestion(events: WorkerEvent[]): boolean {
   return events.some((e) => e.message === "question");
 }
 
-/** Which outcomes trigger a post-mortem (issue #13 "Behaviour"). */
+/** A dry run that filled the form and stopped before Submit (HUMAN_ACTION_REQUIRED, no error code): nothing failed. */
+export const isDryRunStop = (attempt: Pick<FilingAttempt, "outcome" | "errorCode">) => attempt.outcome === "HUMAN_ACTION_REQUIRED" && !attempt.errorCode;
+
+/** Which outcomes trigger a post-mortem (issue #13 "Behaviour"). Dry-run stops never do, even after a live question. */
 export function shouldPostmortem(attempt: FilingAttempt): boolean {
+  if (isDryRunStop(attempt)) return false;
   if (attempt.outcome && TRIGGER_CODES.includes(`${attempt.outcome}/${attempt.errorCode ?? ""}`)) return true;
   return askedLiveQuestion(attempt.workerEvents);
 }
