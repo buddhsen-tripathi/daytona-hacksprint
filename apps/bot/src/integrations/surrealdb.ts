@@ -19,6 +19,7 @@
  */
 import { GeometryPoint, RecordId, Surreal, createRemoteEngines } from "surrealdb";
 import type {
+  CatalogEntry as CatalogEntryT,
   CategoryId,
   ComplaintDraft,
   ComplaintLocation,
@@ -34,7 +35,7 @@ import type {
   RelatedComplaintsQuery,
   WorkflowPattern,
 } from "../core/contracts.js";
-import { CATEGORIES, nowIso } from "../core/contracts.js";
+import { CATEGORIES, CatalogEntry, nowIso } from "../core/contracts.js";
 import { NOT_REPORTED, NOT_REPORTED_OTHERS, RELATED_DEFAULTS } from "../services/memory.js";
 import { env } from "./env.js";
 
@@ -68,6 +69,8 @@ export type SurrealStore = Store & {
   /** Delete every 311Relay record (and re-seed categories). Tests/seed only. */
   reset(): Promise<void>;
   close(): Promise<void>;
+  upsertCatalog(entries: CatalogEntryT[]): Promise<number>;
+  listCatalog(): Promise<CatalogEntryT[]>;
   /** Raw SurrealQL for scripts (seed / dashboards). Returns one result per statement. */
   query<T extends unknown[] = unknown[]>(sql: string, vars?: Record<string, unknown>): Promise<T>;
 };
@@ -276,7 +279,8 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     const b = new Batch();
     for (const c of Object.values(CATEGORIES)) {
       b.add(
-        `UPSERT ${b.bind(rid("complaint_category", c.id))} CONTENT ${b.bind(
+        // MERGE, not CONTENT: catalog fields written by upsertCatalog (#7) must survive a restart.
+        `UPSERT ${b.bind(rid("complaint_category", c.id))} MERGE ${b.bind(
           plain({
             label: c.officialLabel,
             shortLabel: c.label,
@@ -735,6 +739,31 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     }),
 
     // -- graph -----------------------------------------------------------------
+    // -- NYC311 catalog (#7) -------------------------------------------------------
+    upsertCatalog: guard("upsertCatalog", async (entries: CatalogEntryT[]) => {
+      for (let i = 0; i < entries.length; i += 100) {
+        const b = new Batch();
+        for (const e of entries.slice(i, i + 100)) {
+          const { id, ...fields } = e;
+          // Rows seeded from CATEGORIES keep their official label; catalog-only rows are labelled by title.
+          const label = id in CATEGORIES ? {} : { label: e.title, shortLabel: e.title, articleUrl: e.articleUrl };
+          b.add(`UPSERT ${b.bind(rid("complaint_category", id))} MERGE ${b.bind(plain({ ...fields, ...label, catalog: true }))} RETURN NONE`);
+        }
+        await run(b);
+      }
+      return entries.length;
+    }),
+
+    listCatalog: guard("listCatalog", async () => {
+      const [rows] = await q<[Record<string, unknown>[]]>("SELECT * FROM complaint_category WHERE catalog = true");
+      const out: CatalogEntryT[] = [];
+      for (const r of rows ?? []) {
+        const parsed = CatalogEntry.safeParse({ ...r, id: plainId(r.id) });
+        if (parsed.success) out.push(parsed.data);
+      }
+      return out.sort((a, b) => a.id.localeCompare(b.id));
+    }),
+
     graph: guard("graph", async (args?: { complaintId?: string }) => {
       type EdgeRow = { in: unknown; out: unknown; rel: string };
       type NodeRow = { id: unknown; label?: string };
@@ -765,12 +794,14 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
         const nr = await q<[NodeRow[]]>("SELECT id, label FROM $ids", { ids: [...ids.values()] });
         nodeRows = nr[0] ?? [];
       } else {
-        const res = await q<[NodeRow[], EdgeRow[]]>(
-          `SELECT id, label FROM ${GRAPH_NODE_TABLES.join(", ")} LIMIT 2000;
+        const res = await q<[NodeRow[], NodeRow[], EdgeRow[]]>(
+          // Only categories something points at: the NYC311 catalog (#7) adds ~670 unlinked rows.
+          `SELECT id, label FROM ${GRAPH_NODE_TABLES.filter((t) => t !== "complaint_category").join(", ")} LIMIT 2000;
+           SELECT id, label FROM complaint_category WHERE count(<-categorized_as) > 0 OR count(<-applies_to) > 0;
            SELECT in, out, record::tb(id) AS rel FROM ${edgesFrom} LIMIT 5000;`,
         );
-        nodeRows = res[0] ?? [];
-        edgeRows = res[1] ?? [];
+        nodeRows = [...(res[0] ?? []), ...(res[1] ?? [])];
+        edgeRows = res[2] ?? [];
       }
 
       const nodes = new Map<string, { id: string; kind: string; label: string }>();

@@ -707,6 +707,9 @@ export interface Store {
   findRelatedComplaints?(args: RelatedComplaintsQuery): Promise<RelatedComplaints>;
   /** complaint->similar_to->complaint edges (dashboard cluster). */
   linkSimilarComplaints?(complaintId: string, similarIds: string[]): Promise<void>;
+  /** NYC311 category catalog (#7): upsert complaint_category rows by id; returns the count written. */
+  upsertCatalog?(entries: CatalogEntry[]): Promise<number>;
+  listCatalog?(): Promise<CatalogEntry[]>;
   /** For the dashboard: nodes + edges of the complaint graph. */
   graph(args?: { complaintId?: string }): Promise<{ nodes: { id: string; kind: string; label: string }[]; edges: { from: string; to: string; rel: string }[] }>;
 }

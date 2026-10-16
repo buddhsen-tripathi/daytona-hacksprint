@@ -2,13 +2,14 @@
  * Read-mostly JSON API for the dashboard (+ scripted event endpoint POST /api/event and the
  * optional Telegram webhook). node:http, CORS *.
  */
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
-import type { CategoryId, Store, Tracer } from "../core/contracts.js";
+import type { CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
 import { CATEGORIES, InboundEvent } from "../core/contracts.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
-import { env, hasTelegram } from "../integrations/env.js";
+import { env, hasTelegram, REPO_ROOT } from "../integrations/env.js";
 import { resolveEvidencePath } from "../services/evidence-registry.js";
 import type { WebhookHandler } from "../telegram/bot.js";
 import { capturedQuestions, createCaptureTransport } from "./capture-transport.js";
@@ -102,6 +103,19 @@ export function createApiServer(deps: ApiDeps): Server {
             const g = await store.graph({ complaintId: url.searchParams.get("complaintId") ?? undefined });
             return json(res, 200, { ...g, patterns: await allPatterns(store) });
           }
+          case "catalog": {
+            // NYC311 catalog (#7): SurrealDB rows, else the committed snapshot. ?q= filters title/summary/agency/topic.
+            let entries = (await store.listCatalog?.()) ?? [];
+            const source = entries.length ? "store" : "snapshot";
+            if (!entries.length) entries = readCatalogSnapshot();
+            const q = url.searchParams.get("q")?.trim().toLowerCase();
+            if (q) entries = entries.filter((e) => [e.title, e.summary, e.agency ?? "", e.topic ?? ""].some((v) => v.toLowerCase().includes(q)));
+            if (seg[2]) {
+              const hit = entries.find((e) => e.id === decodeURIComponent(seg[2]));
+              return hit ? json(res, 200, { entry: hit, source }) : json(res, 404, { error: "catalog entry not found" });
+            }
+            return json(res, 200, { entries, count: entries.length, source });
+          }
           case "workflow-patterns":
             return json(res, 200, { patterns: await allPatterns(store) });
           case "residents": {
@@ -191,4 +205,9 @@ export function startApiServer(deps: ApiDeps, port = env.PORT_API): Promise<Serv
     server.once("error", reject);
     server.listen(port, () => resolveP(server));
   });
+}
+
+function readCatalogSnapshot(): CatalogEntry[] {
+  const p = resolve(REPO_ROOT, "fixtures/nyc311-catalog.json");
+  return existsSync(p) ? (JSON.parse(readFileSync(p, "utf8")) as CatalogEntry[]) : [];
 }

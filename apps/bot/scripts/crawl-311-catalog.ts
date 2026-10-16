@@ -1,7 +1,7 @@
 /**
  * Crawl the NYC311 "Report Problems" directory into a category catalog (#7).
  *
- *   pnpm --filter @311relay/bot exec tsx scripts/crawl-311-catalog.ts [--limit 20] [--delay 600] [--refresh] [--no-probe] [--headed]
+ *   pnpm --filter @311relay/bot exec tsx scripts/crawl-311-catalog.ts [--limit 20] [--delay 600] [--refresh] [--no-probe] [--headed] [--no-db] [--embedded]
  *
  * 1. /report-problems/: the "All A–Z" list (every article) and the "All by category" tree.
  * 2. Each subcategory page: topic + one-line summary per article.
@@ -12,16 +12,20 @@
  * Local Chrome via playwright-core (CHROME_PATH, else the same paths the worker uses). One page,
  * sequential, `--delay` ms between loads, images/fonts/media blocked. Everything is cached under
  * .runs/catalog-cache/ and reused, so an interrupted run resumes; --refresh ignores the cache.
- * Output (this step): .runs/catalog-cache/catalog.draft.json.
+ * Outputs: fixtures/nyc311-catalog.json (committed snapshot, sorted by id; only on a full run, never with
+ * --limit) and complaint_category rows in SurrealDB (UPSERT … MERGE by id; --no-db skips, --embedded uses
+ * mem://). The CATEGORIES entries (subway-delay) are added with their worker adapter as `automation`.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import type { CatalogEntry } from "../src/core/contracts.js";
-import { RUNS_DIR } from "../src/integrations/env.js";
+import { REPO_ROOT, RUNS_DIR } from "../src/integrations/env.js";
+import { createSurrealStore } from "../src/integrations/surrealdb.js";
 import {
   assignUniqueIds,
   buildCatalogEntry,
+  fileableCatalogEntries,
   PORTAL,
   probeTarget,
   type LandingProbe,
@@ -40,6 +44,9 @@ const DELAY_MS = opt("--delay", 600);
 const REFRESH = flag("--refresh");
 const PROBE = !flag("--no-probe");
 const HEADED = flag("--headed");
+const DB = !flag("--no-db");
+const EMBEDDED = flag("--embedded");
+const SNAPSHOT = resolve(REPO_ROOT, "fixtures/nyc311-catalog.json");
 
 const CACHE = resolve(RUNS_DIR, "catalog-cache");
 for (const d of ["", "categories", "articles"]) mkdirSync(resolve(CACHE, d), { recursive: true });
@@ -228,14 +235,32 @@ try {
   }
 
   const now = new Date().toISOString();
-  const entries: CatalogEntry[] = assignUniqueIds(
+  const crawled = assignUniqueIds(
     raws.map((raw) => {
       const target = probeTarget(raw);
       return buildCatalogEntry(raw, { topic: topic.get(raw.kaNumber) ?? null, summary: summary.get(raw.kaNumber) ?? null, probe: target ? (probes[target] ?? null) : null, now });
     }),
-  ).sort((a, b) => a.id.localeCompare(b.id));
+  );
+  const fileable = fileableCatalogEntries(now);
+  const taken = new Set(fileable.map((e) => e.id));
+  const entries: CatalogEntry[] = [...fileable, ...crawled.filter((e) => !taken.has(e.id))].sort((a, b) => a.id.localeCompare(b.id));
 
   writeCache("catalog.draft.json", entries);
+  if (LIMIT === Infinity) {
+    writeFileSync(SNAPSHOT, `${JSON.stringify(entries, null, 2)}\n`);
+    console.log(`snapshot: ${entries.length} entries → ${SNAPSHOT}`);
+  } else console.log("snapshot: skipped (--limit run)");
+
+  if (DB) {
+    const store = createSurrealStore(EMBEDDED ? { url: "mem://" } : {});
+    try {
+      await store.init();
+      const n = await store.upsertCatalog(entries);
+      console.log(`surrealdb: upserted ${n} complaint_category rows (${store.backend} ${store.namespace}/${store.database})`);
+    } finally {
+      await store.close();
+    }
+  }
   const byChannel = entries.reduce<Record<string, number>>((m, e) => ((m[e.channel] = (m[e.channel] ?? 0) + 1), m), {});
   console.log(`catalog: ${entries.length} entries ${JSON.stringify(byChannel)} in ${Math.round((Date.now() - t0) / 1000)} s → ${resolve(CACHE, "catalog.draft.json")}`);
 } finally {

@@ -12,7 +12,7 @@
  *   triggers it and the article itself is the official link.
  * - Outbound links are `a.externallink`; links to other articles are `a.kalink`.
  */
-import type { CatalogChannel, CatalogEntry } from "../core/contracts.js";
+import { CATEGORIES, type CatalogChannel, type CatalogEntry, type CategoryId } from "../core/contracts.js";
 
 export const PORTAL = "https://portal.311.nyc.gov";
 
@@ -260,4 +260,35 @@ export function assignUniqueIds(entries: CatalogEntry[]): CatalogEntry[] {
   const seen = new Map<string, number>();
   for (const e of entries) seen.set(e.id, (seen.get(e.id) ?? 0) + 1);
   return entries.map((e) => ((seen.get(e.id) ?? 0) > 1 ? { ...e, id: `${e.id}-${e.kaNumber.toLowerCase()}` } : e));
+}
+
+/**
+ * Catalog rows for the categories we can already file (CATEGORIES). They keep their CategoryId as the
+ * catalog id and point at their worker adapter; facts not in CategoryDefinition are stated here.
+ */
+const FILEABLE: Record<CategoryId, { agency: string; topic: string; adapter: string; requiresLogin: boolean; hasCaptcha: boolean }> = {
+  // contact.mta.info wizard: no CAPTCHA or login observed (apps/worker/docs/mta-subway-delay-wizard.md).
+  "subway-delay": { agency: "MTA", topic: "Transportation › Public Transportation", adapter: "mta-subway-delay", requiresLogin: false, hasCaptcha: false },
+};
+
+export function fileableCatalogEntries(now: string): CatalogEntry[] {
+  return Object.values(CATEGORIES).map((c) => {
+    const f = FILEABLE[c.id];
+    return {
+      id: c.id,
+      title: c.label,
+      kaNumber: c.articleUrl.match(/KA-\d+/)?.[0] ?? "KA-00000",
+      articleUrl: c.articleUrl,
+      summary: c.guidance,
+      agency: f.agency,
+      topic: f.topic,
+      channel: channelForUrl(c.officialFormUrl) ?? "external-site",
+      officialUrl: c.officialFormUrl,
+      requiresLogin: f.requiresLogin,
+      hasCaptcha: f.hasCaptcha,
+      requiredFields: [...c.requiredFields],
+      automation: `adapter:${f.adapter}`,
+      lastVerifiedAt: now,
+    };
+  });
 }
