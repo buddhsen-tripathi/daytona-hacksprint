@@ -113,6 +113,8 @@ export const M = {
   busy: () => "I'm already working on this report. Hang tight. ⏳",
   noActive: () => "There's no active draft right now. Send a photo or description to start one.",
 
+  /** #13: once per attempt, after a post-mortem auto-applied a new required field. */
+  learnedFromAttempt: (labels: string[]) => `🧠 I learned something from this attempt; next time I'll ask for ${labels.map((l) => `<b>${esc(l)}</b>`).join(" and ")} up front.`,
   recording: (ref: string) => `🎥 Recording of the filing session for <b>${esc(ref)}</b> — this is what the browser did on your behalf.`,
 
   // ---- subway-delay (MTA Customer Feedback) ----
