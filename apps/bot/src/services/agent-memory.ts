@@ -179,7 +179,24 @@ export type AgentMemoryDeps = {
   now?: () => number;
 };
 
-export type AgentMemoryService = AgentMemory & { readonly embedder: Embedder | null };
+/** Recall computed after the approval card was sent (#22): `/api/memory?complaintId=` answers from it instantly. */
+export type CachedRecall = { complaintId: string; draftVersion: number; query: string; items: ScoredMemory[]; at: string };
+
+export type AgentMemoryService = AgentMemory & {
+  readonly embedder: Embedder | null;
+  /** Start embedding `text` now (cached by text), so a later recall()/remember() of the same text is instant. Never throws. */
+  warm(text: string): void;
+  /** Last background recall per complaint (null when none or the draft has moved on). */
+  cachedRecall(complaintId: string, draftVersion?: number): CachedRecall | null;
+  /** Store a recall result for `/api/memory` (bounded, newest wins). */
+  cacheRecall(r: CachedRecall): void;
+};
+
+/** In-process caches (#22): bounded so a long-running bot never grows without limit. */
+export const EMBED_CACHE_MAX = 512;
+export const RECALL_CACHE_MAX = 200;
+/** A cached recall older than this is recomputed (new outcomes / lessons may have landed since). */
+export const RECALL_CACHE_TTL_MS = 60_000;
 
 export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
   const { store } = deps;
@@ -188,17 +205,33 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
   const tracer = deps.tracer ?? null;
   const inflight = new Set<Promise<unknown>>();
   let warned = false;
+  /** text → embedding (in-flight promises are shared, so remember() + recall() of one draft embed it once). */
+  const embedCache = new Map<string, Promise<{ vector: number[]; model: string } | null>>();
+  const recallCache = new Map<string, CachedRecall>();
 
-  async function embedOne(text: string): Promise<{ vector: number[]; model: string } | null> {
-    if (!embedder || !text) return null;
+  async function embedUncached(text: string): Promise<{ vector: number[]; model: string } | null> {
     try {
-      const r = await embedder.embed([text]);
+      const r = await embedder!.embed([text]);
       const v = r.vectors[0];
       return v?.length ? { vector: v, model: r.model } : null;
     } catch (err) {
       console.warn("[memory] embedding failed:", (err as Error).message);
       return null;
     }
+  }
+
+  function embedOne(text: string): Promise<{ vector: number[]; model: string } | null> {
+    if (!embedder || !text) return Promise.resolve(null);
+    const hit = embedCache.get(text);
+    if (hit) return hit;
+    const p = embedUncached(text).then((r) => {
+      // only the configured model is kept: a fallback vector (OpenRouter down) must not pin this text to the fallback
+      if (!r || r.model !== embedder.model) embedCache.delete(text);
+      return r;
+    });
+    embedCache.set(text, p);
+    if (embedCache.size > EMBED_CACHE_MAX) embedCache.delete(embedCache.keys().next().value!);
+    return p;
   }
 
   async function write(item: MemoryItem): Promise<string> {
@@ -244,6 +277,23 @@ export function createAgentMemory(deps: AgentMemoryDeps): AgentMemoryService {
 
   const memory: AgentMemoryService = {
     embedder,
+
+    warm(text) {
+      const t = text?.trim() ? scrubPii(text) : "";
+      if (t) void embedOne(t);
+    },
+
+    cachedRecall(complaintId, draftVersion) {
+      const r = recallCache.get(complaintId);
+      if (!r || now() - Date.parse(r.at) > RECALL_CACHE_TTL_MS) return null;
+      return draftVersion == null || r.draftVersion === draftVersion ? r : null;
+    },
+
+    cacheRecall(r) {
+      recallCache.delete(r.complaintId);
+      recallCache.set(r.complaintId, r);
+      if (recallCache.size > RECALL_CACHE_MAX) recallCache.delete(recallCache.keys().next().value!);
+    },
 
     remember(item) {
       const p = write(item);
@@ -441,4 +491,35 @@ export async function recallForComplaint(memory: AgentMemory, d: ComplaintDraft,
   const query = readyForApprovalItem(d).text;
   const items = await memory.recall({ text: query, scope: { chatId: d.telegramChatId, category: d.category }, limit });
   return { query, items };
+}
+
+/** Default `/api/memory` page size; the background recall computes this many so the API can answer from the cache. */
+export const RECALL_FOR_COMPLAINT_LIMIT = 10;
+
+const isService = (m: AgentMemory): m is AgentMemoryService => typeof (m as Partial<AgentMemoryService>).cacheRecall === "function";
+
+/**
+ * After the approval card is sent (#22): recall for the complaint in the background. Emits the `memory.recall`
+ * RETRIEVER span (trace decoration) and caches the result for `GET /api/memory?complaintId=`. Never throws and
+ * never delays the resident: callers do not await it.
+ */
+export async function recallAfterCard(memory: AgentMemory, d: ComplaintDraft): Promise<CachedRecall | null> {
+  try {
+    const { query, items } = await recallForComplaint(memory, d, RECALL_FOR_COMPLAINT_LIMIT);
+    const r: CachedRecall = { complaintId: d.id, draftVersion: d.draftVersion, query, items, at: new Date().toISOString() };
+    if (isService(memory)) memory.cacheRecall(r);
+    return r;
+  } catch (err) {
+    console.warn("[memory] background recall failed:", (err as Error).message);
+    return null;
+  }
+}
+
+/** `GET /api/memory?complaintId=`: the cached background recall when it covers the request, else a fresh recall (then cached). */
+export async function recallForComplaintCached(memory: AgentMemory, d: ComplaintDraft, limit = RECALL_FOR_COMPLAINT_LIMIT): Promise<{ query: string; items: ScoredMemory[]; cached: boolean }> {
+  const hit = isService(memory) ? memory.cachedRecall(d.id, d.draftVersion) : null;
+  if (hit && limit <= RECALL_FOR_COMPLAINT_LIMIT) return { query: hit.query, items: hit.items.slice(0, limit), cached: true };
+  const { query, items } = await recallForComplaint(memory, d, limit);
+  if (isService(memory) && limit >= RECALL_FOR_COMPLAINT_LIMIT) memory.cacheRecall({ complaintId: d.id, draftVersion: d.draftVersion, query, items: items.slice(0, RECALL_FOR_COMPLAINT_LIMIT), at: new Date().toISOString() });
+  return { query, items, cached: false };
 }

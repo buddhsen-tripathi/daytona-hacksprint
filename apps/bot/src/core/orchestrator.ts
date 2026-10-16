@@ -67,7 +67,7 @@ import {
   readRelated,
   relatedCardLines,
 } from "../services/memory.js";
-import { readyForApprovalItem } from "../services/agent-memory.js";
+import { readyForApprovalItem, recallAfterCard } from "../services/agent-memory.js";
 
 export type { FilingService, StatusService } from "../integrations/fallbacks.js";
 
@@ -352,7 +352,8 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     try {
       const r = await tracer.span("surrealdb.read_context", { "query.kind": "related_complaints", "openinference.span.kind": "RETRIEVER", "complaint.id": draft.id, "complaint.category": draft.category, "transit.line": line ?? "" }, async (set, oi) => {
         oi.input({ category: q.category, line, lat: lat != null ? Number(lat.toFixed(4)) : null, lon: lon != null ? Number(lon.toFixed(4)) : null, radiusMeters: q.radiusMeters, sinceMs: q.sinceMs, othersSinceMs: q.othersSinceMs });
-        const { related: res, docs } = await readRelated(store, memory, q, readyForApprovalItem(draft).text);
+        // #22: the card never waits for recall (embedding the draft text); recallAfterCard() decorates afterwards
+        const { related: res, docs } = await readRelated(store, null, q, readyForApprovalItem(draft).text);
         set("related.mine", res.mine.length);
         set("related.others_reports", res.others.reports);
         set("related.others_residents", res.others.residents);
@@ -463,6 +464,8 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const blocked = needsName(ctx.resident, draft.category);
     if (blocked) parts.push(M.needName());
     await send(ctx, { text: parts.join("\n\n"), buttons: approvalButtons(draft, { canApprove: !blocked }) });
+    // [memory] #22: recall after the card (memory.recall span + /api/memory cache); never awaited
+    if (memory) void recallAfterCard(memory, draft);
     return draft;
   }
 

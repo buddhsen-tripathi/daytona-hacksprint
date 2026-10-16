@@ -6,7 +6,7 @@ import { createReadStream, statSync } from "node:fs";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
 import type { AgentMemory, CategoryId, Store, Tracer } from "../core/contracts.js";
 import { CATEGORIES, InboundEvent, MemoryKind } from "../core/contracts.js";
-import { createAgentMemory, recallForComplaint } from "../services/agent-memory.js";
+import { createAgentMemory, recallForComplaintCached } from "../services/agent-memory.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
 import { env, hasTelegram } from "../integrations/env.js";
@@ -113,8 +113,9 @@ export function createApiServer(deps: ApiDeps): Server {
             if (complaintId) {
               const c = await store.getComplaint(complaintId);
               if (!c) return json(res, 404, { error: "complaint not found" });
-              const { query, items } = await recallForComplaint(memory, c, limit);
-              return json(res, 200, { complaintId: c.id, query, items });
+              // cached: true ⇒ answered from the recall run right after the approval card was sent (#22)
+              const { query, items, cached } = await recallForComplaintCached(memory, c, limit);
+              return json(res, 200, { complaintId: c.id, query, items, cached });
             }
             const kind = MemoryKind.safeParse(url.searchParams.get("kind"));
             const items = await memory.recall({ text: url.searchParams.get("q") ?? undefined, kind: kind.success ? kind.data : undefined, limit });
