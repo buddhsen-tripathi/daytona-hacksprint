@@ -1,5 +1,5 @@
 /** grammY implementation of the transport-agnostic Transport contract. */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { type Api, GrammyError, InputFile } from "grammy";
 import type { OutboundMessage, Transport } from "../core/contracts.js";
@@ -8,11 +8,30 @@ import { locationKeyboard, toInlineKeyboard } from "./keyboards.js";
 
 const MIME: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".oga": "audio/ogg", ".ogg": "audio/ogg", ".mp3": "audio/mpeg", ".m4a": "audio/mp4" };
 
+export const TELEGRAM_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+
 export function createTelegramTransport(api: Api, token: string): Transport {
   async function sendNew(msg: OutboundMessage, parse: boolean): Promise<number> {
     const reply_markup = msg.requestLocation ? locationKeyboard() : msg.buttons?.length ? toInlineKeyboard(msg.buttons) : undefined;
     const text = parse ? msg.text : stripHtml(msg.text);
     const parse_mode = parse ? msg.parseMode : undefined;
+    if (msg.videoPath) {
+      const size = (() => {
+        try {
+          return statSync(msg.videoPath!).size;
+        } catch {
+          return -1;
+        }
+      })();
+      // Bot API upload limit is 50 MB; larger (or missing) files fall back to a text note.
+      if (size > 0 && size <= TELEGRAM_VIDEO_MAX_BYTES) {
+        const m = await api.sendVideo(msg.chatId, new InputFile(msg.videoPath), { caption: text.slice(0, 1024), parse_mode, reply_markup, supports_streaming: true });
+        return m.message_id;
+      }
+      const note = size > 0 ? `(The recording is ${(size / 1_048_576).toFixed(0)} MB, too large for Telegram; it's saved with the filing evidence on the dashboard.)` : "(The recording file could not be found.)";
+      const m = await api.sendMessage(msg.chatId, `${text}\n\n${note}`.slice(0, 4096), { parse_mode, reply_markup, link_preview_options: { is_disabled: true } });
+      return m.message_id;
+    }
     if (msg.photoPath) {
       const m = await api.sendPhoto(msg.chatId, new InputFile(msg.photoPath), { caption: text.slice(0, 1024), parse_mode, reply_markup });
       return m.message_id;

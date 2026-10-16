@@ -2,7 +2,8 @@
  * In-process Transport that records outbound messages. Used by
  * POST /api/demo/event and scripts/demo.ts. File ids of the form
  * "fixture:<name>" resolve to fixtures/images/<name>.jpg (or .png/.jpeg);
- * "path:<abs path>" copies a local file.
+ * "path:<abs path>" copies a local file. photoPath / videoPath are recorded as-is
+ * (the demo script prints them).
  */
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";

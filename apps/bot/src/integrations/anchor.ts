@@ -22,6 +22,27 @@ async function anchorFetch(path: string, init: RequestInit & { timeoutMs?: numbe
   });
 }
 
+/**
+ * Download an Anchor recording file_link (an API /fetch URL that needs the anchor-api-key header).
+ * The key is only ever sent to *.anchorbrowser.io; other hosts (signed CDN links) get no header.
+ */
+export async function downloadAnchorRecording(url: string, destPath: string, opts: { timeoutMs?: number; maxBytes?: number } = {}): Promise<{ bytes: number }> {
+  const u = new URL(url);
+  if (u.protocol !== "https:") throw new Error("recording link is not https");
+  const anchorHost = u.hostname === "anchorbrowser.io" || u.hostname.endsWith(".anchorbrowser.io");
+  const key = env.ANCHOR_API_KEY;
+  const res = await fetch(url, { headers: anchorHost && key ? { "anchor-api-key": key } : {}, redirect: "follow", signal: AbortSignal.timeout(opts.timeoutMs ?? 120_000) });
+  if (!res.ok) throw new Error(`recording download failed: HTTP ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (opts.maxBytes && buf.length > opts.maxBytes) throw new Error(`recording too large (${buf.length} bytes)`);
+  if (buf.length < 1024) throw new Error(`recording too small (${buf.length} bytes)`);
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { dirname } = await import("node:path");
+  await mkdir(dirname(destPath), { recursive: true });
+  await writeFile(destPath, buf);
+  return { bytes: buf.length };
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function createAnchorBrowserProvider(opts: { maxDurationMin?: number; idleTimeoutMin?: number } = {}): BrowserProvider {
