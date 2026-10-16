@@ -70,6 +70,8 @@ export const env = {
   /** "1" lets real-site adapters click the FINAL Submit (after the resident's approval). Unset ⇒ dry run: fill everything, stop before Submit. */
   get ALLOW_REAL_SUBMIT() { return str("ALLOW_REAL_SUBMIT"); },
   get PORT_API() { return int("PORT_API", 3312); },
+  /** Bearer token for the operator API (#23). Unset ⇒ only loopback callers are trusted. */
+  get OPERATOR_API_TOKEN() { return str("OPERATOR_API_TOKEN"); },
 };
 
 export function hasTelegram(): boolean {
