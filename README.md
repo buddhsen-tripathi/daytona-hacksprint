@@ -59,6 +59,21 @@ pnpm demo -- --scenario subway               # dry run against the real MTA form
 pnpm --filter @311relay/bot evals            # the evaluation scenarios, results pushed to Phoenix
 ```
 
+### Evals
+
+`pnpm --filter @311relay/bot evals` drives every scenario in `fixtures/example-complaints.json` through `POST /api/event`, scores it, prints a table and pushes one annotation per dimension to Phoenix (on the scenario's trace and on its session). The scorer (`apps/bot/src/evals/scoring.ts`, unit-tested in `scoring.test.ts`) picks its dimensions by category:
+
+- **Transit categories (subway delay):** `category_accuracy`, `information_completeness` (asked for line/direction/time only when the text left it missing, never a location), `transit_extraction` (line/direction/station/delay/time match the fixture), `submission_safety` (no filing without the approve tap, at most one attempt), `outcome_accuracy` (stops at the card; with a dry run, `HUMAN_ACTION_REQUIRED` with no error code and no reference number), `alert_corroboration` (the card shows the live MTA alert line or the "no active alert" line).
+- **Everything else** (triage outcomes, future street categories): `category_accuracy`, `information_completeness`, `location_validity`, `submission_safety`, `outcome_accuracy`, `duplicate_relevance`.
+
+By default the subway scenarios answer the bot's follow-ups and **stop at the approval card**, so nothing is filed. `--with-dry-run <scenario>` taps Approve for that one scenario and runs the real Daytona + Anchor dry run. It refuses to start if `ALLOW_REAL_SUBMIT` is set, and the bot must run without it as well. Other flags: `--offline` (no Phoenix), `--only a,b`, `--api <url>`.
+
+```bash
+TELEGRAM_BOT_TOKEN= PORT_API=3399 pnpm --filter @311relay/bot start          # a local API next to the live bot
+pnpm --filter @311relay/bot evals -- --api http://localhost:3399 --offline
+pnpm --filter @311relay/bot evals -- --api http://localhost:3399 --only subway-delay-a-train --with-dry-run subway-delay-a-train
+```
+
 ## Real filing targets
 
 - **Subway delay → MTA Customer Feedback wizard** (`contact.mta.info`). Full automation, but a dry run unless `ALLOW_REAL_SUBMIT=1` (see below).
