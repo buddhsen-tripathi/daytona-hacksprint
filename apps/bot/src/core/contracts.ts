@@ -1085,6 +1085,10 @@ export const RepairProposal = RepairDiagnosis.extend({
   status: z.enum(["pending", "approved", "rejected"]),
   createdAt: z.string(),
   decidedAt: z.string().nullable(),
+  /** Who decided: the deterministic auto-apply guard or an operator on the dashboard (absent ⇒ pending / legacy rows). */
+  decidedBy: z.enum(["auto", "operator"]).nullable().optional(),
+  /** `requiredField` labels actually written to the catalog (auto-apply or approval). Other kinds stay proposal-only. */
+  applied: z.array(z.string()).optional(),
 });
 export type RepairProposal = z.infer<typeof RepairProposal>;
 
