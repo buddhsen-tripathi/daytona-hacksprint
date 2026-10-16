@@ -50,8 +50,27 @@ export async function startBot(bot: Bot): Promise<{ mode: "polling" | "webhook";
     return { mode: "webhook", username, webhook };
   }
   await bot.api.deleteWebhook().catch(() => {});
-  void bot.start({ allowed_updates: ["message", "callback_query"], drop_pending_updates: false, onStart: () => console.log(`[telegram] polling as @${username}`) }).catch((err) =>
-    console.error("[telegram] polling stopped:", err),
-  );
+  // grammY stops polling for good on a 409 (another getUpdates consumer). After a restart,
+  // Telegram can still hold the previous instance's 30 s long poll, so retry with backoff
+  // instead of dying. A persistent 409 means a second instance really is running elsewhere.
+  const poll = async (attempt = 1): Promise<void> => {
+    try {
+      await bot.start({
+        allowed_updates: ["message", "callback_query"],
+        drop_pending_updates: false,
+        onStart: () => console.log(`[telegram] polling as @${username}${attempt > 1 ? ` (attempt ${attempt})` : ""}`),
+      });
+    } catch (err) {
+      const is409 = typeof err === "object" && err !== null && (err as { error_code?: number }).error_code === 409;
+      if (is409 && attempt < 20) {
+        const waitMs = Math.min(5_000 * attempt, 30_000);
+        console.warn(`[telegram] 409 conflict (another getUpdates consumer); retrying in ${waitMs / 1000}s`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        return poll(attempt + 1);
+      }
+      console.error("[telegram] polling stopped:", err);
+    }
+  };
+  void poll();
   return { mode: "polling", username, webhook: null };
 }
