@@ -87,6 +87,9 @@ function suite(name: string, make: () => Promise<Ctx & { close?: () => Promise<v
       const mine = await m.recall({ text: "L train delay Bedford", scope: { chatId: "rider-7", category: "privacy-test" }, limit: 50 });
       expect(mine.map((g) => g.id).sort()).toEqual(["mem_p_mine", "mem_p_world"]);
       expect(mine.every((g) => g.chatId === null || g.chatId === "rider-7")).toBe(true);
+      // an empty chat id still scopes (fails closed): never another resident's items
+      const blank = await m.recall({ text: "L train delay Bedford", scope: { chatId: "", category: "privacy-test" }, limit: 50 });
+      expect(blank.map((g) => g.id)).toEqual(["mem_p_world"]);
       // without a resident scope the stream is cross-resident (for counting duplicates, #5)
       const all = await m.recall({ text: "L train delay Bedford", scope: { category: "privacy-test" }, limit: 50 });
       expect(all.map((g) => g.id)).toContain("mem_p_other");

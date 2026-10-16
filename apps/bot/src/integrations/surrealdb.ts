@@ -481,7 +481,7 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     if (f.kind) c.push(`kind = ${b.bind(f.kind)}`);
     if (f.category) c.push(`category = ${b.bind(f.category)}`);
     // resident scope: own items + world facts (chatId null), never other residents'
-    if (f.chatId) c.push(`(chatId = ${b.bind(f.chatId)} OR chatId = NONE OR chatId = NULL)`);
+    if (f.chatId != null) c.push(`(chatId = ${b.bind(f.chatId)} OR chatId = NONE OR chatId = NULL)`);
     if (f.line) c.push(`line = ${b.bind(f.line)}`);
     if (f.geo) {
       c.push(

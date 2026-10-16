@@ -117,7 +117,8 @@ export function recencyDecay(ageMs: number, halfLifeMs = RECENCY_HALF_LIFE_MS): 
 export function memoryMatches(row: MemoryRecord, q: Omit<MemorySearch, "limit" | "embedding" | "embedModel">, nowMs = Date.now()): boolean {
   if (q.kind && row.kind !== q.kind) return false;
   if (q.category && row.category !== q.category) return false;
-  if (q.chatId && row.chatId != null && row.chatId !== q.chatId) return false;
+  // fail closed: any non-null chatId (even "") scopes to that resident; only null/undefined means unscoped
+  if (q.chatId != null && row.chatId != null && row.chatId !== q.chatId) return false;
   if (q.line && row.line !== q.line) return false;
   if (q.geo) {
     if (!row.geo) return false;
