@@ -405,6 +405,32 @@ export const EvidenceFile = z.object({
   summary: z.string(),
 });
 
+/**
+ * Observed structure of one form control (procedural memory input, issue #11). STRUCTURE ONLY: never a value the
+ * resident typed or chose. `options` are the form's own labels (choice buttons / select / radio).
+ */
+export const FormFieldType = z.enum(["text", "textarea", "select", "radio", "checkbox", "button-choice", "date", "time", "file", "unknown"]);
+export type FormFieldType = z.infer<typeof FormFieldType>;
+export const FormField = z.object({
+  label: z.string(),
+  type: FormFieldType,
+  required: z.boolean(),
+  options: z.array(z.string()).optional(),
+  /** Attribute maxlength, or the visible "0/4000" counter; null when unknown. */
+  maxLength: z.number().nullable().optional(),
+  /** Title of the wizard step / page section this field was seen on. */
+  step: z.string(),
+  /** Playwright selector that found it (role/label/placeholder based), e.g. `role=textbox[name="Email (optional)"]`. */
+  selectorHint: z.string().optional(),
+});
+export type FormField = z.infer<typeof FormField>;
+/** Merged, ordered per-step schema observed during one run. Emitted per step as `EVT {"step":"inspect","message":"form_schema"}`. */
+export const FormSchema = z.object({
+  steps: z.array(z.object({ title: z.string(), fields: z.array(FormField) })),
+  capturedAt: z.string(),
+});
+export type FormSchema = z.infer<typeof FormSchema>;
+
 /** Written to /work/out/result.json by the worker. The bot re-validates it. */
 export const WorkerResult = z.object({
   attemptId: z.string(),
@@ -424,6 +450,8 @@ export const WorkerResult = z.object({
   message: z.string().nullable().optional(),
   startedAt: z.string(),
   finishedAt: z.string(),
+  /** Form structure observed during this run (additive; null/absent when nothing was captured). */
+  formSchema: FormSchema.nullable().optional(),
 });
 export type WorkerResult = z.infer<typeof WorkerResult>;
 
