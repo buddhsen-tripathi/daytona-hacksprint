@@ -69,6 +69,8 @@ export type SurrealStoreOptions = {
 
 export type SurrealStore = Store & {
   backend: "surrealdb-embedded" | "surrealdb";
+  /** Whether the HNSW memory index was accepted by the engine (known after init()). */
+  readonly vectorIndex: boolean;
   namespace: string;
   database: string;
   /** Delete every 311Relay record (and re-seed categories). Tests/seed only. */
@@ -118,6 +120,16 @@ export const RELATIONS: Record<string, { in: string; out: string }> = {
 const GRAPH_NODE_TABLES = ["resident", "complaint", "location", "complaint_category", "official_request", "filing_attempt", "workflow_pattern"];
 const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted_in", "possibly_duplicates", "attempted", "learned", "applies_to", "similar_to"];
 const KIND: Record<string, string> = { complaint_category: "category" };
+
+/**
+ * Optional ANN index for OpenRouter embeddings (text-embedding-3-small = 1536 dims). HNSW needs one fixed
+ * dimension, while the memory stream can also hold 256-dim fallback vectors, so the index lives on a
+ * dedicated field that is only set for 1536-dim vectors. Recall itself uses exact
+ * vector::similarity::cosine with the structural filters (works on every engine); the index is there for
+ * KNN (`embedding_1536 <|k,ef|> $q`) once the stream grows. Defined best-effort: engines without HNSW skip it.
+ */
+export const HNSW_DIM = 1536;
+const HNSW_SQL = `DEFINE INDEX IF NOT EXISTS memory_embedding ON memory FIELDS embedding_${HNSW_DIM} HNSW DIMENSION ${HNSW_DIM} DIST COSINE TYPE F32;`;
 
 function schemaSql(): string {
   const lines: string[] = [];
@@ -235,6 +247,7 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
 
   let db: Surreal | null = null;
   let ready: Promise<void> | null = null;
+  let hnsw = false;
 
   async function connect(): Promise<void> {
     let instance: Surreal;
@@ -261,6 +274,13 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     );
     await instance.use({ namespace, database });
     await instance.query(schemaSql()).collect();
+    try {
+      await instance.query(HNSW_SQL).collect();
+      hnsw = true;
+    } catch (err) {
+      hnsw = false;
+      console.warn(`[surrealdb] HNSW index unavailable (exact cosine recall still works): ${(err as Error).message}`);
+    }
     db = instance;
     await seedCategories();
   }
@@ -505,6 +525,7 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
         lon: m.geo?.lon ?? null,
         text: m.text,
         embedding: m.embedding,
+        ...(hnsw && m.embedding?.length === HNSW_DIM ? { [`embedding_${HNSW_DIM}`]: m.embedding } : {}),
         embedModel: m.embedModel,
         embedDim: m.embedding?.length ?? null,
         importance: m.importance,
@@ -537,6 +558,9 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
   // ---------------------------------------------------------------------------
   const store: SurrealStore = {
     backend: embedded ? "surrealdb-embedded" : "surrealdb",
+    get vectorIndex() {
+      return hnsw;
+    },
     namespace,
     database,
 

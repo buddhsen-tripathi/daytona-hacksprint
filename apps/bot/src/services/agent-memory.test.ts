@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Embedder, FilingAttempt, Store } from "../core/contracts.js";
 import { nowIso } from "../core/contracts.js";
+import { createHashEmbedder } from "../integrations/embedder.js";
 import { createMemoryStore } from "../integrations/memory-store.js";
 import { createSurrealStore, type SurrealStore } from "../integrations/surrealdb.js";
 import { MEMORY_WEIGHTS, createAgentMemory, keywordOverlap, recencyDecay, scrubPii, tokenize } from "./agent-memory.js";
@@ -142,6 +143,44 @@ suite("SurrealDB embedded", async () => {
   };
 });
 suite("memory store", async () => ({ store: createMemoryStore() }));
+suite("SurrealDB embedded + hashed embeddings", async () => {
+  const store = createSurrealStore({ url: "mem://", isolated: true });
+  await store.init();
+  return { store, close: () => store.close() };
+}, createHashEmbedder());
+suite("memory store + hashed embeddings", async () => ({ store: createMemoryStore() }), createHashEmbedder());
+
+describe("agent memory: vectors across models (SurrealDB embedded)", () => {
+  let store: SurrealStore;
+  beforeAll(async () => {
+    store = createSurrealStore({ url: "mem://", isolated: true });
+    await store.init();
+  }, 30_000);
+  afterAll(async () => {
+    await store?.close();
+  });
+
+  it("defines the HNSW index and stores 1536-dim vectors; cosine is computed in SurrealQL", async () => {
+    expect(store.vectorIndex).toBe(true);
+    const unit = (i: number) => Array.from({ length: 1536 }, (_, j) => (j === i ? 1 : 0));
+    const fake1536: Embedder = { model: "fake/1536", dim: 1536, embed: async (texts) => ({ model: "fake/1536", vectors: texts.map((t) => unit(t.includes("delay") ? 0 : 1)) }) };
+    const m = createAgentMemory({ store, embedder: fake1536, now: () => NOW });
+    await m.remember({ id: "mem_v_delay", kind: "episodic", text: "train delay", category: "vec", source: "seed", createdAt: daysAgo(0) });
+    await m.remember({ id: "mem_v_other", kind: "episodic", text: "broken elevator", category: "vec", source: "seed", createdAt: daysAgo(0) });
+    const got = await m.recall({ text: "delay again", scope: { category: "vec" } });
+    expect(got.map((g) => [g.id, g.breakdown.relevanceKind, g.breakdown.relevance])).toEqual([
+      ["mem_v_delay", "cosine", 1],
+      ["mem_v_other", "cosine", 0],
+    ]);
+    const [knn] = await store.query<[{ id: unknown }[]]>("SELECT id FROM memory WHERE embedding_1536 <|1,40|> $q", { q: unit(0) });
+    expect(knn.map((r) => String(r.id))).toEqual(["memory:mem_v_delay"]);
+
+    // a query embedded by another model never compares vectors across models: keyword overlap instead
+    const hash = createAgentMemory({ store, embedder: createHashEmbedder(), now: () => NOW });
+    const mixed = await hash.recall({ text: "train delay", scope: { category: "vec" } });
+    expect(mixed[0]).toMatchObject({ id: "mem_v_delay", breakdown: { relevanceKind: "keyword", relevance: 1 } });
+  });
+});
 
 describe("agent memory: pure helpers", () => {
   it("tokenize keeps subway lines, drops stopwords, strips plurals", () => {
