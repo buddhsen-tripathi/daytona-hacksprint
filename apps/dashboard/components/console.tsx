@@ -81,24 +81,6 @@ export function Console({ mock }: { mock: boolean }) {
         </div>
       </div>
 
-      {/* Provider board */}
-      <Card className="rise mb-8 flex flex-wrap items-stretch">
-        <div className="flex items-center gap-2 border-r border-rule bg-ink px-4 text-paper">
-          <Radar className="size-4" aria-hidden />
-          <span className="font-wide text-[11px] font-extrabold uppercase tracking-[0.12em]">Providers</span>
-        </div>
-        <ProviderCell icon={<Bot className="size-4" />} label="Telegram" value={h?.telegram == null ? "—" : h.telegram ? "polling" : "off"} state={h?.telegram == null ? "unknown" : h.telegram ? "on" : "off"} />
-        <ProviderCell icon={<Database className="size-4" />} label="Store" value={h?.store ?? "—"} state={h?.store && /memory/i.test(h.store) ? "warn" : prov(h?.store)} />
-        <ProviderCell icon={<Box className="size-4" />} label="Sandbox" value={h?.sandbox ?? "—"} state={prov(h?.sandbox)} />
-        <ProviderCell icon={<Globe className="size-4" />} label="Browser" value={h?.browser ?? "—"} state={prov(h?.browser)} />
-        <ProviderCell icon={<Target className="size-4" />} label="Filing target" value={h?.filingTarget ?? "—"} state={h?.filingTarget === "real" ? "warn" : prov(h?.filingTarget)} />
-        <ProviderCell icon={<Sparkles className="size-4" />} label="Classifier" value={h?.classifier ?? "—"} state={prov(h?.classifier)} />
-        <ProviderCell icon={<Activity className="size-4" />} label="Phoenix" value={h?.phoenix ?? "—"} state={prov(h?.phoenix)} />
-        <div className="flex items-center px-4">
-          <LiveTick updatedAt={health.updatedAt} error={health.error} />
-        </div>
-      </Card>
-
       <div className="grid grid-cols-12 gap-8">
         <div className="col-span-12 xl:col-span-8">
           <Section no="01" title="Complaints" aside={<span className="font-mono">newest first · {complaints.length} total</span>}>

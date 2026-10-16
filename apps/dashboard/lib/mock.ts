@@ -103,7 +103,7 @@ const attemptOk: FilingAttempt = {
   id: "att_ok7f2",
   complaintId: "mock",
   approvedVersion: 3,
-  target: "demo",
+  target: "real",
   category: "street-pothole",
   sandboxId: "dtn-5c1e9a42",
   sandboxProvider: "daytona",
@@ -142,7 +142,7 @@ const attemptCaptcha: FilingAttempt = {
   id: "att_cap91",
   complaintId: "mock-captcha",
   approvedVersion: 2,
-  target: "demo",
+  target: "real",
   category: "street-repair-defect",
   sandboxId: "dtn-a7730be0",
   sandboxProvider: "daytona",
@@ -382,7 +382,7 @@ const TRANSITIONS: Transition[] = [
 const PATTERNS: WorkflowPattern[] = [
   {
     id: "wp_addr_enter",
-    target: "demo",
+    target: "real",
     category: "street-pothole",
     kind: "address-autocomplete-needs-enter",
     description: "Address field opens an autocomplete list; press Enter after typing or the value is dropped.",
@@ -393,7 +393,7 @@ const PATTERNS: WorkflowPattern[] = [
   },
   {
     id: "wp_confirm_sel",
-    target: "demo",
+    target: "real",
     category: "street-pothole",
     kind: "confirmation-selector",
     description: "SR number is rendered in [data-testid=sr-number] on /confirmation/<sr>.",
@@ -404,7 +404,7 @@ const PATTERNS: WorkflowPattern[] = [
   },
   {
     id: "wp_captcha",
-    target: "demo",
+    target: "real",
     category: "street-repair-defect",
     kind: "captcha-on-form",
     description: "Street repair form showed reCAPTCHA on load; hand off to the resident immediately.",

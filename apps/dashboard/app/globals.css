@@ -55,11 +55,6 @@ html {
 
 body {
   background-color: var(--paper);
-  /* faint ledger grid, like municipal graph paper */
-  background-image:
-    linear-gradient(to right, rgb(23 20 15 / 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(23 20 15 / 0.035) 1px, transparent 1px);
-  background-size: 24px 24px;
   color: var(--ink);
   font-family: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
   font-size: 14px;

@@ -27,7 +27,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   311<span className="text-signal">Relay</span>
                 </span>
               </span>
-              <span className="hidden font-mono text-[11px] text-muted md:inline">See something. Send it. Track it.</span>
             </Link>
             <div className="ml-auto">
               <Suspense>

@@ -257,7 +257,7 @@ export function GraphView({ mock }: { mock: boolean }) {
     data?.workflowPatterns ??
     (data?.nodes ?? [])
       .filter((n) => n.kind === "workflow_pattern")
-      .map((n) => ({ id: n.id, kind: n.label, description: "—", target: "demo", category: "street-pothole", hint: {}, observedInAttemptId: null, outcome: null, createdAt: "" }));
+      .map((n) => ({ id: n.id, kind: n.label, description: "—", target: "real", category: "street-pothole", hint: {}, observedInAttemptId: null, outcome: null, createdAt: "" }));
 
   return (
     <div>
