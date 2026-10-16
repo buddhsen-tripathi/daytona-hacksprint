@@ -13,7 +13,7 @@
  * Also `embed(texts)` (POST /api/v1/embeddings) for agent memory (#4).
  */
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -263,6 +263,8 @@ export type EmbedOptions = {
   batchSize?: number;
   /** On-disk cache directory (one JSON file per text hash); null/undefined ⇒ in-memory cache only. */
   cacheDir?: string | null;
+  /** Expected vector length; disk-cache entries of another length are discarded (#24). Unknown ⇒ any non-empty length. */
+  dim?: number;
 };
 
 /** In-process cache: sha256(model, text) → vector (insertion-ordered; oldest evicted). */
@@ -282,20 +284,39 @@ function cachePut(key: string, v: number[]) {
   embedCache.set(key, v);
 }
 
-async function diskGet(dir: string, key: string): Promise<number[] | null> {
+/** A cached vector is usable only if it is a non-empty array of finite numbers of the expected length (when known). */
+export function validCachedVector(v: unknown, dim?: number): v is number[] {
+  return Array.isArray(v) && v.length > 0 && (!dim || v.length === dim) && v.every((x) => typeof x === "number" && Number.isFinite(x));
+}
+
+/** #24: empty / truncated / corrupt / wrong-dimension files are misses, and are deleted so they get rewritten. */
+async function diskGet(dir: string, key: string, dim?: number): Promise<number[] | null> {
+  const file = join(dir, `${key}.json`);
+  let raw: string;
   try {
-    const v = JSON.parse(await readFile(join(dir, `${key}.json`), "utf8"));
-    return Array.isArray(v) && v.every((x) => typeof x === "number") ? v : null;
+    raw = await readFile(file, "utf8");
   } catch {
-    return null;
+    return null; // not cached (or unreadable)
   }
+  let v: unknown = null;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    /* corrupt */
+  }
+  if (validCachedVector(v, dim)) return v;
+  await unlink(file).catch(() => {});
+  return null;
 }
 async function diskPut(dir: string, key: string, v: number[]) {
+  const file = join(dir, `${key}.json`);
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   try {
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, `${key}.json`), JSON.stringify(v));
+    await writeFile(tmp, JSON.stringify(v));
+    await rename(tmp, file); // atomic: a crash mid-write never leaves a truncated cache file
   } catch {
-    /* the cache is an optimisation only */
+    await unlink(tmp).catch(() => {}); /* the cache is an optimisation only */
   }
 }
 
@@ -349,7 +370,7 @@ export async function embed(texts: string[], opts: EmbedOptions = {}): Promise<n
   for (let i = 0; i < texts.length; i++) {
     const t = texts[i]!;
     const key = embedCacheKey(model, t);
-    const hit = embedCache.get(key) ?? (opts.cacheDir ? await diskGet(opts.cacheDir, key) : null);
+    const hit = embedCache.get(key) ?? (opts.cacheDir ? await diskGet(opts.cacheDir, key, opts.dim) : null);
     if (hit) {
       cachePut(key, hit);
       out[i] = hit;
