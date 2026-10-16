@@ -29,9 +29,13 @@ import type {
   OfficialRequest,
   Resident,
   Store,
+  RelatedComplaint,
+  RelatedComplaints,
+  RelatedComplaintsQuery,
   WorkflowPattern,
 } from "../core/contracts.js";
 import { CATEGORIES, nowIso } from "../core/contracts.js";
+import { NOT_REPORTED, NOT_REPORTED_OTHERS, RELATED_DEFAULTS } from "../services/memory.js";
 import { env } from "./env.js";
 
 export class StoreError extends Error {
@@ -97,11 +101,13 @@ export const RELATIONS: Record<string, { in: string; out: string }> = {
   applies_to: { in: "workflow_pattern", out: "complaint_category" },
   has_media: { in: "complaint", out: "media" },
   produced: { in: "filing_attempt", out: "evidence" },
+  /** Remembered issues: same category + same line / within 100 m, recent (dashboard cluster). */
+  similar_to: { in: "complaint", out: "complaint" },
 };
 
 /** Tables surfaced by `graph()` (media/evidence/audit rows are left out to keep it readable). */
 const GRAPH_NODE_TABLES = ["resident", "complaint", "location", "complaint_category", "official_request", "filing_attempt", "workflow_pattern"];
-const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted_in", "possibly_duplicates", "attempted", "learned", "applies_to"];
+const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted_in", "possibly_duplicates", "attempted", "learned", "applies_to", "similar_to"];
 const KIND: Record<string, string> = { complaint_category: "category" };
 
 function schemaSql(): string {
@@ -276,7 +282,6 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
             shortLabel: c.label,
             officialRoute: c.officialFormUrl,
             articleUrl: c.articleUrl,
-            demoRoute: c.demoRoute,
             requiredFields: c.requiredFields,
             openData: c.openData,
             guidance: c.guidance,
@@ -469,7 +474,6 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
         telegramChatId: chatId,
         telegramUsername: username,
         preferredLanguage: null,
-        demoPortalMode: "normal",
         contactName: null,
         contactEmail: null,
         createdAt: nowIso(),
@@ -663,6 +667,73 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       ),
     ),
 
+    // -- remembered issues (§8.1 context collector) -----------------------------
+    findRelatedComplaints: guard("findRelatedComplaints", async (args: RelatedComplaintsQuery): Promise<RelatedComplaints> => {
+      const subway = !!args.line;
+      const geo = !subway && args.lat != null && args.lon != null;
+      if (!subway && !geo) return { mine: [], others: { reports: 0, residents: 0, latestAt: null, oldestAt: null, ids: [] } };
+      // Same line (subway) or within $radius metres (street categories, GeoJSON point (lon, lat)).
+      const scope = subway
+        ? "doc.transit.line = $line"
+        : "type::is_number(latitude) AND type::is_number(longitude) AND geo::distance(type::point([longitude, latitude]), $pt) <= $radius";
+      const dist = geo ? "geo::distance(type::point([longitude, latitude]), $pt)" : "NONE";
+      const res = await q<[RelRow[], RelRow[]]>(
+        `-- 1. your own reports: same resident, same category, last 24 h
+         SELECT id, chatId, status, createdAt, doc.officialRequestNumber AS sr, doc.statusReason AS reason, doc.transit.line AS line, ${dist} AS distanceMeters
+         FROM complaint
+         WHERE chatId = $chat AND category = $category AND id != $current AND status NOTINSIDE $notReported
+           AND <datetime> createdAt > time::now() - <duration> $mineWindow
+           AND ${scope}
+         ORDER BY createdAt DESC LIMIT 5;
+         -- 2. other residents: same category, last 2 h (counted, never shown)
+         SELECT id, chatId, createdAt
+         FROM complaint
+         WHERE chatId != $chat AND category = $category AND status NOTINSIDE $notReportedOthers
+           AND <datetime> createdAt > time::now() - <duration> $othersWindow
+           AND ${scope}
+         ORDER BY createdAt DESC LIMIT 200;`,
+        {
+          chat: args.chatId,
+          category: args.category,
+          current: rid("complaint", args.complaintId),
+          line: args.line ?? null,
+          pt: geo ? new GeometryPoint([args.lon as number, args.lat as number]) : null,
+          radius: args.radiusMeters ?? RELATED_DEFAULTS.radiusMeters,
+          notReported: [...NOT_REPORTED],
+          notReportedOthers: [...NOT_REPORTED_OTHERS],
+          mineWindow: duration(args.sinceMs ?? RELATED_DEFAULTS.sinceMs),
+          othersWindow: duration(args.othersSinceMs ?? RELATED_DEFAULTS.othersSinceMs),
+        },
+      );
+      const mine: RelatedComplaint[] = (res[0] ?? []).map((r) => ({
+        id: plainId(r.id),
+        status: r.status as ComplaintState,
+        createdAt: String(r.createdAt),
+        officialRequestNumber: (r.sr as string | null | undefined) ?? null,
+        statusReason: (r.reason as string | null | undefined) ?? null,
+        line: (r.line as string | null | undefined) ?? null,
+        distanceMeters: typeof r.distanceMeters === "number" ? r.distanceMeters : null,
+      }));
+      const others = res[1] ?? [];
+      return {
+        mine,
+        others: {
+          reports: others.length,
+          residents: new Set(others.map((r) => String(r.chatId))).size,
+          latestAt: others[0] ? String(others[0].createdAt) : null,
+          oldestAt: others.length ? String(others[others.length - 1]!.createdAt) : null,
+          ids: others.slice(0, 10).map((r) => plainId(r.id)),
+        },
+      };
+    }),
+
+    linkSimilarComplaints: guard("linkSimilarComplaints", async (complaintId: string, similarIds: string[]) => {
+      const b = new Batch();
+      const cr = rid("complaint", complaintId);
+      for (const id of new Set(similarIds)) if (id !== complaintId) b.relate("similar_to", cr, rid("complaint", id));
+      await run(b);
+    }),
+
     // -- graph -----------------------------------------------------------------
     graph: guard("graph", async (args?: { complaintId?: string }) => {
       type EdgeRow = { in: unknown; out: unknown; rel: string };
@@ -725,6 +796,13 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
   };
 
   return store;
+}
+
+type RelRow = { id: unknown; chatId: unknown; status?: unknown; createdAt: unknown; sr?: unknown; reason?: unknown; line?: unknown; distanceMeters?: unknown };
+
+/** ms → SurrealQL duration string ("1440m"); cast with `<duration>` in the query. */
+function duration(ms: number): string {
+  return `${Math.max(1, Math.round(ms / 60_000))}m`;
 }
 
 /** Namespace/database identifiers are interpolated (SurrealQL can't bind them): allow only safe chars. */

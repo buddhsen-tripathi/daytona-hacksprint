@@ -1,6 +1,6 @@
 /**
  * In-memory Store. Fully implements the Store contract; used by tests, the
- * demo script, and as the fallback when SurrealDB can't initialize.
+ * scripted runner, and as the fallback when SurrealDB can't initialize.
  */
 import type {
   CategoryId,
@@ -16,6 +16,7 @@ import type {
   WorkflowPattern,
 } from "../core/contracts.js";
 import { nowIso, shortId } from "../core/contracts.js";
+import { filterRelated } from "../services/memory.js";
 
 const TERMINAL: ComplaintState[] = ["CANCELLED", "EMERGENCY_REFERRAL", "OUT_OF_SCOPE", "TRACKING", "SUBMITTED"];
 
@@ -40,6 +41,7 @@ export function createMemoryStore(): MemoryStore {
   const processed = new Set<string>();
   const patterns: WorkflowPattern[] = [];
   const transitions: TransitionRecord[] = [];
+  const similar = new Map<string, Set<string>>();
 
   const store: MemoryStore = {
     backend: "memory",
@@ -63,7 +65,6 @@ export function createMemoryStore(): MemoryStore {
         telegramChatId: chatId,
         telegramUsername: username,
         preferredLanguage: null,
-        demoPortalMode: "normal",
         contactName: null,
         contactEmail: null,
         createdAt: nowIso(),
@@ -160,7 +161,18 @@ export function createMemoryStore(): MemoryStore {
     },
 
     async recordWorkflowPattern(p) {
-      patterns.push(clone(p));
+      // Upsert by id (ask-before-approval patterns are re-recorded with an incremented count).
+      const i = patterns.findIndex((x) => x.id === p.id);
+      if (i >= 0) patterns[i] = clone(p);
+      else patterns.push(clone(p));
+    },
+    async findRelatedComplaints(q) {
+      return clone(filterRelated([...complaints.values()], q));
+    },
+    async linkSimilarComplaints(complaintId, similarIds) {
+      const set = similar.get(complaintId) ?? new Set<string>();
+      for (const id of similarIds) if (id !== complaintId) set.add(id);
+      similar.set(complaintId, set);
     },
     async getWorkflowPatterns(args: { target: FilingTarget; category: CategoryId }) {
       return clone(patterns.filter((p) => p.target === args.target && p.category === args.category));
@@ -196,6 +208,12 @@ export function createMemoryStore(): MemoryStore {
           const did = `sr_${d.uniqueKey}`;
           nodes.set(did, { id: did, kind: "open_data_request", label: `${d.uniqueKey} (${d.status ?? "?"})` });
           edges.push({ from: c.id, to: did, rel: "possible_duplicate_of" });
+        }
+        for (const other of similar.get(c.id) ?? []) {
+          const o = complaints.get(other);
+          if (!o) continue;
+          nodes.set(o.id, { id: o.id, kind: "complaint", label: `${o.category ?? "uncategorized"} · ${o.status}` });
+          edges.push({ from: c.id, to: o.id, rel: "similar_to" });
         }
         for (const a of attempts.values()) {
           if (a.complaintId !== c.id) continue;
