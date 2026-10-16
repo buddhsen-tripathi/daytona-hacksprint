@@ -3,7 +3,7 @@
  * learned ask rules (filing service), category seeds (boot). No contact fields or typed answers in memory text.
  */
 import { describe, expect, it } from "vitest";
-import type { BrowserProvider, ClassificationResult, ComplaintDraft, SandboxProvider, WorkerEvent, WorkerQuestion, WorkerResult } from "../core/contracts.js";
+import type { BrowserProvider, ClassificationResult, ComplaintDraft, Embedder, SandboxProvider, WorkerEvent, WorkerQuestion, WorkerResult } from "../core/contracts.js";
 import { CATEGORIES, EMPTY_LOCATION, EMPTY_TRANSIT, nowIso } from "../core/contracts.js";
 import { createOrchestrator } from "../core/orchestrator.js";
 import { createCaptureTransport } from "../api/capture-transport.js";
@@ -166,6 +166,23 @@ describe("memory write points: filing outcome, live question + answer, learned r
     for (const r of rows) expect(`${r.text} ${JSON.stringify(r.data)}`).not.toMatch(/Jane|8512|555|verbatim/);
     expect(byKind.wp).toMatchObject({ kind: "procedural", chatId: null, importance: 0.7, category: "subway-delay" });
     expect((await store.listMemory!({ kind: "procedural" })).map((r) => (r.data as { field?: string }).field).sort()).toEqual(["car_number", "which_car_were_you_in"]);
+  });
+
+  it("a slow embedder never delays the filing outcome (writes land on flush)", async () => {
+    const store = createMemoryStore();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slow: Embedder = { model: "slow/1", dim: 1, embed: async (texts) => (await gate, { model: "slow/1", vectors: texts.map(() => [1]) }) };
+    const memory = createAgentMemory({ store, embedder: slow });
+    await store.saveComplaint(approvedDraft());
+    const filing = createFilingService({ store, tracer: createNoopTracer(), memory, sandboxProvider: sandbox((id) => ({ ...base(id), status: "FAILED", errorCode: "SANDBOX_ERROR" })), browserProvider: browser });
+    const resident = await store.getOrCreateResident("rider-f", null);
+    const outcome = await filing.executeFiling(approvedDraft(), { resident, onProgress: () => {}, onQuestion: async () => ({ value: "x" }) });
+    expect(outcome.status).toBe("FAILED");
+    expect(await store.listMemory!({ source: `attempt:${outcome.attemptId}` })).toHaveLength(0); // still embedding
+    release();
+    await memory.flush();
+    expect((await store.listMemory!({ source: `attempt:${outcome.attemptId}` })).map((r) => r.id)).toContain(`mem_outcome_${outcome.attemptId}`);
   });
 
   it("verified SUBMITTED outcome is remembered with importance 0.9; the reference stays in data", async () => {

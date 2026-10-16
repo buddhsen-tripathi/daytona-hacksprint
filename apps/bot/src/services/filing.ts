@@ -692,11 +692,13 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         const lp = await recordAskPattern(store, { target, category, observation, attemptId: attempt.id, outcome: status }).catch((e) => void console.warn("[filing] recordAskPattern:", (e as Error).message));
         if (lp) learned.push(lp);
       }
-      // agent memory: the outcome (episodic) + learned ask-before-approval rules (procedural)
+      // agent memory: the outcome (episodic) + learned ask-before-approval rules (procedural).
+      // Fire-and-forget like the other write points: embedding can take up to its 20 s timeout and must
+      // never delay the outcome message (memory.flush() drains these in tests / scripts).
       if (memory) {
         const dryRun = status === "HUMAN_ACTION_REQUIRED" && !v.errorCode && isRealOnly(category);
-        await memory.remember(filingOutcomeItem({ complaint: current, attempt, status, errorCode: v.errorCode, officialRequestNumber: sr, dryRun })).catch((e) => console.warn("[filing] memory (outcome):", (e as Error).message));
-        for (const lp of learned) await memory.remember(askPatternItem(lp)).catch((e) => console.warn("[filing] memory (pattern):", (e as Error).message));
+        void memory.remember(filingOutcomeItem({ complaint: current, attempt, status, errorCode: v.errorCode, officialRequestNumber: sr, dryRun })).catch((e) => console.warn("[filing] memory (outcome):", (e as Error).message));
+        for (const lp of learned) void memory.remember(askPatternItem(lp)).catch((e) => console.warn("[filing] memory (pattern):", (e as Error).message));
         set("memory.writes", 1 + learned.length);
       }
       // ---- [/memory] ----
