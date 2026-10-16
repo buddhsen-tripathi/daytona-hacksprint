@@ -28,8 +28,8 @@ export function isSupportedCategory(id: unknown): id is CategoryId {
   return CategoryIdSchema.safeParse(id).success;
 }
 
-/** Default when no category is known yet: assume a street report (location + description). */
-const DEFAULT_REQUIRED: CategoryDefinition["requiredFields"] = ["location", "description"];
+/** Default when no category is known yet: a description. Location is only asked for categories that require it. */
+const DEFAULT_REQUIRED: CategoryDefinition["requiredFields"] = ["description"];
 
 export function requiredFieldsFor(category: string | null | undefined): CategoryDefinition["requiredFields"] {
   return getCategory(category)?.requiredFields ?? DEFAULT_REQUIRED;
@@ -57,9 +57,12 @@ export function missingFields(draft: Pick<ComplaintDraft, "category" | "location
   return missing;
 }
 
-/** Categories with no replica portal: always filed against the official site (approval still required). */
+/**
+ * Categories whose official form the worker drives end to end (the MTA wizard: no CAPTCHA; the final Submit is still
+ * gated by approval + ALLOW_REAL_SUBMIT).
+ */
 export function isRealOnly(category: string | null | undefined): boolean {
-  return getCategory(category)?.filing === "real-only";
+  return getCategory(category)?.id === "subway-delay";
 }
 
 /** Whether NYC Open Data has records for the category (duplicate check + Open Data status). */
@@ -67,19 +70,21 @@ export function isOpenDataBacked(category: string | null | undefined): boolean {
   return getCategory(category)?.openDataBacked !== false;
 }
 
-/** The target a filing for this category actually uses: real-only categories ignore FILING_TARGET. */
-export function effectiveTarget(category: string | null | undefined, configured: FilingTarget): FilingTarget {
-  return isRealOnly(category) ? "real" : configured;
+/** The target a filing uses: always the official form (kept as a function so call sites stay stable). */
+export function effectiveTarget(_category?: string | null, _configured?: FilingTarget): FilingTarget {
+  return "real";
 }
 
 /**
- * Whether the official form for this category needs the resident's name before approval.
- * DOT pothole form (real target): first + last name required. MTA Customer Feedback: contact is
- * optional (agent G mapping), so it is passed through only if the resident set /name or /email.
+ * Whether the official form for this category needs the resident's name before approval
+ * (data-driven: CategoryDefinition.requiresContactName). MTA Customer Feedback: contact is optional,
+ * so it is passed through only if the resident set /name or /email (MTA_REQUIRE_CONTACT=1 forces it).
  */
-export function requiresContactName(category: string | null | undefined, target: FilingTarget): boolean {
-  if (isRealOnly(category)) return process.env.MTA_REQUIRE_CONTACT === "1";
-  return effectiveTarget(category, target) === "real";
+export function requiresContactName(category: string | null | undefined, _target?: FilingTarget): boolean {
+  const def = getCategory(category);
+  if (!def) return false;
+  if (def.id === "subway-delay" && process.env.MTA_REQUIRE_CONTACT === "1") return true;
+  return def.requiresContactName;
 }
 
 /**
@@ -159,31 +164,33 @@ export function isMaterialChange(before: ComplaintDraft, after: ComplaintDraft):
   return materialChanges(before, after).length > 0;
 }
 
+/** "subway delays" / "subway delays and X" — the categories filed today, in plain words. */
+export function supportedSummary(): string {
+  const labels = allCategories().map((c) => `${c.label.toLowerCase()}s`);
+  return labels.length <= 1 ? (labels[0] ?? "") : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
+
 export function helpText(): string {
-  const cats = allCategories()
-    .map((c) => `• ${c.label} (${c.officialLabel})`)
-    .join("\n");
   return [
-    "Here's what I can help with right now:",
-    cats,
+    "What I can file today:",
+    "• Subway delays, with the MTA",
+    "More categories are coming.",
     "",
-    "How it works:",
-    "1. Send a photo or describe the problem",
-    "2. Share the location (pin or address); for a subway delay, tell me the line and direction instead",
-    "3. I check for similar reports nearby (NYC Open Data), or live MTA alerts for subway delays",
-    "4. You review the draft and approve, and only then do I file it",
-    "",
-    "Subway delays go straight to the MTA's Customer Feedback form, filed for real. Only report a delay that actually happened to you.",
+    "What happens:",
+    "1. You send a photo or describe the problem",
+    "2. I draft the report and ask for anything missing",
+    "3. You approve it (nothing is sent without your OK)",
+    "4. I file it in a real browser and send you the recording and the reference",
     "",
     "Commands:",
     "/report start a new report",
-    "/myreports your drafts and filed requests",
-    "/status <number> check a service request",
+    "/myreports your reports",
+    "/status <number> check a report",
+    "/name <First Last> your name for official forms",
+    "/email <address> your email for official replies",
     "/cancel cancel the current draft",
-    "/name <First Last> contact name (only needed for some official forms)",
-    "/email <address> optional email for official forms (the MTA replies by email)",
+    "/help this message",
     "",
-    "I never file without your OK, and I never make up request numbers.",
     "For emergencies, call 911.",
   ].join("\n");
 }
@@ -192,30 +199,19 @@ export function emergencyText(): string {
   return [
     "🚨 This sounds like it could be dangerous.",
     "",
-    "Please call 911 now if anyone is at risk or there's an open hole, collapse, or hazard in the road.",
+    "Please call 911 now if anyone is at risk or there's an immediate hazard.",
     "",
-    "I'm not filing this as a routine 311 report.",
+    "I'm not filing this as a routine report.",
     "",
     "If it's not an emergency after all, describe it again and I'll help you report it.",
   ].join("\n");
 }
 
-export function manualGuidance(triage: TriageOutcome | ClassificationResult["triage"], text: string | null): string {
+export function manualGuidance(triage: TriageOutcome | ClassificationResult["triage"], text: string | null, link: string = NYC311_REPORT_URL): string {
   const lines: string[] = [];
-  if (triage === "OUT_OF_SCOPE") {
-    lines.push("That sounds like a real issue, but it isn't one I can file yet.");
-  } else {
-    lines.push("I can't file this one automatically.");
-  }
+  lines.push(triage === "OUT_OF_SCOPE" ? "That's a real issue, but it isn't one I can file yet." : "I can't file this one automatically.");
   if (text && text.trim()) lines.push("", `What I understood: ${text.trim()}`);
-  lines.push(
-    "",
-    `You can report it directly on NYC311: ${NYC311_REPORT_URL}`,
-    "",
-    `Right now I can file: ${allCategories()
-      .map((c) => c.label.toLowerCase())
-      .join(" and ")}.`,
-  );
+  lines.push("", `Here's where to report it: ${link}`, "", `Right now I can file: ${supportedSummary()}.`);
   return lines.join("\n");
 }
 

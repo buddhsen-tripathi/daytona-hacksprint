@@ -12,8 +12,8 @@ function draft(over: Partial<ComplaintDraft> = {}): ComplaintDraft {
     status: "RECEIVED",
     category: null,
     triage: null,
-    description: "Pothole in the left lane",
-    userMessages: ["there is a pothole"],
+    description: "The A train was held at 14 St for 25 minutes",
+    userMessages: ["A train stuck at 14 St"],
     location: { ...EMPTY_LOCATION },
     media: [],
     classification: null,
@@ -73,8 +73,8 @@ describe("SurrealStore (embedded mem://)", () => {
     const b = await store.getOrCreateResident("chat-1", "alice");
     expect(a.id).toBe(b.id);
     expect(typeof a.id).toBe("string");
-    const u = await store.updateResident(a.id, { demoPortalMode: "captcha", contactName: "Alice Doe" });
-    expect(u.demoPortalMode).toBe("captcha");
+    const u = await store.updateResident(a.id, { contactName: "Alice Doe", contactEmail: "alice@example.com" });
+    expect(u.contactEmail).toBe("alice@example.com");
     expect((await store.getOrCreateResident("chat-1", null)).contactName).toBe("Alice Doe");
   });
 
@@ -85,12 +85,12 @@ describe("SurrealStore (embedded mem://)", () => {
     expect(got?.location).toEqual(EMPTY_LOCATION);
     expect((await store.getActiveComplaint("chat-1"))?.id).toBe("cmp_test1");
 
-    await store.saveComplaint(draft({ status: "READY_FOR_APPROVAL", category: "street-pothole", location: loc, draftVersion: 2 }));
+    await store.saveComplaint(draft({ status: "READY_FOR_APPROVAL", category: "subway-delay", location: loc, draftVersion: 2 }));
     const saved = await store.getComplaint("cmp_test1");
-    expect(saved?.category).toBe("street-pothole");
+    expect(saved?.category).toBe("subway-delay");
     expect(saved?.draftVersion).toBe(2);
 
-    await store.saveComplaint(draft({ status: "CANCELLED", category: "street-pothole", location: loc }));
+    await store.saveComplaint(draft({ status: "CANCELLED", category: "subway-delay", location: loc }));
     expect(await store.getActiveComplaint("chat-1")).toBeNull();
     expect((await store.listComplaints({ chatId: "chat-1" })).map((c) => c.id)).toEqual(["cmp_test1"]);
     expect(await store.getComplaint("missing")).toBeNull();
@@ -103,14 +103,14 @@ describe("SurrealStore (embedded mem://)", () => {
   });
 
   it("links duplicates, attempts, official requests and patterns into a graph", async () => {
-    await store.saveComplaint(draft({ id: "cmp_g", status: "DUPLICATE_REVIEW", category: "street-pothole", location: loc }));
+    await store.saveComplaint(draft({ id: "cmp_g", status: "DUPLICATE_REVIEW", category: "subway-delay", location: loc }));
     await store.linkDuplicates("cmp_g", [candidate]);
     const attempt: FilingAttempt = {
       id: "att_g",
       complaintId: "cmp_g",
       approvedVersion: 1,
-      target: "demo",
-      category: "street-pothole",
+      target: "real",
+      category: "subway-delay",
       sandboxId: "sbx",
       sandboxProvider: "local",
       browserSessionId: null,
@@ -119,7 +119,7 @@ describe("SurrealStore (embedded mem://)", () => {
       recordingUrl: null,
       outcome: "SUBMITTED",
       errorCode: null,
-      officialRequestNumber: "DEMO-20261016-ABC123",
+      officialRequestNumber: "31124680",
       verified: true,
       verificationNotes: null,
       evidence: [],
@@ -138,10 +138,10 @@ describe("SurrealStore (embedded mem://)", () => {
     await store.saveOfficialRequest({
       id: "or_g",
       complaintId: "cmp_g",
-      officialRequestNumber: "DEMO-20261016-ABC123",
-      officialCategory: "Pothole or Cave-In on Street",
+      officialRequestNumber: "31124680",
+      officialCategory: CATEGORIES["subway-delay"].officialLabel,
       status: "Open",
-      statusSource: "demo-portal",
+      statusSource: "confirmation",
       lastCheckedAt: nowIso(),
       receiptUrl: null,
     });
@@ -150,8 +150,8 @@ describe("SurrealStore (embedded mem://)", () => {
 
     await store.recordWorkflowPattern({
       id: "wp_g",
-      target: "demo",
-      category: "street-pothole",
+      target: "real",
+      category: "subway-delay",
       kind: "captcha-after-submit",
       description: "stop on captcha",
       hint: { stopOn: "captcha" },
@@ -159,8 +159,7 @@ describe("SurrealStore (embedded mem://)", () => {
       outcome: "HUMAN_ACTION_REQUIRED",
       createdAt: nowIso(),
     });
-    expect((await store.getWorkflowPatterns({ target: "demo", category: "street-pothole" })).map((p) => p.id)).toEqual(["wp_g"]);
-    expect(await store.getWorkflowPatterns({ target: "real", category: "street-pothole" })).toEqual([]);
+    expect((await store.getWorkflowPatterns({ target: "real", category: "subway-delay" })).map((p) => p.id)).toEqual(["wp_g"]);
 
     const g = await store.graph({ complaintId: "cmp_g" });
     const rels = new Set(g.edges.map((e) => e.rel));

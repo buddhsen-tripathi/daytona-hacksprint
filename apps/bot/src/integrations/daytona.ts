@@ -2,10 +2,9 @@
  * Daytona sandbox provider — one disposable, isolated sandbox per filing attempt (design doc §10).
  *
  * provision(): create sandbox (snapshot DAYTONA_SNAPSHOT, fallback node:20-slim image) → upload
- * apps/worker (package.json + dist) and, for the demo target, apps/portal → `npm i --omit=dev`
- * (playwright-core only) in parallel with starting the portal on :3311 → signed preview URL so the
- * Anchor cloud browser can reach the replica. No API keys are ever uploaded: the worker receives
- * only the ephemeral CDP URL inside payload.json.
+ * apps/worker (package.json + dist) → `npm i --omit=dev` (playwright-core only) in parallel with
+ * starting the CDP relay. No API keys are ever uploaded: the worker only ever sees the relay's
+ * local CDP URL inside payload.json.
  *
  * CDP bridge: sandbox egress on this Daytona tier is firewalled (only essential services such as
  * the npm registry are reachable), so the worker cannot dial Anchor directly. Instead an in-sandbox
@@ -23,7 +22,7 @@ import { join, relative } from "node:path";
 import { Daytona, Image, type Sandbox } from "@daytona/sdk";
 import type { FilingPayload, SandboxHandle, SandboxProvider } from "../core/contracts.js";
 import { env } from "./env.js";
-import { createEventLineParser, ensureWorkerBuilt, parseWorkerResult, PORTAL_DIR, PORTAL_PORT, safeEvidenceName, WORKER_DIR } from "./local-sandbox.js";
+import { answerFile, createEventLineParser, ensureWorkerBuilt, parseWorkerResult, safeEvidenceName, WORKER_DIR, workerDeadline } from "./local-sandbox.js";
 
 export const PREVIEW_HEADERS = { "X-Daytona-Skip-Preview-Warning": "true" } as const;
 
@@ -42,15 +41,11 @@ async function walk(dir: string, skip: (rel: string) => boolean, root = dir): Pr
   return out;
 }
 
-async function collectUploads(home: string, target: "demo" | "real") {
+async function collectUploads(home: string) {
   const files: { source: Buffer; destination: string }[] = [];
   const add = async (abs: string, dest: string) => files.push({ source: await readFile(abs), destination: dest });
   await add(join(WORKER_DIR, "package.json"), `${home}/work/worker/package.json`);
   for (const f of await walk(join(WORKER_DIR, "dist"), () => false)) await add(f, `${home}/work/worker/dist/${relative(join(WORKER_DIR, "dist"), f)}`);
-  if (target === "demo") {
-    const skip = (rel: string) => /^(node_modules|tests?|\.)/.test(rel) || rel.endsWith(".log");
-    for (const f of await walk(PORTAL_DIR, skip)) await add(f, `${home}/work/portal/${relative(PORTAL_DIR, f)}`);
-  }
   return files;
 }
 
@@ -144,7 +139,7 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
 
   return {
     name: "daytona",
-    async provision({ attemptId, target, portalMode, onEvent }): Promise<SandboxHandle> {
+    async provision({ attemptId, onEvent }): Promise<SandboxHandle> {
       const tAll = Date.now();
       ensureWorkerBuilt(onEvent);
 
@@ -152,7 +147,7 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
       onEvent("Creating isolated sandbox…", { provider: "daytona" });
       const tc = Date.now();
       const base = {
-        labels: { app: "311relay", attempt: attemptId, target },
+        labels: { app: "311relay", attempt: attemptId, target: "real" },
         autoStopInterval: 15,
         autoDeleteInterval: 0,
       };
@@ -170,7 +165,6 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
       const createMs = Date.now() - tc;
       onEvent(`Sandbox ready (${sandbox.id.slice(0, 8)}, ${secs(createMs)})`, { provider: "daytona", sandboxId: sandbox.id, durationMs: createMs, snapshot: snapshot || "node:20-slim" });
 
-      let previewToken: string | null = null;
       let relayToken: string | null = null;
       let bridge: Bridge | null = null;
       let destroyed = false;
@@ -179,9 +173,7 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
         destroyed = true;
         const td = Date.now();
         bridge?.close();
-        if (previewToken) await sandbox.expireSignedPreviewUrl(PORTAL_PORT, previewToken).catch(() => {});
         if (relayToken) await sandbox.expireSignedPreviewUrl(RELAY_PORT, relayToken).catch(() => {});
-        previewToken = null;
         relayToken = null;
         try {
           await sandbox.delete(60);
@@ -197,16 +189,16 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
 
         // 2. upload
         const tu = Date.now();
-        const files = await collectUploads(home, target);
+        const files = await collectUploads(home);
         files.push({ source: Buffer.from(HEALTH_SCRIPT), destination: `${work}/health.mjs` });
         files.push({ source: Buffer.from(RELAY_SCRIPT), destination: `${work}/relay/relay.mjs` });
         files.push({ source: Buffer.from(JSON.stringify({ name: "cdp-relay", private: true, type: "module", dependencies: { ws: "8.22.0" } })), destination: `${work}/relay/package.json` });
-        await sandbox.process.executeCommand(`sh -c "mkdir -p ${work}/worker/dist ${work}/portal ${work}/out ${work}/relay"`, undefined, undefined, 30);
+        await sandbox.process.executeCommand(`sh -c "mkdir -p ${work}/worker/dist ${work}/out ${work}/relay"`, undefined, undefined, 30);
         await sandbox.fs.uploadFiles(files, 120);
         const uploadMs = Date.now() - tu;
-        onEvent(`Uploaded worker${target === "demo" ? " + demo portal" : ""} (${files.length} files, ${secs(uploadMs)})`, { files: files.length, durationMs: uploadMs });
+        onEvent(`Uploaded worker (${files.length} files, ${secs(uploadMs)})`, { files: files.length, durationMs: uploadMs });
 
-        // 3. npm i (playwright-core) ‖ start portal
+        // 3. npm i (playwright-core) ‖ start the CDP relay
         const install = (async () => {
           onEvent("Installing browser driver…", { package: "playwright-core" });
           const ti = Date.now();
@@ -215,49 +207,6 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
           if (r.exitCode !== 0) throw new Error(`npm install failed (exit ${r.exitCode}): ${r.result.slice(-400)}`);
           onEvent(`Browser driver installed (${secs(ms)})`, { durationMs: ms });
           return ms;
-        })();
-
-        const portal = (async (): Promise<{ url: string; ms: number } | null> => {
-          if (target !== "demo") return null;
-          const tp = Date.now();
-          let h = { result: "", exitCode: -1 };
-          for (let attemptNo = 1; attemptNo <= 2 && !h.result.includes("HEALTH_OK"); attemptNo++) {
-            const sid = `portal-${attemptNo}`;
-            await sandbox.process.createSession(sid);
-            await sandbox.process.executeSessionCommand(sid, {
-              command: `cd ${work}/portal && PORT=${PORTAL_PORT} MODE=${portalMode} node server.js > ${work}/portal-${attemptNo}.log 2>&1`,
-              runAsync: true,
-            });
-            h = await sandbox.process
-              .executeCommand(`node ${work}/health.mjs http://127.0.0.1:${PORTAL_PORT}/health 15000`, undefined, undefined, 25)
-              .catch((err: Error) => ({ result: `health probe error: ${err.message}`, exitCode: -1 }));
-            if (!h.result.includes("HEALTH_OK") && attemptNo === 1) {
-              onEvent("Demo portal slow to start, restarting it…", { attempt: attemptNo });
-              await sandbox.process.deleteSession(sid).catch(() => {});
-            }
-          }
-          if (!h.result.includes("HEALTH_OK")) {
-            const log = await sandbox.process.executeCommand(`sh -c "tail -c 600 ${work}/portal-2.log"`, undefined, undefined, 10).catch(() => null);
-            throw new Error(`demo portal did not become healthy in the sandbox: ${log?.result ?? h.result}`);
-          }
-          const signed = await sandbox.getSignedPreviewUrl(PORTAL_PORT, 3600);
-          previewToken = signed.token;
-          const url = signed.url.replace(/\/+$/, "");
-          // verify from the bot side, like the cloud browser will reach it
-          let ok = false;
-          for (let i = 0; i < 5 && !ok; i++) {
-            try {
-              const r = await fetch(`${url}/health`, { headers: PREVIEW_HEADERS, signal: AbortSignal.timeout(8_000) });
-              ok = r.ok;
-            } catch {
-              /* retry */
-            }
-            if (!ok) await sleep(1_000);
-          }
-          if (!ok) throw new Error("demo portal preview URL not reachable from outside the sandbox");
-          const ms = Date.now() - tp;
-          onEvent(`Demo portal live (${portalMode} mode, ${secs(ms)})`, { portalMode, durationMs: ms });
-          return { url, ms };
         })();
 
         const relaySecret = randomBytes(18).toString("base64url");
@@ -280,15 +229,13 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
           return { wsUrl, ms };
         })();
 
-        const [installMs, portalRes, relayRes] = await Promise.all([install, portal, relay]);
+        const [installMs, relayRes] = await Promise.all([install, relay]);
         const totalMs = Date.now() - tAll;
-        onEvent(`Isolated worker provisioned (${secs(totalMs)})`, { durationMs: totalMs, createMs, uploadMs, installMs, portalMs: portalRes?.ms ?? null, relayMs: relayRes.ms });
+        onEvent(`Isolated worker provisioned (${secs(totalMs)})`, { durationMs: totalMs, createMs, uploadMs, installMs, relayMs: relayRes.ms });
 
         const handle: SandboxHandle = {
           id: sandbox.id,
           provider: "daytona",
-          portalUrl: portalRes?.url ?? null,
-          portalHeaders: target === "demo" ? { ...PREVIEW_HEADERS } : {},
 
           async runWorker(payload: FilingPayload, onWorkerEvent) {
             const tw = Date.now();
@@ -301,7 +248,7 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
             }
             await sandbox.fs.uploadFiles([{ source: Buffer.from(JSON.stringify(sandboxPayload, null, 2)), destination: `${work}/payload.json` }], 30);
             onEvent("Running filing worker…", { provider: "daytona", sandboxId: sandbox.id });
-            const timeoutMs = payload.limits.totalTimeoutMs + 30_000;
+            const deadline = workerDeadline(payload);
             const sid = "worker";
             await sandbox.process.createSession(sid);
             const cmd = await sandbox.process.executeSessionCommand(sid, {
@@ -311,61 +258,69 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
             const cmdId = cmd.cmdId!;
             let stdout = "";
             let stderr = "";
-            const parser = createEventLineParser(onWorkerEvent);
+            /** Characters of stdout already fed to the parser (stream and snapshot polling share it). */
+            let fed = 0;
+            const parser = createEventLineParser(deadline.wrap(onWorkerEvent));
+            const feed = (full: string) => {
+              if (full.length > fed) {
+                parser.push(full.slice(fed));
+                fed = full.length;
+                stdout = full;
+              }
+            };
 
-            // Live streaming of stdout so EVT lines reach Telegram while the worker runs.
+            // Live streaming of stdout so EVT lines (progress + live questions) reach the bot while the worker runs.
             let timedOut = false;
+            let timerHandle: NodeJS.Timeout | undefined;
+            const timer = new Promise<boolean>((res) => {
+              const tick = () => {
+                if (Date.now() >= deadline.at) {
+                  timedOut = true;
+                  res(false);
+                } else timerHandle = setTimeout(tick, Math.min(1_000, deadline.at - Date.now()));
+              };
+              tick();
+            });
             const streamed = sandbox.process
               .getSessionCommandLogs(
                 sid,
                 cmdId,
-                (chunk) => {
-                  stdout += chunk;
-                  parser.push(chunk);
-                },
+                (chunk) => feed(stdout + chunk),
                 (chunk) => (stderr += chunk),
               )
               .then(() => true)
               .catch(() => false);
-            let timerHandle: NodeJS.Timeout | undefined;
-            const timer = new Promise<boolean>((res) => {
-              timerHandle = setTimeout(() => {
-                timedOut = true;
-                res(false);
-              }, timeoutMs);
-            });
-            const streamOk = await Promise.race([streamed, timer]);
-            clearTimeout(timerHandle);
-            parser.end();
+            let streamOk = await Promise.race([streamed, timer]);
 
-            // Exit code (poll until the command reports one, or give up on timeout).
+            // Exit code. If the stream dropped while the worker still runs, poll log snapshots every 1.5 s instead
+            // (live questions depend on seeing events promptly).
             let exitCode = -1;
-            const exitDeadline = timedOut ? Date.now() : Math.max(Date.now() + 5_000, streamOk ? 0 : tw + timeoutMs);
+            let polled = false;
+            const graceUntil = Date.now() + 5_000;
             for (;;) {
               const info = await sandbox.process.getSessionCommand(sid, cmdId).catch(() => null);
-              if (info?.exitCode !== undefined && info?.exitCode !== null) {
-                exitCode = info.exitCode;
+              const done = info?.exitCode !== undefined && info?.exitCode !== null;
+              if (!streamOk) {
+                const snap = await sandbox.process.getSessionCommandLogs(sid, cmdId).catch(() => null);
+                if (snap) {
+                  feed(snap.stdout ?? snap.output ?? "");
+                  if (snap.stderr) stderr = snap.stderr;
+                  polled = polled || !streamOk;
+                }
+              }
+              if (done) {
+                exitCode = info!.exitCode!;
                 break;
               }
-              if (Date.now() >= exitDeadline) break;
-              await sleep(1_000);
-            }
-
-            // Streaming failed (e.g. websocket unavailable) ⇒ fetch a log snapshot and replay missed events.
-            if (!streamOk) {
-              const snap = await sandbox.process.getSessionCommandLogs(sid, cmdId).catch(() => null);
-              if (snap) {
-                let seen = 0;
-                const already = parser.count;
-                const replay = createEventLineParser((e) => {
-                  if (++seen > already) onWorkerEvent(e);
-                });
-                replay.push(snap.stdout ?? snap.output ?? "");
-                replay.end();
-                stdout = snap.stdout ?? snap.output ?? stdout;
-                stderr = snap.stderr ?? stderr;
+              if (timedOut || Date.now() >= deadline.at) {
+                timedOut = true;
+                break;
               }
+              if (streamOk && Date.now() >= graceUntil) streamOk = false; // stream ended but no exit code yet: keep polling
+              await sleep(1_500);
             }
+            clearTimeout(timerHandle);
+            parser.end();
 
             const bridgeStats = bridge?.stats ?? null;
             bridge?.close();
@@ -377,11 +332,16 @@ export function createDaytonaSandboxProvider(opts: { daytona?: Daytona } = {}): 
               exitCode,
               timedOut,
               durationMs: ms,
-              streamed: streamOk,
+              streamed: !polled,
               resultError: error,
               cdpFrames: bridgeStats,
             });
             return { result, stdout: stdout + (stderr ? `\n[stderr]\n${stderr}` : ""), exitCode };
+          },
+
+          async answerQuestion(questionId, answer) {
+            const f = answerFile(questionId, answer);
+            await sandbox.fs.uploadFiles([{ source: Buffer.from(f.body), destination: `${work}/out/${f.name}` }], 30);
           },
 
           async downloadEvidence(name: string) {

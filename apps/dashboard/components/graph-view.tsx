@@ -257,7 +257,7 @@ export function GraphView({ mock }: { mock: boolean }) {
     data?.workflowPatterns ??
     (data?.nodes ?? [])
       .filter((n) => n.kind === "workflow_pattern")
-      .map((n) => ({ id: n.id, kind: n.label, description: "—", target: "demo", category: "street-pothole", hint: {}, observedInAttemptId: null, outcome: null, createdAt: "" }));
+      .map((n) => ({ id: n.id, kind: n.label, description: "—", target: "real", category: "subway-delay", hint: {}, observedInAttemptId: null, outcome: null, createdAt: "" }));
 
   return (
     <div>
@@ -267,7 +267,7 @@ export function GraphView({ mock }: { mock: boolean }) {
           <div className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-signal-deep">SurrealDB · RELATE edges</div>
           <h1 className="font-wide mt-1 text-[40px] leading-[0.95] font-black tracking-tight">Complaint graph</h1>
           <p className="mt-2 max-w-xl text-[13px] text-ink2">
-            Residents, complaints, places, categories, public NYC311 requests, filing attempts and what the filing worker remembers — one connected record.
+            What people reported → where it was filed. Residents, complaints, categories, filing attempts, official references and what the filing worker remembers — one connected record.
           </p>
         </div>
         <div className="ml-auto flex items-center gap-4">

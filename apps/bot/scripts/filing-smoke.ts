@@ -1,16 +1,18 @@
 /**
- * Filing smoke test: runs filing.executeFiling end-to-end on a fake APPROVED complaint.
+ * Filing smoke test: runs filing.executeFiling end-to-end on a fake APPROVED subway-delay complaint against the
+ * official MTA Customer Feedback form. With ALLOW_REAL_SUBMIT unset the worker fills the form and stops before Submit
+ * (dry run): nothing is sent.
  *
- *   tsx scripts/filing-smoke.ts --mode normal|captcha|flaky|reject [--local] [--target real] [--hold <sec>]
+ *   tsx scripts/filing-smoke.ts [--local]
  *
  * Default: Daytona sandbox + Anchor cloud browser (needs DAYTONA_API_KEY + ANCHOR_API_KEY).
- * --local: local child-process portal/worker + local Chrome.
- * --hold: keep browser+sandbox for a human handoff (default 0 here so cleanup can be verified).
+ * --local: local child-process worker + local Chrome.
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ComplaintDraft, PortalMode, Resident, SpanHelpers, Tracer } from "../src/core/contracts.js";
-import { EMPTY_LOCATION, nowIso, shortId } from "../src/core/contracts.js";
+import type { ComplaintDraft, Resident, SpanHelpers, Tracer } from "../src/core/contracts.js";
+import { EMPTY_LOCATION, EMPTY_TRANSIT, nowIso, shortId } from "../src/core/contracts.js";
+import { nycIso } from "../src/core/knowledge.js";
 import { REPO_ROOT } from "../src/integrations/env.js";
 
 const envFile = resolve(REPO_ROOT, ".env");
@@ -18,14 +20,8 @@ if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
-const opt = (n: string) => {
-  const i = args.indexOf(`--${n}`);
-  return i >= 0 ? args[i + 1] : undefined;
-};
-const mode = (opt("mode") ?? "normal") as PortalMode;
 const local = flag("local");
-const target = opt("target") === "real" ? "real" : "demo";
-const holdSec = Number(opt("hold") ?? 0);
+const target = "real" as const;
 
 const t0 = Date.now();
 const stamp = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
@@ -82,7 +78,7 @@ async function main() {
   }
   const store = await loadStore();
   const tracer = consoleTracer();
-  const filing = createFilingService({ store, tracer, sandboxProvider: sandbox, browserProvider: browser, target, handoffHoldMs: holdSec * 1000 });
+  const filing = createFilingService({ store, tracer, sandboxProvider: sandbox, browserProvider: browser, target });
 
   const now = nowIso();
   const resident: Resident = {
@@ -90,7 +86,6 @@ async function main() {
     telegramChatId: "smoke-chat",
     telegramUsername: "smoke",
     preferredLanguage: "en",
-    demoPortalMode: mode,
     contactName: "Ada Lovelace",
     contactEmail: null,
     createdAt: now,
@@ -100,11 +95,12 @@ async function main() {
     telegramChatId: resident.telegramChatId,
     residentId: resident.id,
     status: "APPROVED",
-    category: "street-pothole",
+    category: "subway-delay",
     triage: "SUPPORTED",
-    description: "Pothole about 40 cm wide and 8 cm deep in the right lane, in front of the building entrance.",
-    userMessages: ["big pothole in front of 1515 Broadway"],
-    location: { ...EMPTY_LOCATION, latitude: 40.758, longitude: -73.9855, address: "1515 Broadway, Manhattan", borough: "Manhattan", rawInput: "1515 Broadway", source: "text", userConfirmed: true, withinNyc: true },
+    description: "The downtown A train was held at 14 St for about 25 minutes with no announcement.",
+    userMessages: ["A train held at 14 St downtown for 25 min"],
+    location: { ...EMPTY_LOCATION },
+    transit: { ...EMPTY_TRANSIT, line: "A", direction: "Downtown & Queens", station: "14 St", delayMinutes: 25, incidentTime: nycIso() },
     media: [],
     classification: null,
     missingFields: [],
@@ -124,7 +120,7 @@ async function main() {
   };
   await store.createComplaint(complaint);
 
-  console.log(`== filing smoke: mode=${mode} target=${target} providers=${sandbox.name}+${browser.name}`);
+  console.log(`== filing smoke: target=${target} providers=${sandbox.name}+${browser.name}`);
   const outcome = await filing.executeFiling(complaint, { resident, onProgress: (t) => console.log(`${stamp()} > ${t}`) });
   console.log(`${stamp()} executeFiling returned`);
 
@@ -146,7 +142,7 @@ async function main() {
   const after = await store.getComplaint(complaint.id);
   console.log(`\n== complaint status: ${after?.status} (reason ${after?.statusReason}, SR ${after?.officialRequestNumber})`);
   console.log("== transitions:", (store as unknown as { transitions: { from: string; to: string }[] }).transitions.map((t) => `${t.from}->${t.to}`).join(", "));
-  console.log("== workflow patterns:", (await store.getWorkflowPatterns({ target, category: "street-pothole" })).map((p) => p.kind).join(", "));
+  console.log("== workflow patterns:", (await store.getWorkflowPatterns({ target, category: "subway-delay" })).map((p) => p.kind).join(", "));
   console.log("== spans:", tracer.spans.map((s) => `${s.name}=${s.ms}ms`).join(" "));
 
   // Second call must refuse after SUBMISSION_UNKNOWN (never auto-retry).

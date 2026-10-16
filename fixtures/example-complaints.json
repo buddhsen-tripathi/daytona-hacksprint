@@ -1,86 +1,34 @@
 [
   {
-    "id": "clear-pothole-with-location",
-    "scenario": "Clear pothole photo and location",
-    "expectedBehavior": "Produce correct reviewable draft",
+    "id": "subway-delay-a-train",
+    "scenario": "Clear subway delay (MTA)",
+    "expectedBehavior": "SUPPORTED/subway-delay with transit extracted (line A, downtown, 14 St, ~25 min); no location question; no NYC311 duplicate check",
     "clear": true,
-    "inputText": "Big pothole in the road here, cars keep swerving around it.",
-    "imageFixture": "fixtures/images/pothole-1.jpg",
-    "location": { "latitude": 40.7576, "longitude": -73.9858, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
-    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
+    "skipEvals": true,
+    "inputText": "A train delayed 25 min at 14 St downtown this morning",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "A", "directionIncludes": "down", "stationIncludes": "14", "delayMinutes": 25 } }
   },
   {
-    "id": "pothole-in-repaired-patch",
-    "scenario": "Pothole on repaired street patch",
-    "expectedBehavior": "Route toward street repair defect",
+    "id": "repaired-patch-photo",
+    "scenario": "Hole in a repaired street patch (photo + text)",
+    "expectedBehavior": "OUT_OF_SCOPE: street conditions are not a category yet; manual NYC311 guidance with link",
     "clear": true,
     "inputText": "There's a hole in the road here and it keeps getting worse.",
     "imageFixture": "fixtures/images/repaired-patch-1.jpg",
-    "location": { "latitude": 40.6831, "longitude": -73.9792, "address": "32 4th Avenue, Brooklyn", "borough": "Brooklyn" },
-    "expected": { "triage": "SUPPORTED", "category": "street-repair-defect", "asksForLocation": false, "emergency": false }
+    "location": null,
+    "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
   },
   {
-    "id": "photo-without-location",
-    "scenario": "Photo without location",
-    "expectedBehavior": "Ask for location",
+    "id": "photo-without-text",
+    "scenario": "Photo with no text (a pothole)",
+    "expectedBehavior": "Not filed: ask what's wrong (UNCLEAR) or give manual guidance (OUT_OF_SCOPE)",
     "clear": true,
     "inputText": null,
     "imageFixture": "fixtures/images/pothole-1.jpg",
     "location": null,
-    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": true, "emergency": false }
-  },
-  {
-    "id": "possible-nearby-duplicate",
-    "scenario": "Possible nearby duplicate",
-    "expectedBehavior": "Offer existing report for review (real Open Data SRs 70342225 / 70339080 / 69647377 lie within ~70 m)",
-    "clear": true,
-    "inputText": "Pothole in the street right by 1515 Broadway in Times Square, it's been there for weeks.",
-    "imageFixture": null,
-    "location": { "latitude": 40.758, "longitude": -73.9855, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
-    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false, "expectDuplicates": true }
-  },
-  {
-    "id": "ambiguous-roadway-hole",
-    "scenario": "Ambiguous roadway hole",
-    "expectedBehavior": "Ask clarification or escalate",
-    "clear": false,
-    "inputText": "Can you report this?",
-    "imageFixture": "fixtures/images/blurry-1.jpg",
-    "location": null,
-    "expected": { "triage": "UNCLEAR", "category": null, "asksForLocation": true, "emergency": false }
-  },
-  {
-    "id": "user-cancels",
-    "scenario": "User cancels",
-    "expectedBehavior": "Do not submit (user sends /cancel at READY_FOR_APPROVAL)",
-    "clear": false,
-    "inputText": "Pothole on my block, it's about a foot wide.",
-    "imageFixture": "fixtures/images/pothole-1.jpg",
-    "location": { "latitude": 40.7576, "longitude": -73.9858, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
-    "flow": { "afterDraft": "cancel" },
-    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
-  },
-  {
-    "id": "browser-requires-captcha",
-    "scenario": "Browser requires CAPTCHA",
-    "expectedBehavior": "Request human action (portalMode=captcha → HUMAN_ACTION_REQUIRED/CAPTCHA)",
-    "clear": false,
-    "inputText": "Pothole in the crosswalk lane, pretty deep but no one is hurt.",
-    "imageFixture": "fixtures/images/pothole-1.jpg",
-    "location": { "latitude": 40.7576, "longitude": -73.9858, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
-    "flow": { "portalMode": "captcha", "afterDraft": "approve" },
-    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
-  },
-  {
-    "id": "no-official-confirmation",
-    "scenario": "No official confirmation",
-    "expectedBehavior": "Mark outcome unknown (portalMode=flaky → SUBMISSION_UNKNOWN, no auto-retry)",
-    "clear": false,
-    "inputText": "Pothole in front of the deli, my bike tire hit it.",
-    "imageFixture": "fixtures/images/pothole-1.jpg",
-    "location": { "latitude": 40.6831, "longitude": -73.9792, "address": "32 4th Avenue, Brooklyn", "borough": "Brooklyn" },
-    "flow": { "portalMode": "flaky", "afterDraft": "approve" },
-    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
+    "expected": { "triage": "OUT_OF_SCOPE", "acceptTriage": ["UNCLEAR", "OUT_OF_SCOPE"], "category": null, "emergency": false }
   },
   {
     "id": "explicit-emergency",
@@ -93,6 +41,36 @@
     "expected": { "triage": "EMERGENCY", "category": null, "emergency": true }
   },
   {
+    "id": "out-of-scope-lirr",
+    "scenario": "LIRR delay (not the subway)",
+    "expectedBehavior": "Manual guidance naming the LIRR; not filed",
+    "clear": true,
+    "inputText": "LIRR delayed",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
+  },
+  {
+    "id": "ambiguous",
+    "scenario": "Ambiguous photo",
+    "expectedBehavior": "Ask one clarifying question",
+    "clear": false,
+    "inputText": "Can you report this?",
+    "imageFixture": "fixtures/images/blurry-1.jpg",
+    "location": null,
+    "expected": { "triage": "UNCLEAR", "category": null, "asksForLocation": false, "emergency": false }
+  },
+  {
+    "id": "out-of-scope-pothole",
+    "scenario": "Extra: pothole described in text",
+    "expectedBehavior": "Generic out-of-scope reply with the NYC311 link",
+    "clear": false,
+    "inputText": "pothole on my street",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
+  },
+  {
     "id": "out-of-scope-streetlight",
     "scenario": "Extra: out-of-scope photo",
     "expectedBehavior": "Manual guidance with link (streetlight is not a supported category)",
@@ -103,24 +81,15 @@
     "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
   },
   {
-    "id": "subway-delay-a-train",
-    "scenario": "Extra: subway delay (MTA, real-only)",
-    "expectedBehavior": "SUPPORTED/subway-delay with transit extracted (line A, downtown, 14 St, ~25 min); no location question; no NYC311 duplicate check",
-    "clear": true,
+    "id": "user-cancels",
+    "scenario": "User cancels a subway delay draft",
+    "expectedBehavior": "Do not submit (user sends /cancel at READY_FOR_APPROVAL)",
+    "clear": false,
     "skipEvals": true,
-    "inputText": "A train delayed 25 min at 14 St downtown this morning",
+    "inputText": "The 7 train has been stuck outside Queensboro Plaza for 20 minutes, Manhattan-bound.",
     "imageFixture": null,
     "location": null,
-    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "A", "directionIncludes": "down", "stationIncludes": "14", "delayMinutes": 25 } }
-  },
-  {
-    "id": "out-of-scope-lirr",
-    "scenario": "Extra: LIRR delay (not a subway)",
-    "expectedBehavior": "Manual guidance; LIRR is not the subway",
-    "clear": true,
-    "inputText": "LIRR delayed",
-    "imageFixture": null,
-    "location": null,
-    "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
+    "flow": { "afterDraft": "cancel" },
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false }
   }
 ]

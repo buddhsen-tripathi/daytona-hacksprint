@@ -6,7 +6,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
-import type { FilingTarget } from "../core/contracts.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 /** apps/bot/src/integrations → repo root */
@@ -64,10 +63,8 @@ export const env = {
   get PHOENIX_API_KEY() { return str("PHOENIX_API_KEY", str("ARIZE_API_KEY", str("ARISE_KEY"))); },
   get PHOENIX_PROJECT() { return str("PHOENIX_PROJECT", "311relay"); },
   get NYC_OPEN_DATA_APP_TOKEN() { return str("NYC_OPEN_DATA_APP_TOKEN"); },
-  get FILING_TARGET() { return str("FILING_TARGET", "demo"); },
   /** "1" lets real-site adapters click the FINAL Submit (after the resident's approval). Unset ⇒ dry run: fill everything, stop before Submit. */
   get ALLOW_REAL_SUBMIT() { return str("ALLOW_REAL_SUBMIT"); },
-  get DEMO_PORTAL_URL() { return str("DEMO_PORTAL_URL", "http://localhost:3311"); },
   get PORT_API() { return int("PORT_API", 3312); },
 };
 
@@ -79,6 +76,3 @@ export function webhookMode(): boolean {
   return hasTelegram() && env.PUBLIC_WEBHOOK_URL.length > 0 && env.TELEGRAM_WEBHOOK_SECRET.length > 0;
 }
 
-export function filingTarget(): FilingTarget {
-  return env.FILING_TARGET === "real" ? "real" : "demo";
-}

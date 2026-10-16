@@ -74,17 +74,13 @@ export function parseAddress(address: string | null, borough: string | null): Pa
   return out;
 }
 
-/** Restoration type for the street-repair form, ONLY when the resident's description names it. */
-export function restorationTypeFrom(description: string): "Street cut" | "Trench" | "Patch" | null {
-  const d = description.toLowerCase();
-  if (/trench/.test(d)) return "Trench";
-  if (/street cut|utility cut|\bcut\b/.test(d)) return "Street cut";
-  if (/patch|repair|restor|filled|plate/.test(d)) return "Patch";
-  return null;
+export function needField(message: string, data?: Record<string, unknown>): never {
+  throw needFieldOutcome(message, data);
 }
 
-export function needField(message: string, data?: Record<string, unknown>): never {
-  throw new Outcome("HUMAN_ACTION_REQUIRED", "UNEXPECTED_REQUIRED_FIELD", message, data);
+/** The HUMAN_ACTION_REQUIRED/UNEXPECTED_REQUIRED_FIELD outcome without throwing (ctx.ask fallback). */
+export function needFieldOutcome(message: string, data?: Record<string, unknown>): Outcome {
+  return new Outcome("HUMAN_ACTION_REQUIRED", "UNEXPECTED_REQUIRED_FIELD", message, data);
 }
 
 /** goto with bounded retries (navigation only — never used after submit). */
@@ -143,7 +139,6 @@ export function payloadSummary(p: FilingPayload) {
   return {
     target: p.target,
     category: p.category,
-    portalMode: p.portalMode,
     hasContactName: !!p.form.contactName,
     hasEmail: !!p.form.contactEmail,
     hasPhone: !!p.form.contactPhone,

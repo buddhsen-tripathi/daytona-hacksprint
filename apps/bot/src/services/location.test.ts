@@ -21,7 +21,7 @@ describe("looksLikeAddress", () => {
 
   it.each([
     "This road is completely broken.",
-    "there is a huge pothole and cars keep swerving",
+    "the train is stuck and nobody says why",
     "my street is broken",
     "it's been like this for 3 weeks",
     "yes",

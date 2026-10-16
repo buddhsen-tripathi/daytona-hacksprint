@@ -11,13 +11,14 @@
  *  - Only payload.form values are typed/selected; page text is data and never changes what we do.
  *  - The final "Submit your feedback" is clicked ONLY when payload.realSubmitAuthorized === true, exactly once,
  *    with state.submitClicked = true set immediately before. Otherwise: dry-run stop (HUMAN_ACTION_REQUIRED, errorCode null).
- *  - Ambiguous/unmatched direction ⇒ HUMAN_ACTION_REQUIRED/UNEXPECTED_REQUIRED_FIELD listing the official options.
+ *  - Ambiguous/unmatched direction, ambiguous station, or a newly required field ⇒ ctx.ask() the resident live (same page,
+ *    options = the official labels); no answer in time ⇒ HUMAN_ACTION_REQUIRED/UNEXPECTED_REQUIRED_FIELD (station: left empty).
  *  - Contact fields are never invented; the newsletter checkbox and file upload are never touched.
  */
 import type { Locator, Page } from "playwright-core";
 import { Outcome, SUBWAY_LINES, sanitizeUrl, type TransitDetails } from "../protocol.js";
 import { detectCaptcha, detectLogin } from "../safety.js";
-import { gotoWithRetries, needField, normalizeBorough } from "./common.js";
+import { gotoWithRetries, needField, needFieldOutcome, normalizeBorough } from "./common.js";
 import type { AdapterContext, ConfirmResult, FormAdapter } from "./types.js";
 
 export const MTA_FEEDBACK_URL = "https://contact.mta.info/s/customer-feedback";
@@ -197,7 +198,9 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
     descriptionOk: boolean;
     contact: { label: string; value: string }[];
     skipped: string[];
-  } = { line: null, direction: null, station: null, dateTime: null, breadcrumb: null, descriptionLen: 0, descriptionOk: false, contact: [], skipped: [] };
+    /** Fields answered live by the resident (ctx.ask). */
+    answered: string[];
+  } = { line: null, direction: null, station: null, dateTime: null, breadcrumb: null, descriptionLen: 0, descriptionOk: false, contact: [], skipped: [], answered: [] };
 
   const stepMs = (ctx: AdapterContext) => Math.max(5000, ctx.payload.limits.stepTimeoutMs || 20000);
 
@@ -256,20 +259,36 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
     const opts = (await page.getByRole("button").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label") ?? (b as HTMLElement).innerText.trim()))).filter(
       (a): a is string => !!a && /Train-|Shuttle-|Railway-/.test(a),
     );
-    const pick = matchDirection(t?.direction, opts);
+    let pick = matchDirection(t?.direction, opts);
+    let byResident = false;
     if (!pick) {
       await ctx.shot("fill", "direction-needed", "Direction options shown by the MTA form");
       const said = t?.direction ? `"${t.direction}" does not clearly match one of them` : "no direction was given";
-      needField(`Which direction was the ${t?.line ?? ""} train going? The MTA form offers: ${opts.map((o) => `"${directionCore(o)}"`).join(" or ")} (${said}).`, {
+      const fallback = needFieldOutcome(`Which direction was the ${t?.line ?? ""} train going? The MTA form offers: ${opts.map((o) => `"${directionCore(o)}"`).join(" or ")} (${said}).`, {
         field: "transit.direction",
         options: opts,
         optionsShort: opts.map(directionCore),
         got: t?.direction ?? null,
       });
+      if (opts.length < 2) throw fallback;
+      const a = await ctx.ask(
+        {
+          id: "direction",
+          field: "direction",
+          prompt: `Which way was the ${t?.line ?? ""} train going? ${t?.direction ? `"${clean(t.direction, 60)}" doesn't clearly match one of` : "You didn't say; pick one of"} the MTA form's options:`,
+          options: opts.map(directionCore),
+          required: true,
+        },
+        fallback,
+      );
+      pick = a.optionIndex !== undefined ? (opts[a.optionIndex] ?? null) : matchDirection(a.value, opts);
+      if (!pick) throw fallback;
+      byResident = true;
+      filled.answered.push("direction");
     }
     await choose(ctx, pick!);
     filled.direction = pick!;
-    ctx.log("fill", "info", `direction "${t?.direction}" matched "${pick}"`, { options: opts });
+    ctx.log("fill", "info", byResident ? `direction chosen by the resident: "${pick}"` : `direction "${t?.direction}" matched "${pick}"`, { options: opts });
     await ctx.shot("fill", "direction-chosen", `Direction chosen: ${pick}`);
     await advance(ctx, "fill", "direction");
   }
@@ -308,8 +327,42 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
             cands = stationCandidates(want, options);
           }
         }
-        if (cands.length === 1) {
-          const hit = cands[0]!;
+        let hit: string | null = cands.length === 1 ? cands[0]! : null;
+        if (!hit) {
+          // Optional field: ask the resident live; no answer / "Skip" ⇒ leave it empty (the previous behaviour).
+          await page.keyboard.press("Escape").catch(() => {});
+          const top = cands.slice(0, 5);
+          const lineName = filled.line ?? t?.line ?? "this";
+          const skipped = new Error("station question unanswered");
+          const a = await ctx
+            .ask(
+              {
+                id: "station",
+                field: "station",
+                prompt: top.length
+                  ? `"${clean(want, 60)}" matches more than one station on the MTA's list for the ${lineName}. Which one?`
+                  : `I couldn't find "${clean(want, 60)}" on the MTA's station list for the ${lineName}. Type the station as the MTA lists it, or tap Skip.`,
+                options: [...top, "Skip"],
+                required: false,
+              },
+              skipped,
+            )
+            .catch((err) => {
+              if (err === skipped) return null;
+              throw err;
+            });
+          const chosen = a && a.optionIndex !== undefined ? (a.optionIndex < top.length ? top[a.optionIndex]! : null) : a && !/^skip$/i.test(a.value) ? matchStation(a.value, options) : null;
+          if (chosen) {
+            ({ list, options } = await readOptions());
+            hit = options.includes(chosen) ? chosen : null;
+            if (hit) {
+              ctx.log("fill", "info", `station chosen by the resident: "${hit}"`);
+              filled.answered.push("station");
+            }
+            else await page.keyboard.press("Escape").catch(() => {});
+          }
+        }
+        if (hit) {
           await list.getByRole("option", { name: hit, exact: true }).first().click();
           await page.waitForTimeout(500);
           filled.station = hit;
@@ -381,29 +434,46 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
   async function doContact(ctx: AdapterContext) {
     const page = ctx.page;
     const f = ctx.payload.form;
-    const parts = (f.contactName ?? "").trim().split(/\s+/).filter(Boolean);
-    const first = parts[0] ?? null;
-    const last = parts.length > 1 ? parts.slice(1).join(" ") : null;
-    const fields: { re: RegExp; value: string | null; what: string }[] = [
-      { re: /^first name/i, value: first, what: "first name" },
-      { re: /^last name/i, value: last, what: "last name" },
-      { re: /^email/i, value: f.contactEmail, what: "email" },
-      { re: /^phone/i, value: f.contactPhone, what: "phone" },
+    let parts = (f.contactName ?? "").trim().split(/\s+/).filter(Boolean);
+    const nameParts = () => ({ first: parts[0] ?? null, last: parts.length > 1 ? parts.slice(1).join(" ") : null });
+    let email = f.contactEmail;
+    let phone = f.contactPhone;
+    const fields: { re: RegExp; value: () => string | null; what: string }[] = [
+      { re: /^first name/i, value: () => nameParts().first, what: "first name" },
+      { re: /^last name/i, value: () => nameParts().last, what: "last name" },
+      { re: /^email/i, value: () => email, what: "email" },
+      { re: /^phone/i, value: () => phone, what: "phone" },
     ];
+    /** A field the form now requires and the payload lacks: ask the resident live (never invent). */
+    const askFor = async (what: string, label: string) => {
+      const fallback = needFieldOutcome(`The MTA form now requires your ${what}.`, { field: what, label });
+      if (what === "first name" || what === "last name") {
+        const a = await ctx.ask({ id: "contact_name", field: "contact_name", prompt: "The MTA form now requires your name. What first and last name should go on the complaint?", required: true }, fallback);
+        parts = a.value.split(/\s+/).filter(Boolean);
+        if (!nameParts()[what === "first name" ? "first" : "last"]) throw fallback;
+      } else if (what === "email") {
+        const a = await ctx.ask({ id: "contact_email", field: "contact_email", prompt: "The MTA form now requires an email address so they can reply. Which email should I use?", required: true }, fallback);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a.value)) throw fallback;
+        email = a.value;
+      } else {
+        const a = await ctx.ask({ id: "contact_phone", field: "free_text", prompt: "The MTA form now requires a phone number. Which number should I use?", required: true }, fallback);
+        if (!/\d{7,}/.test(a.value.replace(/\D/g, ""))) throw fallback;
+        phone = a.value;
+      }
+    };
     for (const fd of fields) {
       const box = page.getByRole("textbox", { name: fd.re }).first();
       if (!(await box.count())) {
-        if (fd.value) ctx.log("fill", "info", `the MTA form has no ${fd.what} field; not sent`);
+        if (fd.value()) ctx.log("fill", "info", `the MTA form has no ${fd.what} field; not sent`);
         continue;
       }
       const label = clean((await box.evaluate((e) => (e as HTMLInputElement).labels?.[0]?.innerText ?? e.getAttribute("aria-label") ?? "").catch(() => "")) || fd.what, 60);
       const required = !/optional/i.test(label) && (/required|\*/i.test(label) || (await box.evaluate((e) => (e as HTMLInputElement).required || e.getAttribute("aria-required") === "true")));
-      if (!fd.value) {
-        if (required) needField(`The MTA form now requires your ${fd.what}.`, { field: fd.what, label });
-        continue;
-      }
-      await box.fill(fd.value);
-      filled.contact.push({ label, value: fd.value });
+      if (!fd.value() && required) await askFor(fd.what, label);
+      const value = fd.value();
+      if (!value) continue;
+      await box.fill(value);
+      filled.contact.push({ label, value });
     }
     // Any other visible required free-text input we do not know about ⇒ ask, never guess.
     const unknownRequired = await page.evaluate(() =>
@@ -412,7 +482,19 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         .map((e) => ({ label: ((e as HTMLInputElement).labels?.[0]?.innerText ?? "").replace(/\s+/g, " ").trim(), value: (e as HTMLInputElement).value, req: (e as HTMLInputElement).required || e.getAttribute("aria-required") === "true" }))
         .filter((x) => !x.value && (x.req || /\(required\)/i.test(x.label)) && !/optional/i.test(x.label)),
     );
-    if (unknownRequired.length) needField(`The MTA form now requires: ${unknownRequired.map((u) => u.label || "an unlabeled field").join(", ")}.`, { fields: unknownRequired });
+    if (unknownRequired.length) {
+      const fallback = needFieldOutcome(`The MTA form now requires: ${unknownRequired.map((u) => u.label || "an unlabeled field").join(", ")}.`, { fields: unknownRequired });
+      for (const [i, u] of unknownRequired.slice(0, 3).entries()) {
+        if (!u.label) throw fallback;
+        const box = page.getByLabel(u.label, { exact: true }).first();
+        if (!(await box.count())) throw fallback;
+        const a = await ctx.ask({ id: `field-${i + 1}`, field: "free_text", prompt: `The MTA form now requires "${clean(u.label, 80)}", which I don't have from you. What should I enter?`, required: true }, fallback);
+        if (!a.value) throw fallback;
+        await box.fill(a.value);
+        filled.contact.push({ label: u.label, value: a.value });
+      }
+      if (unknownRequired.length > 3) throw fallback;
+    }
     ctx.log("fill", "info", "contact step filled from the resident's own details only (newsletter box and file upload untouched)", { filled: filled.contact.map((c) => c.label) });
   }
 
@@ -506,12 +588,26 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
       const page = ctx.page;
       if (ctx.payload.realSubmitAuthorized !== true) {
         ctx.log("submit", "warn", `dry run: realSubmitAuthorized is not true; NOT clicking "${SUBMIT_LABEL}"`);
-        await ctx.shot("submit", "dry-run-stop", `Dry run: everything filled, stopped before "${SUBMIT_LABEL}"`);
+        // After a live answer, caption the evidence with the form's OWN summary line (proves what the form recorded).
+        // Visual only (pointer-events: none, removed right after the screenshot); no form field is touched.
+        const caption = filled.answered.length && filled.breadcrumb ? `311Relay dry run (not submitted). The MTA form's own summary: ${filled.breadcrumb}` : null;
+        if (caption)
+          await page
+            .evaluate((text) => {
+              const d = document.createElement("div");
+              d.id = "relay-evidence-caption";
+              d.textContent = text;
+              d.setAttribute("style", "position:fixed;top:0;left:0;right:0;z-index:2147483647;pointer-events:none;background:#fff3cd;color:#000;font:600 15px/1.4 system-ui,sans-serif;padding:10px 16px;border-bottom:2px solid #c69500");
+              document.body.appendChild(d);
+            }, caption)
+            .catch(() => {});
+        await ctx.shot("submit", "dry-run-stop", caption ? `Dry run: everything filled, stopped before "${SUBMIT_LABEL}" (${filled.breadcrumb})` : `Dry run: everything filled, stopped before "${SUBMIT_LABEL}"`);
+        if (caption) await page.evaluate(() => document.getElementById("relay-evidence-caption")?.remove()).catch(() => {});
         await ctx.saveHtml("submit", "dry-run-stop");
         throw new Outcome("HUMAN_ACTION_REQUIRED", null, "Stopped before the final Submit (dry run). Everything is filled in.", {
           dryRun: true,
           liveViewUrl: ctx.payload.liveViewUrl,
-          filled: { line: filled.line, direction: filled.direction, station: filled.station, dateTime: filled.dateTime, breadcrumb: filled.breadcrumb, skipped: filled.skipped },
+          filled: { line: filled.line, direction: filled.direction, station: filled.station, dateTime: filled.dateTime, breadcrumb: filled.breadcrumb, skipped: filled.skipped, answeredLive: filled.answered },
         });
       }
       const btn = page.getByRole("button", { name: SUBMIT_LABEL, exact: true }).first();

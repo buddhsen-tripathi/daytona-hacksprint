@@ -31,7 +31,6 @@ const payload = {
   extraHeaders: {},
   cdpUrl: null,
   liveViewUrl: null,
-  portalMode: "normal",
   realSubmitAuthorized: false,
   form: {
     description: "A train held at 14 St for about 25 minutes around 8:30 this morning with no announcements.",

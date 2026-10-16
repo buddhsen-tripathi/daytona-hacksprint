@@ -35,22 +35,15 @@ export function Footer() {
   const mock = useSearchParams().get("mock") === "1";
   const health = usePoll<unknown>("/api/health", { mock, intervalMs: 10000 });
   const h = health.data ? normalizeHealth(health.data) : null;
-  const demo = !h || !h.filingTarget || h.filingTarget === "demo";
+  void h;
   return (
     <footer className="mt-16 border-t-2 border-ink">
       <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4 text-[12px] text-ink2">
         <span className="font-wide font-extrabold uppercase tracking-wider text-ink">311Relay</span>
-        {demo ? (
-          <span className="inline-flex items-center gap-2">
-            <span className="hazard inline-block h-3 w-6" aria-hidden />
-            Filing target: <strong>controlled demo portal — not the official NYC311 site.</strong>
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-2 font-semibold text-stop">
-            <span className="size-2 rounded-full bg-stop" aria-hidden />
-            Filing target: official NYC DOT form (real submissions)
-          </span>
-        )}
+        <span className="inline-flex items-center gap-2">
+          <span className="size-2 rounded-full bg-stop" aria-hidden />
+          Files on the official form for each category (today: MTA Customer Feedback). Final submission only after the resident approves.
+        </span>
         <span className="ml-auto font-mono text-[11px] text-muted">read-only console · SR numbers are only ever parsed from a confirmation page</span>
       </div>
     </footer>

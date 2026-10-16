@@ -146,7 +146,7 @@ export function createComplaintService(store: Store) {
       return transition(store, draft, to, { reason, actor });
     },
 
-    buildSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; target?: "demo" | "real"; alertLine?: string | null } = {}): string {
+    buildSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; target?: "real"; alertLine?: string | null; contextLines?: string[] } = {}): string {
       const cat = getCategory(draft.category);
       if (requiredFieldsFor(draft.category).includes("transit")) return buildTransitSummary(draft, opts);
       const loc = draft.location;
@@ -169,7 +169,11 @@ export function createComplaintService(store: Store) {
       ];
       if (opts.contactName) lines.push(`<b>Contact name:</b> ${esc(opts.contactName)}`);
       if (draft.duplicates.length && draft.duplicateReviewed) lines.push(`<i>You chose to continue despite ${draft.duplicates.length} similar nearby report(s).</i>`);
-      lines.push("", opts.target === "real" ? "Filing target: <b>official NYC DOT form</b>" : "Filing target: <b>NYC311 Demo Portal</b> (safe replica, not the official site)");
+      if (opts.contextLines?.length) lines.push("", ...opts.contextLines);
+      lines.push(
+        "",
+        `Filing target: <b>${esc(cat?.officialFormUrl ?? "the official form")}</b>. If it asks you to prove you're human, I'll hand you the live browser to finish.`,
+      );
       lines.push("", `<i>Draft v${draft.draftVersion}. Nothing is filed until you tap Approve.</i>`);
       return lines.join("\n");
     },
@@ -284,7 +288,7 @@ export function lineLabel(line: string | null | undefined): string {
   return /^[0-9A-Z]$/.test(line) ? `${line} train` : line;
 }
 
-function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; alertLine?: string | null }): string {
+function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; alertLine?: string | null; contextLines?: string[] }): string {
   const cat = getCategory(draft.category);
   const t = draft.transit;
   const lineDir = [t?.line ? lineLabel(t.line) : "Line not given", t?.direction ? t.direction : "direction not given"].join(", ");
@@ -304,6 +308,8 @@ function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string
   if (opts.contactEmail) lines.push(`<b>Contact email:</b> ${esc(opts.contactEmail)}`);
   if (!opts.contactName && !opts.contactEmail) lines.push("<i>No contact details will be sent (optional: /name, /email if you want the MTA to reply).</i>");
   if (opts.alertLine) lines.push("", opts.alertLine);
+  // SurrealDB memory: remembered issues + learned questions (services/memory.ts)
+  if (opts.contextLines?.length) lines.push(...(opts.alertLine ? [] : [""]), ...opts.contextLines);
   if (isRealOnly(draft.category)) lines.push("", "⚠️ <b>This files a real complaint with the MTA. Only approve if this actually happened to you.</b>");
   lines.push("", `<i>Draft v${draft.draftVersion}. Nothing is filed until you tap Approve.</i>`);
   return lines.join("\n");

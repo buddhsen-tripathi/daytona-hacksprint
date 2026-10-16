@@ -4,7 +4,7 @@
  * executeFiling(approved complaint):
  *   guard (APPROVED + approvedVersion === draftVersion; never re-run after SUBMISSION_UNKNOWN)
  *   → FilingAttempt + complaint → FILING
- *   → Anchor session ‖ Daytona sandbox (worker + demo portal)
+ *   → Anchor session ‖ Daytona sandbox (worker + CDP relay to Anchor)
  *   → FilingPayload → sandbox.runWorker (EVT stream → Telegram progress + browser.* spans)
  *   → evidence download to .runs/<attemptId>/ → receipts.verifyReceipt
  *   → persist attempt / complaint transition / official request / workflow pattern
@@ -32,12 +32,15 @@ import type {
   SandboxProvider,
   Store,
   Tracer,
+  WorkerAnswer,
   WorkerEvent,
+  WorkerQuestion,
   WorkerResult,
 } from "../core/contracts.js";
-import { CATEGORIES, nowIso, shortId } from "../core/contracts.js";
+import { CATEGORIES, DEFAULT_QUESTION_TIMEOUT_MS, nowIso, questionFromEvent, shortId } from "../core/contracts.js";
 import { transition } from "../core/state-machine.js";
-import { RUNS_DIR, env, filingTarget } from "../integrations/env.js";
+import { askFromOutcome, recordAskPattern } from "./memory.js";
+import { RUNS_DIR, env } from "../integrations/env.js";
 import { isRealOnly } from "../core/knowledge.js";
 import { registerEvidenceFile } from "./evidence-registry.js";
 import { verifyReceipt, type ReceiptVerification } from "./receipts.js";
@@ -53,7 +56,15 @@ export type FilingOpts = {
   onProgress: (text: string) => void;
   /** Background callback once the session recording is downloaded to .runs/<attemptId>/recording.mp4 (Anchor only). */
   onRecording?: (localPath: string, evidence: Evidence) => Promise<void>;
+  /**
+   * Live follow-up question from the worker (the browser holds the page). Resolve with the resident's answer,
+   * or null to give up (the worker then times out into the usual hand-off). Absent ⇒ questions are disabled
+   * (limits.questionTimeoutMs = 0) and the worker behaves exactly as before.
+   */
+  onQuestion?: (q: WorkerQuestion & { attemptId: string; timeoutMs: number }) => Promise<WorkerAnswer | null>;
 };
+
+export const WAITING_FOR_ANSWER = "⏸ Waiting for your answer — the browser is holding the page";
 
 type WorkerStep = WorkerEvent["step"];
 
@@ -66,16 +77,9 @@ export type FilingServiceDeps = {
   browserProvider?: BrowserProvider | null;
   browser?: BrowserProvider | null;
   evidenceRegistry?: { registerEvidenceFile(evidence: Evidence, localPath: string): string | void };
-  /** Defaults to env FILING_TARGET (demo). */
+  /** Always "real" (official forms); kept optional for older callers. */
   target?: FilingTarget;
   limits?: Partial<FilingPayload["limits"]>;
-  /**
-   * Demo target only: how long to keep the browser + sandbox (which hosts the replica page) alive
-   * after HUMAN_ACTION_REQUIRED with a live view. Default env FILING_HANDOFF_HOLD_MS, else 3 min;
-   * 0 disables. Real target: the sandbox is destroyed immediately and the Anchor session is left
-   * open for the resident (reaped by Anchor's idle 5 min / max 15 min timeouts).
-   */
-  handoffHoldMs?: number;
 };
 
 export type FilingService = {
@@ -84,9 +88,8 @@ export type FilingService = {
   drain(): Promise<void>;
 };
 
-/** Official hosts per category for the real target (navigation allowlist). */
-const REAL_ALLOWED_HOSTS: Partial<Record<CategoryId, string[]>> = {
-  "street-pothole": ["a841-dotvweb01.nyc.gov"],
+/** Official hosts per category (navigation allowlist). Adding a category = add its official hosts here. */
+const REAL_ALLOWED_HOSTS: Record<CategoryId, string[]> = {
   "subway-delay": ["contact.mta.info", "mta.info", "new.mta.info"],
 };
 
@@ -161,7 +164,7 @@ const STEP_PROGRESS: Partial<Record<WorkerStep, string>> = {
   confirm: "Reading confirmation…",
 };
 
-/** Hide the signed part of Daytona preview hostnames (`3311-<signed>.<domain>`) in exported traces. */
+/** Hide the signed part of Daytona preview hostnames (`<port>-<signed>.<domain>`) in exported traces. */
 export function redactPreview(s: string): string {
   return s.replace(/\b(\d{2,5})-[a-z0-9-]{8,}\.([a-z0-9.-]+)/gi, "$1-***.$2");
 }
@@ -178,7 +181,7 @@ function nycDate(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(Number.isFinite(d.getTime()) ? d : new Date());
 }
 
-function patternFor(target: FilingTarget, status: FilingStatus, code: FilingErrorCode | null, result: WorkerResult | null): { kind: string; description: string; hint: Record<string, unknown> } {
+function patternFor(_target: FilingTarget, status: FilingStatus, code: FilingErrorCode | null, result: WorkerResult | null): { kind: string; description: string; hint: Record<string, unknown> } {
   if (status === "SUBMITTED")
     return {
       kind: "confirmation-parsed",
@@ -187,7 +190,7 @@ function patternFor(target: FilingTarget, status: FilingStatus, code: FilingErro
     };
   switch (code) {
     case "CAPTCHA":
-      return { kind: "captcha-on-step1", description: `${target === "real" ? "Official DOT form" : "Demo portal (captcha mode)"} shows a CAPTCHA before step 1 can be submitted; hand off to a human.`, hint: { handoff: "live_view", detectBeforeClick: true } };
+      return { kind: "captcha-on-step1", description: "Official form shows a CAPTCHA; hand off to the resident in the live view.", hint: { handoff: "live_view", detectBeforeClick: true } };
     case "CONNECTION_LOST_AFTER_SUBMIT":
       return { kind: "flaky-submit", description: "Connection dropped after submit; outcome unknown. Never auto-retry; ask the resident to check the portal.", hint: { autoRetry: false } };
     case "FORM_REJECTED":
@@ -197,51 +200,52 @@ function patternFor(target: FilingTarget, status: FilingStatus, code: FilingErro
   }
 }
 
-/** Effective filing target: real-only categories (subway-delay → MTA) ignore FILING_TARGET. */
-export function targetFor(category: CategoryId, configured: FilingTarget): FilingTarget {
-  return isRealOnly(category) ? "real" : configured;
+/** Every category files against its official form. */
+export function targetFor(_category?: CategoryId, _configured?: FilingTarget): FilingTarget {
+  return "real";
 }
 
-export function allowedHostsFor(category: CategoryId, formUrl: string, target: FilingTarget): string[] {
-  return [...new Set([new URL(formUrl).hostname, ...(target === "real" ? (REAL_ALLOWED_HOSTS[category] ?? []) : [])])];
+export function allowedHostsFor(category: CategoryId, formUrl: string, _target?: FilingTarget): string[] {
+  return [...new Set([new URL(formUrl).hostname, ...(REAL_ALLOWED_HOSTS[category] ?? [])])];
 }
 
 export function realSubmitAuthorizedFor(complaint: Pick<ComplaintDraft, "approvedVersion" | "draftVersion">, target: FilingTarget): boolean {
   return target === "real" && env.ALLOW_REAL_SUBMIT === "1" && complaint.approvedVersion != null && complaint.approvedVersion === complaint.draftVersion;
 }
 
-/** The `form` block of the FilingPayload. Contact fields are only ever user-provided on the real target. */
-export function buildForm(complaint: ComplaintDraft, resident: Resident, target: FilingTarget): FilingPayload["form"] {
+/** The `form` block of the FilingPayload. Contact fields are only ever user-provided. */
+export function buildForm(complaint: ComplaintDraft, resident: Resident, _target?: FilingTarget): FilingPayload["form"] {
   const category = complaint.category;
   return {
-    // the worker picks the restoration type from the description (trench / cut / patch / repair)
-    description: category === "street-repair-defect" && !/trench|cut|patch|repair/i.test(complaint.description) ? `${complaint.description} (repaired patch)` : complaint.description,
+    description: complaint.description,
     address: complaint.location.address,
     borough: complaint.location.borough,
     latitude: complaint.location.latitude,
     longitude: complaint.location.longitude,
-    // Real target: only ever user-provided. Demo replica: documented placeholder is acceptable.
-    contactName: resident.contactName ?? (target === "demo" ? "Relay Resident" : null),
+    // Only ever user-provided (categories with requiresContactName are gated on /name before approval).
+    contactName: resident.contactName ?? null,
     contactEmail: resident.contactEmail ?? null,
     contactPhone: null,
     dateObserved: complaint.transit?.incidentTime ? nycDate(complaint.transit.incidentTime) : todayNyc(),
     ...(complaint.transit ? { transit: complaint.transit } : {}),
+    // [memory] answers to questions learned from earlier filings (workflow memory, services/memory.ts)
+    ...(complaint.extraFields && Object.keys(complaint.extraFields).length ? { extraFields: complaint.extraFields } : {}),
   };
 }
 
 /** What the worker would receive for this complaint, minus the per-attempt browser/sandbox fields (scripts, previews). */
-export function previewPayload(complaint: ComplaintDraft, resident: Resident, configured: FilingTarget = filingTarget()) {
+export function previewPayload(complaint: ComplaintDraft, resident: Resident, _configured?: FilingTarget) {
   if (!complaint.category) return null;
   const category = complaint.category;
-  const target = targetFor(category, configured);
+  const target = targetFor(category);
   const cat = CATEGORIES[category];
-  const formUrl = target === "demo" ? `<sandbox portal>/report/${cat.demoRoute}` : cat.officialFormUrl;
+  const formUrl = cat.officialFormUrl;
   return {
     approvedVersion: complaint.approvedVersion,
     target,
     category,
     formUrl,
-    allowedHosts: target === "demo" ? ["<sandbox portal host>"] : allowedHostsFor(category, formUrl, target),
+    allowedHosts: allowedHostsFor(category, formUrl, target),
     form: buildForm(complaint, resident, target),
     realSubmitAuthorized: realSubmitAuthorizedFor(complaint, target),
     limits: DEFAULT_LIMITS,
@@ -261,8 +265,8 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
 
   async function executeFiling(complaint: ComplaintDraft, opts: FilingOpts): Promise<FilingOutcome> {
     const t0 = Date.now();
-    // Real-only categories (no replica portal, e.g. subway-delay → MTA) always file against the official site.
-    const target: FilingTarget = complaint.category ? targetFor(complaint.category, deps.target ?? filingTarget()) : (deps.target ?? filingTarget());
+    // Every category files against its official site (subway: the MTA wizard).
+    const target: FilingTarget = "real";
     const progress = (text: string) => {
       try {
         opts.onProgress(text);
@@ -399,7 +403,6 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
 
       // (c) browser ‖ (d) sandbox --------------------------------------------
       progress("Preparing an isolated filing worker…");
-      const portalMode = opts.resident.demoPortalMode ?? "normal";
       const [b, s] = await Promise.allSettled([
         tracer.span("anchor.create_session", { "attempt.id": attempt.id, "browser.provider": browserProvider.name }, async (set, oi) => {
           oi.tool({ name: "anchor.create_session", description: "Create a recorded cloud browser session (CDP) for the worker", parameters: { recording: true, viewport: "1280x900" } });
@@ -411,13 +414,13 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
           oi.output({ sessionId: sess.id, provider: sess.provider, liveView: Boolean(sess.liveViewUrl), durationMs: attempt.timing.browserMs });
           return sess;
         }),
-        tracer.span("daytona.create_worker", { "attempt.id": attempt.id, "sandbox.provider": sandboxProvider.name, "filing.target": target, "portal.mode": portalMode }, async (set, oi) => {
-          oi.tool({ name: "daytona.create_worker", description: "Disposable sandbox: upload worker (+ demo portal), install playwright-core, start portal", parameters: { target, portalMode } });
+        tracer.span("daytona.create_worker", { "attempt.id": attempt.id, "sandbox.provider": sandboxProvider.name, "filing.target": target }, async (set, oi) => {
+          oi.tool({ name: "daytona.create_worker", description: "Disposable sandbox: upload worker, install playwright-core, relay CDP to the Anchor browser", parameters: { target } });
           const ts = Date.now();
-          const h = await sandboxProvider.provision({ attemptId: attempt.id, target, portalMode, onEvent: onProviderEvent });
+          const h = await sandboxProvider.provision({ attemptId: attempt.id, onEvent: onProviderEvent });
           attempt.timing.sandboxMs = Date.now() - ts;
           set("sandbox.id", h.id);
-          oi.output({ sandboxId: h.id, provider: h.provider, portal: Boolean(h.portalUrl), durationMs: attempt.timing.sandboxMs, stages: providerLog.map((l) => l.msg) });
+          oi.output({ sandboxId: h.id, provider: h.provider, durationMs: attempt.timing.sandboxMs, stages: providerLog.map((l) => l.msg) });
           return h;
         }),
       ]);
@@ -436,8 +439,7 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
       await store.saveAttempt(attempt);
 
       // (e) payload ---------------------------------------------------------------
-      if (target === "demo" && !box.portalUrl) throw Object.assign(new Error("demo portal URL missing"), { code: "SANDBOX_ERROR" as FilingErrorCode });
-      const formUrl = target === "demo" ? `${box.portalUrl}/report/${cat.demoRoute}` : cat.officialFormUrl;
+      const formUrl = cat.officialFormUrl;
       const allowedHosts = allowedHostsFor(category, formUrl, target);
       const payload: FilingPayload = {
         attemptId: attempt.id,
@@ -447,21 +449,22 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         category,
         formUrl,
         allowedHosts,
-        extraHeaders: box.portalHeaders,
+        extraHeaders: {},
         cdpUrl: sess.cdpUrl,
         liveViewUrl: sess.liveViewUrl,
-        portalMode,
         form: buildForm(complaint, opts.resident, target),
-        // The final real Submit needs ALL of: real target, operator switch ALLOW_REAL_SUBMIT=1, approval of this exact version.
+        // The final Submit needs BOTH: operator switch ALLOW_REAL_SUBMIT=1 and approval of this exact version.
         realSubmitAuthorized: realSubmitAuthorizedFor(complaint, target),
         limits: { ...DEFAULT_LIMITS, ...deps.limits },
       };
+      const canAsk = Boolean(opts.onQuestion && box.answerQuestion);
+      payload.limits.questionTimeoutMs = canAsk ? (deps.limits?.questionTimeoutMs ?? DEFAULT_QUESTION_TIMEOUT_MS) : 0;
 
       // (f) worker -----------------------------------------------------------------
       const said = new Set<string>();
       let run: Awaited<ReturnType<SandboxHandle["runWorker"]>>;
       run = await tracer.span("daytona.run_worker", { "attempt.id": attempt.id, "sandbox.id": box.id, "filing.target": target }, async (set, oi) => {
-        oi.tool({ name: "worker.run", description: "Run the bounded Playwright filing worker inside the sandbox", parameters: { category, target, portalMode, limits: payload.limits } });
+        oi.tool({ name: "worker.run", description: "Run the bounded Playwright filing worker inside the sandbox", parameters: { category, target, limits: payload.limits } });
         oi.input(redactJson({ ...payload, cdpUrl: payload.cdpUrl ? "[redacted]" : null, form: { ...payload.form, contactName: payload.form.contactName ? "[redacted]" : null, contactEmail: payload.form.contactEmail ? "[redacted]" : null } }));
 
         // live browser.<step> spans, one per contiguous step
@@ -484,8 +487,51 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
           );
           open = { step, events, end };
         };
+        // live follow-up questions: worker pauses → resident answers on Telegram → answer file → same page continues
+        const questionJobs: Promise<void>[] = [];
+        const asked = new Set<string>();
+        let workerFinished!: (v: null) => void;
+        const workerDone = new Promise<null>((r) => (workerFinished = r));
+        const askResident = (q: WorkerQuestion) => {
+          const timeoutMs = payload.limits.questionTimeoutMs ?? DEFAULT_QUESTION_TIMEOUT_MS;
+          progress(WAITING_FOR_ANSWER);
+          return tracer
+            .span("browser.ask_resident", { "attempt.id": attempt.id, "question.id": q.id, "question.field": q.field, "question.options": q.options?.length ?? 0 }, async (qset, qoi) => {
+              qoi.tool({ name: "browser.ask_resident", description: "Pause the filing browser and ask the resident one question on Telegram", parameters: { field: q.field, required: q.required, timeoutMs } });
+              // prompt + official option labels only; never the resident's typed answer
+              qoi.input({ id: q.id, field: q.field, prompt: q.prompt, options: q.options ?? [], required: q.required });
+              const tq = Date.now();
+              let answer: WorkerAnswer | null = null;
+              let timer: NodeJS.Timeout | undefined;
+              try {
+                answer = await Promise.race([
+                  opts.onQuestion!({ ...q, attemptId: attempt.id, timeoutMs }),
+                  new Promise<null>((r) => (timer = setTimeout(() => r(null), timeoutMs))),
+                  workerDone,
+                ]);
+              } catch (err) {
+                console.warn("[filing] onQuestion failed:", (err as Error).message);
+              } finally {
+                clearTimeout(timer);
+              }
+              const waitedMs = Date.now() - tq;
+              qset("question.answered", Boolean(answer));
+              qset("question.wait_ms", waitedMs);
+              if (answer) {
+                await box.answerQuestion!(q.id, answer);
+                progress("▶️ Got your answer — continuing in the same browser");
+              }
+              qoi.output({ answered: Boolean(answer), optionIndex: answer?.optionIndex ?? null, optionLabel: answer?.optionIndex !== undefined ? (q.options?.[answer.optionIndex] ?? null) : null, freeTextChars: answer && answer.optionIndex === undefined ? answer.value.length : null, waitedMs });
+            })
+            .catch((err) => console.warn("[filing] ask_resident failed:", (err as Error).message));
+        };
         const onWorkerEvent = (e: WorkerEvent) => {
           attempt.workerEvents.push(e);
+          const q = canAsk ? questionFromEvent(e) : null;
+          if (q && !asked.has(q.id)) {
+            asked.add(q.id);
+            questionJobs.push(askResident(q));
+          }
           if (!open || open.step !== e.step) {
             open?.end();
             openStep(e.step);
@@ -501,6 +547,8 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         const tw = Date.now();
         const r = await box.runWorker(payload, onWorkerEvent);
         attempt.timing.workerMs = Date.now() - tw;
+        workerFinished(null);
+        await Promise.all(questionJobs);
         (open as { end: () => void } | null)?.end();
         await Promise.all(stepSpans);
         // the result's own step log is authoritative if streaming missed anything
@@ -577,9 +625,8 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         notes: `filing error: ${redactPreview((err as Error).message ?? String(err))}`,
       };
     } finally {
-      // (j) ALWAYS clean up — except an explicit human handoff with a live view, which is deferred.
-      const holdMs = deps.handoffHoldMs ?? (process.env.FILING_HANDOFF_HOLD_MS ? Number(process.env.FILING_HANDOFF_HOLD_MS) : 3 * 60_000);
-      if (holdForHandoff && target === "real") {
+      // (j) ALWAYS clean up — except an explicit human handoff with a live view (the Anchor session stays open).
+      if (holdForHandoff) {
         // Worker left the official form open in the Anchor browser: the resident finishes there.
         // Destroy the sandbox now; Anchor's idle/max timeouts reap the browser session.
         held = true;
@@ -588,23 +635,6 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         session = null;
         await h?.destroy().catch(() => {});
         progress("The browser stays open so you can finish the form");
-      } else if (holdForHandoff && holdMs > 0) {
-        // Demo: the replica page lives in the sandbox, so keep both briefly for the live view.
-        held = true;
-        const s = session;
-        const h = handle;
-        session = null;
-        handle = null;
-        progress(`Keeping the browser open for ${holdMs >= 60_000 ? `${Math.round(holdMs / 60_000)} min` : `${Math.round(holdMs / 1000)} s`} so you can finish`);
-        track(
-          new Promise<void>((resolve) =>
-            setTimeout(async () => {
-              await Promise.all([h?.destroy().catch(() => {}), s?.close().catch(() => {})]);
-              await collectRecording(s, 1, 6);
-              resolve();
-            }, holdMs),
-          ),
-        );
       } else {
         const closed = await cleanup();
         await collectRecording(closed, 1, 6);
@@ -639,7 +669,7 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
           officialRequestNumber: sr,
           officialCategory: cat.officialLabel,
           status: "Open",
-          statusSource: target === "demo" ? "demo-portal" : "confirmation",
+          statusSource: "confirmation",
           lastCheckedAt: nowIso(),
           receiptUrl: result?.officialReceiptUrl ? redactPreview(result.officialReceiptUrl) : null,
         });
@@ -648,6 +678,11 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
       await store
         .recordWorkflowPattern({ id: shortId("wp"), target, category, kind: p.kind, description: p.description, hint: p.hint, observedInAttemptId: attempt.id, outcome: status, createdAt: nowIso() })
         .catch(() => {});
+      // ---- [memory] ask-before-approval: learn which field the form stalled on (services/memory.ts) ----
+      for (const observation of askFromOutcome(status, v.errorCode, result)) {
+        await recordAskPattern(store, { target, category, observation, attemptId: attempt.id, outcome: status }).catch((e) => console.warn("[filing] recordAskPattern:", (e as Error).message));
+      }
+      // ---- [/memory] ----
       oi.output({ attemptId: attempt.id, status, sr, pattern: p.kind, evidence: attempt.evidence.length, timing: attempt.timing });
     });
 

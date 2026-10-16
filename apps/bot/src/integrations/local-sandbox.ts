@@ -1,24 +1,22 @@
 /**
- * Local "sandbox" (dev fallback): same SandboxProvider contract as Daytona, but the demo
- * portal and the worker run as local child processes in a temp work dir.
- * NOT isolated — only for development and offline demos.
+ * Local "sandbox" (dev fallback): same SandboxProvider contract as Daytona, but the worker
+ * runs as a local child process in a temp work dir.
+ * NOT isolated — only for development.
  *
  * Also exports the small helpers shared with daytona.ts (EVT line parsing, worker build check).
  */
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { FilingPayload, SandboxHandle, SandboxProvider, WorkerEvent as WorkerEventT, WorkerResult as WorkerResultT } from "../core/contracts.js";
-import { WorkerEvent, WorkerResult } from "../core/contracts.js";
+import { DEFAULT_QUESTION_TIMEOUT_MS, WorkerEvent, WorkerResult, questionFromEvent, type WorkerAnswer } from "../core/contracts.js";
 import { REPO_ROOT } from "./env.js";
 
 export const WORKER_DIR = resolve(REPO_ROOT, "apps/worker");
-export const PORTAL_DIR = resolve(REPO_ROOT, "apps/portal");
-export const PORTAL_PORT = 3311;
 
 /** Build apps/worker/dist with pnpm when it is missing. Returns build duration in ms (0 if already built). */
 export function ensureWorkerBuilt(onEvent?: (msg: string, data?: Record<string, unknown>) => void): number {
@@ -68,6 +66,33 @@ export function createEventLineParser(onEvent: (e: WorkerEventT) => void) {
     },
     get count() {
       return count;
+    },
+  };
+}
+
+/** Answer file contents for a worker question (validated id; plain JSON). */
+export function answerFile(questionId: string, answer: WorkerAnswer): { name: string; body: string } {
+  if (!/^[A-Za-z0-9_-]{1,24}$/.test(questionId)) throw new Error(`refusing question id ${JSON.stringify(questionId)}`);
+  return { name: `answer-${questionId}.json`, body: JSON.stringify({ value: String(answer.value).slice(0, 500), ...(answer.optionIndex !== undefined ? { optionIndex: answer.optionIndex } : {}) }) };
+}
+
+/**
+ * Bot-side deadline for one worker run: totalTimeoutMs + 30 s, extended by questionTimeoutMs for every
+ * live question (the worker pauses its own deadline while it waits for the resident).
+ */
+export function workerDeadline(payload: FilingPayload) {
+  let at = Date.now() + payload.limits.totalTimeoutMs + 30_000;
+  const perQuestion = payload.limits.questionTimeoutMs ?? DEFAULT_QUESTION_TIMEOUT_MS;
+  return {
+    get at() {
+      return at;
+    },
+    /** Wrap the event callback so question events extend the deadline. */
+    wrap(onEvent: (e: WorkerEventT) => void) {
+      return (e: WorkerEventT) => {
+        if (questionFromEvent(e)) at += perQuestion + 5_000;
+        onEvent(e);
+      };
     },
   };
 }
@@ -128,42 +153,18 @@ async function waitForHealth(url: string, timeoutMs: number): Promise<boolean> {
 export function createLocalSandboxProvider(): SandboxProvider {
   return {
     name: "local",
-    async provision({ attemptId, target, portalMode, onEvent }): Promise<SandboxHandle> {
+    async provision({ attemptId, onEvent }): Promise<SandboxHandle> {
       const t0 = Date.now();
       onEvent("Creating local worker (dev, not isolated)…", { provider: "local" });
       ensureWorkerBuilt(onEvent);
       const workDir = await mkdtemp(join(tmpdir(), `311relay-${attemptId}-`));
       const outDir = join(workDir, "out");
       const procs: ChildProcess[] = [];
-      let portalUrl: string | null = null;
-
-      if (target === "demo") {
-        const serverJs = join(PORTAL_DIR, "server.js");
-        if (!existsSync(serverJs)) throw new Error("apps/portal/server.js not found");
-        const port = await freePort();
-        const portal = spawn(process.execPath, [serverJs], {
-          cwd: PORTAL_DIR,
-          env: { ...scrubbedEnv(), PORT: String(port), MODE: portalMode },
-          stdio: ["ignore", "ignore", "pipe"],
-        });
-        procs.push(portal);
-        let portalErr = "";
-        portal.stderr?.on("data", (d) => (portalErr = (portalErr + d.toString()).slice(-2000)));
-        const tp = Date.now();
-        portalUrl = `http://127.0.0.1:${port}`;
-        if (!(await waitForHealth(`${portalUrl}/health`, 15_000))) {
-          portal.kill("SIGKILL");
-          throw new Error(`local demo portal did not become healthy: ${portalErr.slice(-300)}`);
-        }
-        onEvent(`Demo portal live (local :${port}, ${portalMode}, ${((Date.now() - tp) / 1000).toFixed(1)} s)`, { portalMode, durationMs: Date.now() - tp });
-      }
       onEvent(`Sandbox ready (local, ${((Date.now() - t0) / 1000).toFixed(1)} s)`, { provider: "local", sandboxId: `local_${attemptId}`, durationMs: Date.now() - t0 });
 
       const handle: SandboxHandle = {
         id: `local_${attemptId}`,
         provider: "local",
-        portalUrl,
-        portalHeaders: {},
         async runWorker(payload: FilingPayload, onWorkerEvent) {
           const payloadPath = join(workDir, "payload.json");
           await writeFile(payloadPath, JSON.stringify(payload, null, 2));
@@ -176,19 +177,23 @@ export function createLocalSandboxProvider(): SandboxProvider {
           });
           procs.push(child);
           let stdout = "";
-          const parser = createEventLineParser(onWorkerEvent);
+          const deadline = workerDeadline(payload);
+          const parser = createEventLineParser(deadline.wrap(onWorkerEvent));
           const rl = createInterface({ input: child.stdout! });
           rl.on("line", (line) => {
             stdout += line + "\n";
             parser.push(line + "\n");
           });
           child.stderr?.on("data", (d) => (stdout += d.toString()));
-          const timeoutMs = payload.limits.totalTimeoutMs + 30_000;
           const exitCode = await new Promise<number>((res) => {
-            const timer = setTimeout(() => {
-              child.kill("SIGKILL");
-              res(-1);
-            }, timeoutMs);
+            let timer: NodeJS.Timeout;
+            const tick = () => {
+              if (Date.now() >= deadline.at) {
+                child.kill("SIGKILL");
+                res(-1);
+              } else timer = setTimeout(tick, Math.min(1_000, deadline.at - Date.now()));
+            };
+            timer = setTimeout(tick, Math.min(1_000, deadline.at - Date.now()));
             child.on("close", (code) => {
               clearTimeout(timer);
               res(code ?? -1);
@@ -200,6 +205,12 @@ export function createLocalSandboxProvider(): SandboxProvider {
           const ms = Date.now() - tw;
           onEvent(`Filing worker finished (exit ${exitCode}, ${(ms / 1000).toFixed(1)} s)`, { exitCode, durationMs: ms, events: parser.count, resultError: error });
           return { result, stdout, exitCode };
+        },
+        async answerQuestion(questionId, answer) {
+          const f = answerFile(questionId, answer);
+          const tmp = join(outDir, `${f.name}.tmp`);
+          await writeFile(tmp, f.body);
+          await rename(tmp, join(outDir, f.name));
         },
         async downloadEvidence(name: string) {
           return readFile(join(outDir, safeEvidenceName(name)));

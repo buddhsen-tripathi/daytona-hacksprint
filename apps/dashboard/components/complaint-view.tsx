@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, ShieldAlert, ShieldCheck, ShieldQuestion, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePoll, withMock } from "@/lib/api";
-import { CATEGORY_LABEL, CATEGORY_OFFICIAL } from "@/lib/categories";
+import { categoryLabel, categoryOfficial } from "@/lib/categories";
 import { SAFETY_COPY, fmtDateTime, fmtMs, fmtTime, humanState, pct, evidenceSrc } from "@/lib/format";
 import type { Actor, ComplaintDetail, ComplaintDraft, DuplicateCandidate, Evidence, FilingAttempt, Transition, WorkerEvent } from "@/lib/types";
 import { ApiDownBanner, Card, Empty, ExtLink, Label, LiveTick, Mono, Section, SkeletonRows, StatePill } from "./ui";
@@ -63,7 +63,7 @@ function Conversation({ c }: { c: ComplaintDraft }) {
         {cl ? (
           <div className="mt-2 space-y-2.5">
             <div>
-              <div className="font-wide text-[15px] font-extrabold">{cl.category ? CATEGORY_OFFICIAL[cl.category] : humanState(cl.triage)}</div>
+              <div className="font-wide text-[15px] font-extrabold">{cl.category ? categoryOfficial(cl.category) : humanState(cl.triage)}</div>
               <div className="mt-1 flex items-center gap-2">
                 <Bar value={cl.confidence} tone={cl.confidence >= 0.6 ? "bg-go" : "bg-caution"} />
                 <Mono className="text-[11px] font-bold tabular">{pct(cl.confidence)}</Mono>
@@ -457,7 +457,7 @@ export function ComplaintView({ id, mock }: { id: string; mock: boolean }) {
       <div className="rise mb-6 flex flex-wrap items-end gap-x-6 gap-y-3 border-b-2 border-ink pb-4">
         <div>
           <div className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-signal-deep">
-            Complaint · {c.category ? CATEGORY_LABEL[c.category] : (c.triage ?? "untriaged")}
+            Complaint · {c.category ? categoryLabel(c.category) : (c.triage ?? "untriaged")}
           </div>
           <h1 className="font-wide mt-1 text-[38px] leading-none font-black tracking-tight">{c.id}</h1>
           <p className="mt-2 max-w-2xl text-[13.5px] text-ink2">{c.description || "No description yet."}</p>

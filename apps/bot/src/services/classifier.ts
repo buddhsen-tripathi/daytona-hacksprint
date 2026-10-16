@@ -16,20 +16,14 @@ export const MAX_IMAGES = 2;
 
 function categoryBlock(): string {
   return Object.values(CATEGORIES)
-    .map((c) => `- "${c.id}" — ${c.label} (official NYC311: "${c.officialLabel}"). ${c.guidance}`)
+    .map((c) => `- "${c.id}" — ${c.label} (official route: "${c.officialLabel}"). ${c.guidance}`)
     .join("\n");
 }
 
-export const CLASSIFIER_SYSTEM_PROMPT = `You are the intake classifier for 311Relay, an assistant that helps New York City residents prepare NYC311 street-condition reports and MTA subway delay complaints. You look at the resident's photo(s) and words and decide how the report should be routed. You never file anything yourself.
+export const CLASSIFIER_SYSTEM_PROMPT = `You are the intake classifier for 311Relay, an assistant that helps New York City residents report problems to the right official channel. You look at the resident's photo(s) and words and decide how the report should be routed. You never file anything yourself.
 
-SUPPORTED CATEGORIES (the only values allowed in "category"):
+SUPPORTED CATEGORIES (the only values allowed in "category"; anything else is OUT_OF_SCOPE):
 ${categoryBlock()}
-
-HOW TO TELL THEM APART (most important judgement):
-- "street-pothole": a hole, crater or broken/cracked area in ordinary roadway asphalt. The surrounding pavement is continuous and uniform; there is no straight-edged patch around the damage.
-- "street-repair-defect": the damage is INSIDE or ALONG THE EDGE of an area that was previously cut and refilled — a rectangular/square patch, a trench line, a utility cut or a restoration around a utility cover — recognisable by straight saw-cut edges and asphalt of a different colour/texture than the surrounding road. A pothole, sinking, depression or heaving inside such a patch is a street repair defect, NOT a plain pothole. Also use this when the resident says it is where a utility/contractor recently dug up the street.
-- A street drain or manhole cover merely being nearby does not change this; judge where the damage itself is.
-- If you cannot tell whether the hole sits inside a repaired patch, say so in alternativeConsidered and lower confidence; if it is a genuine toss-up use UNCLEAR and ask about it.
 
 SUBWAY DELAYS ("subway-delay"):
 - A New York City subway train or line that was delayed, held, late, stuck, "sat in the tunnel", "sat at the station", ran with long gaps ("no train for 30 minutes"), or was otherwise significantly late ⇒ SUPPORTED / "subway-delay". This is NOT out of scope (it is filed with the MTA, not NYC311). Use it even if the line or direction is not mentioned yet — the app asks for them; do not use UNCLEAR just because they are missing.
@@ -45,13 +39,13 @@ SUBWAY DELAYS ("subway-delay"):
 
 TRIAGE VALUES:
 - "SUPPORTED": clearly one of the categories above. category must be set.
-- "EMERGENCY": immediate danger. Use for: a deep or large cave-in / sinkhole / collapsed roadway, an open unprotected hole a car or person could fall into, exposed or downed electrical wires, fire, smoke, gas smell, flooding from a broken water main, or anyone injured or trapped. Put each danger signal in safetyFlags. category is null. When in doubt between a dangerous cave-in and a routine pothole, prefer EMERGENCY.
-- "OUT_OF_SCOPE": a real city problem that is not a street-surface pothole/repair defect or a subway delay. category is null. Name the issue plainly at the start of "description" (e.g. "Streetlight out: ..."). Examples: streetlight or traffic signal out, damaged or missing street sign, sidewalk crack/trip hazard (sidewalks are not the street), clogged catch basin or street flooding, a cave-in right next to/around a catch basin (NYC311 handles it as a sewer issue, KA-01084), potholes on a highway/expressway/parkway (separate highway route, KA-01106), bus / LIRR / Metro-North / PATH delays, noise, illegal parking, garbage, graffiti, trees, anything outside New York City.
-- "UNCLEAR": you cannot responsibly decide. Use it when the photo is blurry, dark, too close, or does not clearly show a road surface; when the words and photo conflict; when the text is too vague to know what or where the problem is; or when you cannot distinguish a plain pothole from a repaired patch. Ask exactly ONE short, targeted clarifyingQuestion that would resolve it (e.g. "Is the hole inside a square patch where the street was dug up before, or in regular pavement?"). category may hold your best guess or null.
+- "EMERGENCY": immediate danger. Use for: a deep or large cave-in / sinkhole / collapsed roadway, an open unprotected hole a car or person could fall into, exposed or downed electrical wires, fire, smoke, gas smell, flooding from a broken water main, or anyone injured or trapped. Put each danger signal in safetyFlags. category is null. When in doubt between a dangerous hazard and a routine problem, prefer EMERGENCY.
+- "OUT_OF_SCOPE": a real problem that is not one of the supported categories above. category is null. Name the issue plainly at the start of "description" (e.g. "Pothole: ...", "Streetlight out: ...", "LIRR delay: ..."). Examples: potholes, damaged or sunken street patches and any other street or sidewalk condition, streetlight or traffic signal out, damaged street sign, clogged catch basin or street flooding, noise, illegal parking, garbage, graffiti, trees, bus / LIRR / Metro-North / PATH / NJ Transit / ferry problems, subway problems that are not a delay, anything outside New York City. These are reported directly on NYC311 (or the service's own channel); the app gives the resident that guidance.
+- "UNCLEAR": you cannot responsibly decide. Use it when the photo is blurry, dark or too close to tell what it shows; when the words and photo conflict; or when the text is too vague to know what the problem is. Ask exactly ONE short, targeted clarifyingQuestion that would resolve it (e.g. "What's the problem you ran into — for example, was a subway train delayed?"). A photo with no text that clearly shows an unsupported problem (e.g. a pothole) is OUT_OF_SCOPE, not UNCLEAR. category may hold your best guess or null.
 
 RULES:
 - Never invent facts that are not visible in the photo or stated by the resident. Never state or guess a location, address, street name, borough, subway line, direction, station, size or date unless the resident said it. Do not read GPS or location from the image. Whether the location is known is handled elsewhere — do not ask for location in clarifyingQuestion.
-- A text-only report is fine: if the resident clearly describes a pothole (or a sunken utility patch) in the street, classify it as SUPPORTED even without a photo.
+- A text-only report is fine: if the resident clearly describes a supported problem (e.g. a delayed subway train), classify it as SUPPORTED even without a photo.
 - "description": one or two short, neutral sentences describing the problem as it would appear on a 311 report, written from the resident's point of view (what it is and how bad it looks). Do not estimate dimensions or depth unless the resident gave them; do not mention unrelated objects in the photo (gloves, cars, people); no location unless the resident stated it; no speculation about cause.
 - "rationale": what in the photo/text supports your decision. "alternativeConsidered": why the other category (or triage) was rejected, or null.
 - "confidence" is calibrated: about 0.9+ only when the evidence is unambiguous; 0.6-0.8 when likely but with some doubt; below 0.6 when you are guessing (then prefer UNCLEAR).
@@ -122,21 +116,16 @@ export function postValidate(r: ClassificationResult): ClassificationResult {
     if (!validCategory) {
       out.triage = "UNCLEAR";
       out.confidence = Math.min(out.confidence, 0.4);
-      out.clarifyingQuestion ??= "Can you tell me a bit more about the problem — is it a hole in the street surface?";
+      out.clarifyingQuestion ??= "Can you tell me a bit more about what happened?";
     } else if (out.confidence < CLASSIFY_CONFIDENCE_THRESHOLD && !out.clarifyingQuestion) {
       // Orchestrator will clarify on low confidence; make sure it has a question to ask.
-      out.clarifyingQuestion =
-        validCategory === "street-pothole" || validCategory === "street-repair-defect"
-          ? "Is the damage inside a square or rectangular patch where the street was dug up before, or in regular pavement?"
-          : validCategory === "subway-delay"
-            ? "Was this a subway train that was delayed? Which line was it?"
-            : "Can you describe the problem a bit more?";
+      out.clarifyingQuestion = validCategory === "subway-delay" ? "Was this a subway train that was delayed? Which line was it?" : "Can you describe the problem a bit more?";
     }
   } else if (out.triage === "EMERGENCY" || out.triage === "OUT_OF_SCOPE") {
     out.category = null;
     out.clarifyingQuestion = null;
   } else if (out.triage === "UNCLEAR" && !out.clarifyingQuestion) {
-    out.clarifyingQuestion = "Could you send a clearer photo or describe what's wrong with the street?";
+    out.clarifyingQuestion = "Could you send a clearer photo or describe what's wrong?";
   }
   if (out.triage !== "UNCLEAR" && out.triage !== "SUPPORTED") out.clarifyingQuestion = null;
   if (out.triage === "SUPPORTED" && out.confidence >= CLASSIFY_CONFIDENCE_THRESHOLD) out.clarifyingQuestion = null;

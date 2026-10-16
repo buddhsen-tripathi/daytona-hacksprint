@@ -4,7 +4,6 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "dev": "pnpm --filter @311relay/bot dev",
-    "dev:portal": "pnpm --filter @311relay/portal dev",
     "dev:dashboard": "pnpm --filter @311relay/dashboard dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",

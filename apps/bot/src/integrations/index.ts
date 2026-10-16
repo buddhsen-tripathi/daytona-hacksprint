@@ -6,7 +6,7 @@
  * crashing boot. `providerReport()` says which implementation is active.
  */
 import type { BrowserProvider, Classifier, DuplicateService, LocationService, SandboxProvider, Store, Tracer } from "../core/contracts.js";
-import { env, filingTarget } from "./env.js";
+import { env } from "./env.js";
 import {
   type FilingService,
   type StatusService,
@@ -185,9 +185,8 @@ export const getFilingService = once(async (): Promise<FilingService> => {
         tracer: await getTracer(),
         sandbox: await getSandboxProvider(),
         browser: await getBrowserProvider(),
-        target: filingTarget(),
       })) as FilingService;
-      report.filing = `filing service (target ${filingTarget()})`;
+      report.filing = "filing service (official forms)";
       return s;
     } catch (err) {
       console.warn(`[providers] filing service init failed: ${(err as Error).message}`);

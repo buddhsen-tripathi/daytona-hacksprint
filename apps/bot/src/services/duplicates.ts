@@ -3,7 +3,12 @@
  * possibilities, never as confirmed duplicates, and never block reporting.
  */
 import { CATEGORIES, DUPLICATE_SEARCH, haversineMeters } from "../core/contracts.js";
-import type { CategoryId, DuplicateCandidate, DuplicateService } from "../core/contracts.js";
+import type { CategoryDefinition, CategoryId, DuplicateCandidate, DuplicateService } from "../core/contracts.js";
+
+/** A category id from the registry, or its Open Data mapping directly (keeps scoring testable without a registered category). */
+export type OpenDataMatch = CategoryDefinition["openData"];
+export type CategoryRef = CategoryId | OpenDataMatch;
+const openDataOf = (c: CategoryRef): OpenDataMatch | null => (typeof c === "string" ? (CATEGORIES[c]?.openData ?? null) : c);
 import { getByUniqueKey, searchNearby } from "../integrations/nyc-open-data.js";
 import type { Raw311Record } from "../integrations/nyc-open-data.js";
 
@@ -35,11 +40,11 @@ function parseDate(s: string | undefined | null): number | null {
   return Number.isFinite(t) ? t : null;
 }
 
-export function categorySimilarity(category: CategoryId, rec: Pick<Raw311Record, "complaint_type" | "descriptor">): number {
-  const def = CATEGORIES[category];
+export function categorySimilarity(category: CategoryRef, rec: Pick<Raw311Record, "complaint_type" | "descriptor">): number {
+  const od = openDataOf(category);
   const descriptor = (rec.descriptor ?? "").trim();
-  if (rec.complaint_type === def.openData.complaintType) {
-    if (def.openData.descriptors.includes(descriptor)) return 1.0;
+  if (od && od.complaintType && rec.complaint_type === od.complaintType) {
+    if (od.descriptors.includes(descriptor)) return 1.0;
     if (STREET_SURFACE_DESCRIPTORS.some((d) => d.toLowerCase() === descriptor.toLowerCase()) || /^plate condition/i.test(descriptor)) return 0.6;
   }
   return 0.2;
@@ -48,7 +53,7 @@ export function categorySimilarity(category: CategoryId, rec: Pick<Raw311Record,
 /** Score one Open Data record against the user's location/category (design doc §12.3). Returns null if dropped. */
 export function scoreRecord(
   rec: Raw311Record,
-  args: { category: CategoryId; latitude: number; longitude: number; now?: Date },
+  args: { category: CategoryRef; latitude: number; longitude: number; now?: Date },
   cfg: { radiusMeters: number; broadRadiusMeters: number; recencyDays: number } = DUPLICATE_SEARCH,
 ): DuplicateCandidate | null {
   const lat = num(rec.latitude);
@@ -83,7 +88,7 @@ export function scoreRecord(
 
 export function rankCandidates(
   records: Raw311Record[],
-  args: { category: CategoryId; latitude: number; longitude: number; now?: Date },
+  args: { category: CategoryRef; latitude: number; longitude: number; now?: Date },
   cfg: { radiusMeters: number; broadRadiusMeters: number; recencyDays: number; minScore: number; maxCandidates: number } = DUPLICATE_SEARCH,
 ): { candidates: DuplicateCandidate[]; dataAsOf: string | null } {
   let maxCreated: string | null = null;
