@@ -14,6 +14,7 @@ import { z } from "zod";
 export const CategoryId = z.enum([
   "street-pothole", // Pothole or Cave-In on Street (KA-01093) → DOT pothole form
   "street-repair-defect", // Street Repair Complaint (KA-01095): failed restoration / utility cut
+  "subway-delay", // Buses and Subways (KA-01014) → MTA customer feedback wizard (contact.mta.info), fully automatable
 ]);
 export type CategoryId = z.infer<typeof CategoryId>;
 
@@ -39,8 +40,12 @@ export const CategoryDefinition = z.object({
   demoRoute: z.string(),
   /** NYC Open Data (erm2-nwe9) complaint_type / descriptor values that map to this category. */
   openData: z.object({ complaintType: z.string(), descriptors: z.array(z.string()) }),
-  /** Fields the draft must have before READY_FOR_APPROVAL. */
-  requiredFields: z.array(z.enum(["location", "description"])),
+  /** Fields the draft must have before READY_FOR_APPROVAL. "transit" = line + direction (+ optional station/time). */
+  requiredFields: z.array(z.enum(["location", "description", "transit"])),
+  /** "demo-or-real": replica portal exists; "real-only": no replica, always files against the official site (no CAPTCHA observed). */
+  filing: z.enum(["demo-or-real", "real-only"]).default("demo-or-real"),
+  /** Whether NYC Open Data has records for this category (duplicate check + status). */
+  openDataBacked: z.boolean().default(true),
   /** Short guidance used in prompts + /help. */
   guidance: z.string(),
 });
@@ -56,6 +61,8 @@ export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
     demoRoute: "pothole",
     openData: { complaintType: "Street Condition", descriptors: ["Pothole", "Cave-in", "Rough, Pitted or Cracked Roads"] },
     requiredFields: ["location", "description"],
+    filing: "demo-or-real",
+    openDataBacked: true,
     guidance:
       "A shallow hole or crack in the street surface, NOT inside a previously repaired patch and NOT next to a catch basin. Deep cave-ins or unprotected openings are a safety hazard: refer to 911.",
   },
@@ -68,8 +75,24 @@ export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
     demoRoute: "street-repair",
     openData: { complaintType: "Street Condition", descriptors: ["Failed Street Repair", "Pothole"] },
     requiredFields: ["location", "description"],
+    filing: "demo-or-real",
+    openDataBacked: true,
     guidance:
       "Damage inside a filled/repaired area left by street work: a street cut, trench or square patch that is heaped above street level, sunk an inch or more, or has developed a pothole or depression.",
+  },
+  "subway-delay": {
+    id: "subway-delay",
+    label: "Subway delay",
+    officialLabel: "MTA Customer Feedback — Subways › Complaint › Service and schedule › Delay",
+    articleUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01014",
+    officialFormUrl: "https://contact.mta.info/s/customer-feedback",
+    demoRoute: "subway-delay",
+    openData: { complaintType: "", descriptors: [] },
+    requiredFields: ["transit", "description"],
+    filing: "real-only",
+    openDataBacked: false,
+    guidance:
+      "A subway train or line that was delayed, held, or significantly late. NYC311 does not take these; they go to the MTA's customer feedback form. Needs the line (e.g. A, 7, L), the direction (uptown/downtown or terminal), optionally the nearest station, and when it happened.",
   },
 };
 
@@ -169,6 +192,26 @@ export const MediaItem = z.object({
 export type MediaItem = z.infer<typeof MediaItem>;
 
 // ---------------------------------------------------------------------------
+// Transit details (subway categories). Values must come from the user.
+// ---------------------------------------------------------------------------
+export const SUBWAY_LINES = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D", "F", "M", "N", "Q", "R", "W", "G", "L", "J", "Z", "S-42 Street Shuttle", "S-Franklin Av Shuttle", "S-Rockaway Park Shuttle", "Staten Island Railway"] as const;
+export const TransitDetails = z.object({
+  /** One of SUBWAY_LINES (canonical), or null if the user has not said. */
+  line: z.string().nullable(),
+  /** Free text as the user said it, e.g. "downtown", "uptown", "Manhattan-bound", "toward Coney Island". */
+  direction: z.string().nullable(),
+  /** Nearest station as the user said it, or null. */
+  station: z.string().nullable(),
+  borough: z.string().nullable(),
+  /** ISO datetime of the incident if the user gave a time ("this morning at 8:30"), else null. */
+  incidentTime: z.string().nullable(),
+  /** Minutes delayed if stated. */
+  delayMinutes: z.number().nullable(),
+});
+export type TransitDetails = z.infer<typeof TransitDetails>;
+export const EMPTY_TRANSIT: TransitDetails = { line: null, direction: null, station: null, borough: null, incidentTime: null, delayMinutes: null };
+
+// ---------------------------------------------------------------------------
 // Classification (LLM output, Zod-validated; backend re-validates category)
 // ---------------------------------------------------------------------------
 export const ClassificationResult = z.object({
@@ -187,6 +230,8 @@ export const ClassificationResult = z.object({
   safetyFlags: z.array(z.string()),
   /** The single most useful clarifying question when triage === UNCLEAR, else null. */
   clarifyingQuestion: z.string().nullable(),
+  /** Transit details extracted from the text for subway categories; null when not applicable or not mentioned. Never invented. */
+  transit: TransitDetails.nullable().optional(),
 });
 export type ClassificationResult = z.infer<typeof ClassificationResult>;
 
@@ -233,7 +278,9 @@ export const ComplaintDraft = z.object({
   location: ComplaintLocation,
   media: z.array(MediaItem),
   classification: ClassificationResult.nullable(),
-  missingFields: z.array(z.enum(["location", "description", "category"])),
+  /** Transit details for subway categories (merged across messages; conversation memory). */
+  transit: TransitDetails.nullable().optional(),
+  missingFields: z.array(z.enum(["location", "description", "category", "transit"])),
   needsEmergencyReferral: z.boolean(),
   confidence: z.number(),
   duplicates: z.array(DuplicateCandidate),
@@ -310,7 +357,14 @@ export const FilingPayload = z.object({
     contactPhone: z.string().nullable(),
     /** ISO date (YYYY-MM-DD) the problem was observed; defaults to today in the bot. */
     dateObserved: z.string().nullable(),
+    /** Subway categories only. */
+    transit: TransitDetails.nullable().optional(),
   }),
+  /**
+   * True ONLY when the resident explicitly approved AND FILING_TARGET=real AND env ALLOW_REAL_SUBMIT=1.
+   * Real-site adapters must never click the final Submit unless this is true.
+   */
+  realSubmitAuthorized: z.boolean().optional(),
   limits: z.object({ totalTimeoutMs: z.number(), stepTimeoutMs: z.number(), maxNavigationRetries: z.number() }),
 });
 export type FilingPayload = z.infer<typeof FilingPayload>;
@@ -504,6 +558,8 @@ export type OutboundMessage = {
   /** Edit an earlier bot message instead of sending a new one. */
   editMessageId?: number;
   photoPath?: string;
+  /** Local MP4 to upload with sendVideo (≤ 50 MB); used for the filing session recording. */
+  videoPath?: string;
   parseMode?: "Markdown" | "HTML";
 };
 

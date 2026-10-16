@@ -2,11 +2,29 @@
  * Worker-side copy of the protocol types from apps/bot/src/core/contracts.ts.
  * The worker runs alone inside the sandbox (only playwright-core installed), so it must not import the bot.
  * KEEP IDENTICAL to: FilingTarget, PortalMode, CategoryId, FilingPayload, FilingStatus, FilingErrorCode,
- * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult.
+ * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult, TransitDetails, SUBWAY_LINES.
  */
 export type FilingTarget = "demo" | "real";
 export type PortalMode = "normal" | "captcha" | "flaky" | "reject";
-export type CategoryId = "street-pothole" | "street-repair-defect";
+export type CategoryId = "street-pothole" | "street-repair-defect" | "subway-delay";
+
+/** Canonical subway lines (same order/spelling as the bot's SUBWAY_LINES). The MTA wizard labels them "<line> Line". */
+export const SUBWAY_LINES = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D", "F", "M", "N", "Q", "R", "W", "G", "L", "J", "Z", "S-42 Street Shuttle", "S-Franklin Av Shuttle", "S-Rockaway Park Shuttle", "Staten Island Railway"] as const;
+
+/** Transit details (subway categories). Values must come from the user. */
+export interface TransitDetails {
+  /** One of SUBWAY_LINES (canonical), or null if the user has not said. */
+  line: string | null;
+  /** Free text as the user said it, e.g. "downtown", "uptown", "Manhattan-bound", "toward Coney Island". */
+  direction: string | null;
+  /** Nearest station as the user said it, or null. */
+  station: string | null;
+  borough: string | null;
+  /** ISO datetime of the incident if the user gave a time, else null. */
+  incidentTime: string | null;
+  /** Minutes delayed if stated. */
+  delayMinutes: number | null;
+}
 
 export interface FilingPayload {
   attemptId: string;
@@ -30,7 +48,14 @@ export interface FilingPayload {
     contactEmail: string | null;
     contactPhone: string | null;
     dateObserved: string | null;
+    /** Subway categories only. */
+    transit?: TransitDetails | null;
   };
+  /**
+   * True ONLY when the resident explicitly approved AND FILING_TARGET=real AND env ALLOW_REAL_SUBMIT=1.
+   * Real-site adapters must never click the final Submit unless this is true.
+   */
+  realSubmitAuthorized?: boolean;
   limits: { totalTimeoutMs: number; stepTimeoutMs: number; maxNavigationRetries: number };
 }
 
@@ -106,7 +131,7 @@ export class Outcome extends Error {
 export const nowIso = () => new Date().toISOString();
 
 const PORTAL_MODES: PortalMode[] = ["normal", "captcha", "flaky", "reject"];
-const CATEGORIES: CategoryId[] = ["street-pothole", "street-repair-defect"];
+const CATEGORIES: CategoryId[] = ["street-pothole", "street-repair-defect", "subway-delay"];
 
 /** Hand-written shape check (no zod in the sandbox). Returns a list of problems; empty = valid. */
 export function validatePayload(p: unknown): string[] {
@@ -147,7 +172,15 @@ export function validatePayload(p: unknown): string[] {
     for (const k of ["address", "borough", "contactName", "contactEmail", "contactPhone", "dateObserved"]) strOrNull(f, k, "form.");
     numOrNull(f, "latitude", "form.");
     numOrNull(f, "longitude", "form.");
+    if (f.transit !== undefined && f.transit !== null) {
+      if (!isObj(f.transit)) problems.push("form.transit must be an object|null");
+      else {
+        for (const k of ["line", "direction", "station", "borough", "incidentTime"]) if (f.transit[k] !== undefined) strOrNull(f.transit, k, "form.transit.");
+        if (f.transit.delayMinutes !== undefined) numOrNull(f.transit, "delayMinutes", "form.transit.");
+      }
+    }
   }
+  if (p.realSubmitAuthorized !== undefined && typeof p.realSubmitAuthorized !== "boolean") problems.push("realSubmitAuthorized must be a boolean");
   if (!isObj(p.limits)) problems.push("limits must be an object");
   else
     for (const k of ["totalTimeoutMs", "stepTimeoutMs", "maxNavigationRetries"])
