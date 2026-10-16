@@ -49,6 +49,7 @@ ROUTING (two-stage router): the user message lists CATALOG CANDIDATES — NYC311
 - "catalogId": the id of the ONE candidate this report belongs to, copied exactly from the list. Only ids from the list are allowed. null when triage is EMERGENCY or UNCLEAR, or when no candidate fits.
 - For SUPPORTED, catalogId is the category id itself (e.g. "subway-delay"). For OUT_OF_SCOPE pick the best candidate so the resident gets the exact official link.
 - "confidence": calibrated like the top-level confidence, for catalogId only. "rationale": one short sentence. "alternatives": up to 3 other candidate ids that could also fit, best first ([] if none).
+- UNCLEAR: catalogId is null, but put the 2-3 candidates that could plausibly fit in "alternatives" (best first) so the resident can pick one; [] only if nothing in the list is plausible.
 
 RULES:
 - Never invent facts that are not visible in the photo or stated by the resident. Never state or guess a location, address, street name, borough, subway line, direction, station, size or date unless the resident said it. Do not read GPS or location from the image. Whether the location is known is handled elsewhere — do not ask for location in clarifyingQuestion.

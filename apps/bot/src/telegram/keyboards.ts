@@ -3,7 +3,7 @@
  * keyboards. Every callback is bound to a complaint id + draft version.
  */
 import { InlineKeyboard, Keyboard } from "grammy";
-import type { ComplaintDraft, OutboundButton } from "../core/contracts.js";
+import type { CatalogEntry, ComplaintDraft, OutboundButton } from "../core/contracts.js";
 import { encodeCallback } from "../core/contracts.js";
 
 /** Telegram rejects URL buttons pointing at localhost / non-https hosts. */
@@ -39,6 +39,19 @@ export function trackingButtons(d: ComplaintDraft, receiptUrl: string | null): O
     ? { text: "🧾 View official request", url: receiptUrl }
     : { text: "🧾 View official request", data: encodeCallback("view_official", d.id, d.draftVersion) };
   return [[{ text: "🔄 Check status", data: encodeCallback("status", d.id, d.draftVersion) }, view]];
+}
+
+/** Router (#8) route card: the official link, then the NYC311 article. */
+export function routeButtons(e: CatalogEntry): OutboundButton[][] {
+  const rows: OutboundButton[][] = [];
+  if (e.officialUrl && e.officialUrl !== e.articleUrl) rows.push(...linkButton(e.channel === "nyc311-sr-form" ? "📝 Report on NYC311" : "📝 Open the official form", e.officialUrl));
+  rows.push(...linkButton(e.officialUrl === e.articleUrl ? "📝 Report on NYC311" : "ℹ️ NYC311 article", e.articleUrl));
+  return rows;
+}
+
+/** Router (#8) low-confidence picker: one button per candidate, by index. */
+export function routeChoiceButtons(d: ComplaintDraft, choices: CatalogEntry[]): OutboundButton[][] {
+  return choices.map((e, i) => [{ text: e.title.slice(0, 60), data: `${encodeCallback("route_pick", d.id, d.draftVersion)}:${i}` }]);
 }
 
 export function linkButton(text: string, url: string): OutboundButton[][] {

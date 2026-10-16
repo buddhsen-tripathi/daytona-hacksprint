@@ -28,7 +28,8 @@ import type {
   WorkerAnswer,
   WorkerQuestion,
 } from "./contracts.js";
-import { decodeCallback, encodeCallback, nowIso, shortId } from "./contracts.js";
+import { ROUTE_CONFIDENCE_THRESHOLD, decodeCallback, encodeCallback, nowIso, shortId } from "./contracts.js";
+import type { CatalogEntry } from "./contracts.js";
 import {
   NYC311_CHECK_STATUS_URL,
   NYC311_REPORT_URL,
@@ -50,7 +51,8 @@ import { canTransition, transition } from "./state-machine.js";
 import { OPEN_STATES, createComplaintService, fmtIncidentTime, lineLabel } from "../services/complaints.js";
 import { getActiveAlertsForLine, isDelayAlert, type MtaAlertsResult } from "../integrations/mta-alerts.js";
 import { M, esc } from "../telegram/messages.js";
-import { approvalButtons, duplicateButtons, isButtonSafeUrl, linkButton, trackingButtons } from "../telegram/keyboards.js";
+import { approvalButtons, duplicateButtons, isButtonSafeUrl, linkButton, routeButtons, routeChoiceButtons, trackingButtons } from "../telegram/keyboards.js";
+import { getCatalogEntry } from "../services/catalog.js";
 import type { FilingService, StatusService } from "../integrations/fallbacks.js";
 import { RUNS_DIR } from "../integrations/env.js";
 import { resolveEvidencePath } from "../services/evidence-registry.js";
@@ -484,6 +486,9 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         set("classification.triage", out.result.triage);
         set("classification.category", out.result.category ?? "none");
         set("classification.confidence", out.result.confidence);
+        set("route.catalog_id", out.result.route?.catalogId ?? "none");
+        set("route.confidence", out.result.route?.confidence ?? 0);
+        set("route.alternatives", (out.result.route?.alternatives ?? []).join(","));
         set("llm.model_name", out.model);
         oi.output(out.result);
         return out;
@@ -518,13 +523,26 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         return draft;
       }
       case "OUT_OF_SCOPE": {
-        draft = await transition(store, draft, "OUT_OF_SCOPE", { reason: "unsupported category", actor: "llm" });
-        await send(ctx, { text: M.outOfScope("OUT_OF_SCOPE", result.description), buttons: linkButton("Report on NYC311", NYC311_REPORT_URL) });
+        draft = await transition(store, draft, "OUT_OF_SCOPE", { reason: `routed: ${result.route?.catalogId ?? "no catalog match"}`, actor: "llm" });
+        // Router (#8): a confident catalog match ⇒ route card with the exact official link; unsure ⇒ top 3 to pick from.
+        const route = result.route ?? null;
+        const entry = getCatalogEntry(route?.catalogId);
+        const choices = routeChoices(draft);
+        if (entry && (route!.confidence >= ROUTE_CONFIDENCE_THRESHOLD || choices.length < 2)) {
+          tracer.evaluate("route_card", { label: entry.id, score: route!.confidence, explanation: route!.rationale });
+          await send(ctx, { text: M.routeCard(entry), buttons: routeButtons(entry) });
+        } else if (choices.length >= 2) {
+          await send(ctx, { text: M.routeChoice(), buttons: routeChoiceButtons(draft, choices) });
+        } else {
+          await send(ctx, { text: M.outOfScope("OUT_OF_SCOPE", result.description), buttons: linkButton("Report on NYC311", NYC311_REPORT_URL) });
+        }
         return draft;
       }
       case "CLARIFY": {
         draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "low confidence / unclear");
-        await send(ctx, { text: [...prefix, M.clarify(applied.decision.question)].join("\n\n") });
+        // Router (#8): unsure between catalog entries ⇒ offer the top 3 as buttons alongside the question.
+        const choices = routeChoices(draft);
+        await send(ctx, { text: [...prefix, M.clarify(applied.decision.question)].join("\n\n"), ...(choices.length >= 2 ? { buttons: routeChoiceButtons(draft, choices) } : {}) });
         return draft;
       }
       case "CONTINUE": {
@@ -535,6 +553,16 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         return advance(ctx, draft, pre);
       }
     }
+  }
+
+  /** Router (#8): the chosen entry + alternatives that exist in the catalog, max 3 — the "Which of these is it?" options. */
+  function routeChoices(d: ComplaintDraft): CatalogEntry[] {
+    const r = d.classification?.route;
+    if (!r) return [];
+    return [r.catalogId, ...r.alternatives]
+      .map((id) => getCatalogEntry(id))
+      .filter((e): e is CatalogEntry => !!e)
+      .slice(0, 3);
   }
 
   function photoPaths(d: ComplaintDraft) {
@@ -794,6 +822,32 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     switch (cb.action) {
       case "approve":
         return onApprove(ctx, draft, cb.version);
+      case "route_pick": {
+        // The resident picked one of the router's top 3: record it as the decision, then send its route card.
+        const picked = routeChoices(draft)[Number(ev.data.split(":")[3] ?? -1)];
+        if (!picked || !draft.classification) return;
+        const prev = draft.classification.route;
+        draft = await store.saveComplaint({
+          ...draft,
+          classification: {
+            ...draft.classification,
+            route: { catalogId: picked.id, confidence: 1, rationale: "picked by the resident", alternatives: [prev?.catalogId, ...(prev?.alternatives ?? [])].filter((id): id is string => !!id && id !== picked.id).slice(0, 3) },
+          },
+          updatedAt: nowIso(),
+        });
+        tracer.evaluate("route_pick", { label: picked.id, score: 1, explanation: `resident picked from ${[prev?.catalogId, ...(prev?.alternatives ?? [])].filter(Boolean).join(", ")}` });
+        const fileable = getCategory(picked.id);
+        if (fileable && OPEN_STATES.includes(draft.status)) {
+          // A category we can file: continue the normal draft → approve flow.
+          draft = await store.saveComplaint({ ...draft, category: fileable.id, updatedAt: nowIso() });
+          return void (await advance(ctx, draft, [M.classified(fileable.label)]));
+        }
+        if (draft.status === "NEEDS_INFORMATION") draft = await complaints.enterTriage(draft, "route picked");
+        if (draft.status !== "OUT_OF_SCOPE" && canTransition(draft.status, "OUT_OF_SCOPE"))
+          draft = await transition(store, draft, "OUT_OF_SCOPE", { reason: `routed: ${picked.id} (picked)`, actor: "user" });
+        await send(ctx, { text: M.routeCard(picked), buttons: routeButtons(picked) });
+        return;
+      }
       case "edit": {
         if (!OPEN_STATES.includes(draft.status) && !["FAILED", "HUMAN_ACTION_REQUIRED"].includes(draft.status)) {
           await send(ctx, { text: `This report is already ${M_status(draft)}, so it can't be edited.` });
