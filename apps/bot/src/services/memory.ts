@@ -201,8 +201,11 @@ export function fieldValue(draft: ComplaintDraft, resident: Pick<Resident, "cont
       return resident.contactEmail ?? null;
     case "description":
       return draft.description || null;
-    default:
-      return draft.extraFields?.[field]?.trim() || null;
+    default: {
+      // #12 stores answers under the official label; a learned pattern's normalized field id matches it too
+      const x = draft.extraFields ?? {};
+      return x[field]?.trim() || Object.entries(x).find(([k, v]) => normalizeField(k) === field && v.trim())?.[1]?.trim() || null;
+    }
   }
 }
 

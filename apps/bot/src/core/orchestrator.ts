@@ -48,7 +48,7 @@ import {
   requiresContactName,
   transitHintsFromText,
 } from "./knowledge.js";
-import { canTransition, transition } from "./state-machine.js";
+import { bumpDraft, canTransition, transition } from "./state-machine.js";
 import { OPEN_STATES, createComplaintService, fmtIncidentTime, lineLabel } from "../services/complaints.js";
 import { getActiveAlertsForLine, isDelayAlert, type MtaAlertsResult } from "../integrations/mta-alerts.js";
 import { M, esc } from "../telegram/messages.js";
@@ -80,6 +80,24 @@ import {
   relatedCardLines,
 } from "../services/memory.js";
 import { readyForApprovalItem, recallAfterCard } from "../services/agent-memory.js";
+import { categorySchemaView } from "../services/form-schema-memory.js";
+import {
+  WHY_REPLY,
+  createFieldPhraser,
+  directionOptionsFor,
+  fieldButtons,
+  fieldPrompt,
+  formNeedsLines,
+  learnedFields,
+  missingLearnedFields,
+  parseFieldAnswer,
+  parseFieldCallback,
+  todayFor,
+  unknowableFields,
+  unknowableNotice,
+  type FieldPhraser,
+  type LearnedField,
+} from "../services/field-questions.js";
 
 export type { FilingService, StatusService } from "../integrations/fallbacks.js";
 
@@ -107,6 +125,8 @@ export type OrchestratorDeps = {
    * to ask live (same browser) instead of asking before approval. Default env SUBWAY_DIRECTION_DURING_FILING=1, else off.
    */
   directionDuringFiling?: boolean;
+  /** #12: plain-language phrasing of learned form fields (default: LLM once per label, cached as semantic memory). */
+  fieldPhraser?: FieldPhraser;
 };
 
 /** A live worker question waiting for the resident (in-memory, keyed by complaint id). */
@@ -153,6 +173,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
   const approvalsLog = new Map<string, number[]>();
   const pendingQuestions = new Map<string, PendingQuestion>();
   const directionDuringFiling = deps.directionDuringFiling ?? process.env.SUBWAY_DIRECTION_DURING_FILING === "1";
+  const fieldPhraser = deps.fieldPhraser ?? createFieldPhraser({ store, memory });
 
   // ---------------------------------------------------------------- helpers
   async function send(ctx: Ctx, msg: Omit<OutboundMessage, "chatId">) {
@@ -216,9 +237,10 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       await send(ctx, { text: [...prefix, M.askTransit(["line"])].join("\n\n") });
       return null;
     }
-    const opts = mtaDirectionOptions(t.line);
+    // #12: the form's own option labels when learned for this line, else the hardcoded table
+    const opts = directionOptionsFor((await learnedSchema(draft))?.formSchema, t.line);
     if (opts && !opts.includes(t.direction ?? "")) {
-      const hit = resolveDirection(t.line, t.direction);
+      const hit = resolveDirection(t.line, t.direction, opts);
       if (hit) draft = complaints.setTransit(draft, { direction: hit });
       else if (directionDuringFiling && t.direction?.trim()) {
         /* the worker asks live against the form's own options (browser.ask_resident) */
@@ -226,7 +248,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: direction");
         await send(ctx, {
           text: [...prefix, M.askDirection(t.line, t.direction)].join("\n\n"),
-          buttons: opts.map((label, i) => [{ text: label, data: `${encodeCallback("set_direction", draft.id, draft.draftVersion)}:d=${i}` }]),
+          buttons: directionButtons(draft, opts),
         });
         return null;
       }
@@ -248,6 +270,102 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       return null;
     }
     return draft;
+  }
+
+  const directionButtons = (d: ComplaintDraft, opts: readonly string[]) => opts.map((label, i) => [{ text: label, data: `${encodeCallback("set_direction", d.id, d.draftVersion)}:d=${i}` }]);
+
+  // ------------------------------------------- #12 learned required fields (services/field-questions.ts)
+  /** Learned form fields skipped / announced as unknowable per draft (`<draftId>\u0000<label>`), so they are never re-asked. */
+  const formAsked = new Set<string>();
+  const FORM_FIELD = "missing: form field:";
+  const formKey = (d: ComplaintDraft, label: string) => `${d.id}\u0000${label}`;
+
+  /** The category's learned schema (#11: procedural memory, else the catalog row). RETRIEVER span; null when none. */
+  async function learnedSchema(draft: ComplaintDraft) {
+    if (!draft.category) return null;
+    try {
+      return await tracer.span("form_fields.read_schema", { "openinference.span.kind": "RETRIEVER", "complaint.category": draft.category }, async (set, oi) => {
+        const v = await categorySchemaView(store, draft.category!);
+        set("schema.found", !!v);
+        set("schema.required_fields", v?.requiredFields.length ?? 0);
+        if (v) oi.retriever([{ id: `schema:${draft.category}`, content: v.requiredFields.join(", "), metadata: { source: v.source, version: v.version, attemptId: v.provenance.attemptId } }]);
+        return v;
+      });
+    } catch (err) {
+      console.warn("[orchestrator] learned schema unavailable:", (err as Error).message);
+      return null;
+    }
+  }
+
+  async function learnedFieldList(draft: ComplaintDraft): Promise<LearnedField[]> {
+    const v = await learnedSchema(draft);
+    return v ? learnedFields(draft.category, v.formSchema, v.requiredFields) : [];
+  }
+
+  async function sendFieldQuestion(ctx: Ctx, draft: ComplaintDraft, f: LearnedField, prefix: string[]) {
+    const q = await tracer.span("form_fields.phrase", { "openinference.span.kind": "LLM", "complaint.category": draft.category ?? "", "field.label": f.label, "field.required": f.required }, async (set, oi) => {
+      oi.input({ label: f.label, type: f.type, options: f.options?.length ?? 0 });
+      const out = await fieldPhraser.phrase(draft.category!, f);
+      set("field.question_source", out.source);
+      set("field.kind", out.kind);
+      oi.output({ question: out.question, kind: out.kind });
+      return out;
+    });
+    await send(ctx, { text: [...prefix, fieldPrompt(f, q)].join("\n\n"), buttons: fieldButtons(draft, f, q.kind) });
+  }
+
+  /**
+   * Ask the next learned required field the draft can't answer (one at a time). Unknowable fields are announced once
+   * (hand-off). Returns the draft when a question was sent; otherwise the notes to show with the card.
+   */
+  async function askFormFields(ctx: Ctx, draft: ComplaintDraft, prefix: string[]): Promise<{ asked: ComplaintDraft } | { notes: string[] }> {
+    const fields = await learnedFieldList(draft);
+    if (!fields.length) return { notes: prefix };
+    const notes = [...prefix];
+    const unknown = unknowableFields(fields, draft).filter((f) => !formAsked.has(formKey(draft, f.label)));
+    if (unknown.length) {
+      for (const f of unknown) formAsked.add(formKey(draft, f.label));
+      notes.push(unknowableNotice(unknown));
+    }
+    const next = missingLearnedFields(fields, draft, ctx.resident, (l) => formAsked.has(formKey(draft, l)))[0];
+    if (!next) return { notes };
+    draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", `${FORM_FIELD}${next.label}`);
+    await sendFieldQuestion(ctx, draft, next, notes);
+    return { asked: draft };
+  }
+
+  /** Store a resident's answer under the official label; a material change ⇒ new draft version. */
+  async function saveFieldAnswer(ctx: Ctx, draft: ComplaintDraft, f: LearnedField, value: string) {
+    draft = await store.saveComplaint(bumpDraft({ ...draft, extraFields: { ...(draft.extraFields ?? {}), [f.label]: value } }));
+    await advance(ctx, draft, [gotIt(value)]);
+  }
+
+  /** Typed answer to a learned-field question. Returns true when consumed. */
+  async function answerFormField(ctx: Ctx, draft: ComplaintDraft, text: string): Promise<boolean> {
+    if (draft.status !== "NEEDS_INFORMATION" || !draft.statusReason?.startsWith(FORM_FIELD)) return false;
+    const label = draft.statusReason.slice(FORM_FIELD.length);
+    const f = (await learnedFieldList(draft)).find((x) => x.label === label);
+    if (!f) return false;
+    const a = parseFieldAnswer(f, text);
+    switch (a.kind) {
+      case "why":
+        await sendFieldQuestion(ctx, draft, f, [f.required ? WHY_REPLY : "The official form asks for it, but it's optional, so you can say “skip”."]);
+        return true;
+      case "invalid":
+        await send(ctx, { text: a.message });
+        return true;
+      case "skip":
+        formAsked.add(formKey(draft, f.label));
+        await advance(ctx, draft, ["OK, I'll leave that out."]);
+        return true;
+      case "resident":
+        ctx.resident = await store.updateResident(ctx.resident.id, a.patch);
+        await advance(ctx, draft, [gotIt(a.patch.contactName ?? a.patch.contactEmail ?? "")]);
+        return true;
+      case "value":
+        await saveFieldAnswer(ctx, draft, f, a.value);
+        return true;
+    }
   }
 
   /** Live MTA alert corroboration for subway categories (the analogue of the Open Data duplicate check). */
@@ -309,10 +427,10 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         const line = draft.transit.line;
         const said = draft.transit.direction;
         draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: direction");
-        const opts = mtaDirectionOptions(line) ?? [];
+        const opts = directionOptionsFor((await learnedSchema(draft))?.formSchema, line) ?? [];
         await send(ctx, {
           text: [...prefix, memoryCardLine([h]) ?? "", M.askDirection(line, said)].filter(Boolean).join("\n\n"),
-          buttons: opts.map((label, i) => [{ text: label, data: `${encodeCallback("set_direction", draft.id, draft.draftVersion)}:d=${i}` }]),
+          buttons: directionButtons(draft, opts),
         });
         return draft;
       }
@@ -455,6 +573,11 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       return draft;
     }
 
+    // [#12] Learned required fields the draft can't answer yet: one plain-language question at a time.
+    const form = await askFormFields(ctx, draft, prefix);
+    if ("asked" in form) return form.asked;
+    prefix = form.notes;
+
     // [memory] Ask what earlier filings stalled on, before READY_FOR_APPROVAL (workflow_pattern "ask-before-approval").
     const hints = await loadAskHints(draft);
     const asked = await askLearned(ctx, draft, hints, prefix);
@@ -513,7 +636,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
   async function presentDraft(ctx: Ctx, draft: ComplaintDraft, notes: string[] = [], actor: "system" | "user" = "system", knownHints?: AskHint[]): Promise<ComplaintDraft> {
     if (draft.status !== "READY_FOR_APPROVAL") draft = await complaints.moveTo(draft, "READY_FOR_APPROVAL", "draft complete", actor);
     const realOnly = isRealOnly(draft.category);
-    const [alertLine, related, hints] = await Promise.all([realOnly ? mtaAlertLine(draft) : Promise.resolve(null), relatedLines(ctx, draft), knownHints ? Promise.resolve(knownHints) : loadAskHints(draft)]);
+    const [alertLine, related, hints, formFields] = await Promise.all([realOnly ? mtaAlertLine(draft) : Promise.resolve(null), relatedLines(ctx, draft), knownHints ? Promise.resolve(knownHints) : loadAskHints(draft), learnedFieldList(draft)]);
     const memoLine = memoryCardLine(hints);
     const contextLines = [...related, ...(memoLine ? [memoLine] : [])];
     const summary = await tracer.span("draft.generate", { "complaint.id": draft.id, "draft.version": draft.draftVersion }, async (_set, oi) => {
@@ -524,6 +647,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         target: effectiveTarget(draft.category, target),
         alertLine,
         contextLines,
+        formNeeds: formNeedsLines(formFields, draft),
       });
       oi.output({ category: draft.category, version: draft.draftVersion, photos: draft.media.length, transit: draft.transit ?? null });
       // [memory] episodic: this draft reached READY_FOR_APPROVAL (neutral description + transit facts; upserted per complaint; never blocks the card)
@@ -703,6 +827,8 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const trimmed = text.trim();
     if (!trimmed) return;
     let draft = await openOrNewDraft(ctx);
+    // [#12] typed answer to a learned form-field question
+    if (await answerFormField(ctx, draft, trimmed)) return;
     // [memory] typed answer to a question learned from earlier filings
     if (await answerLearned(ctx, draft, trimmed)) return;
     // Subway: direct answers to our own direction / time questions are resolved deterministically (no LLM round trip).
@@ -1023,7 +1149,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         }
         const suffix = ev.data.split(":").slice(3).join(":");
         if (cb.action === "set_direction") {
-          const opts = mtaDirectionOptions(draft.transit.line);
+          const opts = directionOptionsFor((await learnedSchema(draft))?.formSchema, draft.transit.line);
           const idx = Number(/^d=(\d)$/.exec(suffix)?.[1] ?? -1);
           const label = opts?.[idx];
           if (!label) return void (await advance(ctx, draft));
@@ -1039,6 +1165,28 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         }
         draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: time");
         await send(ctx, { text: M.askTimeTyped() });
+        return;
+      }
+      case "set_field": {
+        if (!OPEN_STATES.includes(draft.status)) {
+          await send(ctx, { text: `This report is ${M_status(draft)}.` });
+          return;
+        }
+        if (cb.version !== draft.draftVersion) {
+          await send(ctx, { text: M.draftChanged() });
+          return void (await advance(ctx, draft));
+        }
+        const pick = parseFieldCallback(ev.data);
+        const f = pick ? (await learnedFieldList(draft))[pick.index] : undefined;
+        if (!pick || !f || f.target.kind !== "extra") return void (await advance(ctx, draft));
+        if (pick.choice === "skip") {
+          if (f.required) return void (await sendFieldQuestion(ctx, draft, f, [`${WHY_REPLY} I can't leave it out.`]));
+          formAsked.add(formKey(draft, f.label));
+          return void (await advance(ctx, draft, ["OK, I'll leave that out."]));
+        }
+        const value = pick.choice === "today" ? todayFor(f.label) : f.options?.[pick.choice];
+        if (!value) return void (await advance(ctx, draft));
+        await saveFieldAnswer(ctx, draft, f, value);
         return;
       }
       case "answer_q":
