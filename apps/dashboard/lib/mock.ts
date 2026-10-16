@@ -2,6 +2,7 @@
  * Mock data for `?mock=1` — lets the dashboard render before / without the bot API.
  * Shapes follow apps/bot/src/core/contracts.ts exactly.
  */
+import { mockCatalog } from "./catalog";
 import type {
   ComplaintDetail,
   ComplaintDraft,
@@ -427,6 +428,7 @@ export function mockFetch(path: string): unknown {
   if (p === "/api/attempts") return { attempts: ATTEMPTS };
   if (p === "/api/graph") return graph();
   if (p === "/api/official-requests") return { officialRequests: [] };
+  if (p === "/api/catalog" || p.startsWith("/api/catalog/")) return mockCatalog(path);
   const cm = p.match(/^\/api\/complaints\/(.+)$/);
   if (cm) {
     const id = decodeURIComponent(cm[1]);

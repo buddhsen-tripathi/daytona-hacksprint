@@ -11,6 +11,8 @@ export function Nav() {
   const items = [
     { href: "/", label: "Console", active: pathname === "/" || pathname.startsWith("/complaints") },
     { href: "/graph", label: "Graph", active: pathname.startsWith("/graph") },
+    { href: "/catalog", label: "Catalog", active: pathname.startsWith("/catalog") },
+    { href: "/repairs", label: "Repairs", active: pathname.startsWith("/repairs") },
   ];
   return (
     <nav aria-label="Primary" className="flex items-center gap-1">
