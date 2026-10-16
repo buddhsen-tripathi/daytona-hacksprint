@@ -15,6 +15,7 @@ apps/bot            @311relay/bot — grammY bot (long polling by default) + orc
   src/services/{classifier,location,duplicates,complaints,filing,receipts,status,memory,agent-memory}.ts
   src/integrations/{openrouter,embedder,daytona,local-sandbox,anchor,local-browser,surrealdb,arize,nyc-open-data,geosearch}.ts
   src/api/server.ts                 node:http JSON API on :3312 for the dashboard (+ optional /telegram/webhook)
+  src/evals/scoring.ts              pure, category-aware eval scorer (transit vs location dimensions) used by scripts/evals.ts
   scripts/{seed,demo,evals}.ts
 apps/worker         @311relay/worker — the isolated filing worker. Compiled with tsc to dist/, uploaded (dist + package.json) into the sandbox, `npm i --omit=dev` there, run as `node dist/main.js /work/payload.json /work/out`. Only dep: playwright-core.
 apps/dashboard      @311relay/dashboard — Next 16 read-only console on :4000 reading the bot API (complaints, attempts, evidence, graph, traces). Lowest priority.
