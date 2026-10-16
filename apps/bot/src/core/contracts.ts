@@ -36,14 +36,10 @@ export const CategoryDefinition = z.object({
   articleUrl: z.string().url(),
   /** Official reporting route the browser worker may open (allowlisted). */
   officialFormUrl: z.string().url(),
-  /** Route id inside the controlled demo portal (apps/portal). */
-  demoRoute: z.string(),
   /** NYC Open Data (erm2-nwe9) complaint_type / descriptor values that map to this category. */
   openData: z.object({ complaintType: z.string(), descriptors: z.array(z.string()) }),
   /** Fields the draft must have before READY_FOR_APPROVAL. "transit" = line + direction (+ optional station/time). */
   requiredFields: z.array(z.enum(["location", "description", "transit"])),
-  /** "demo-or-real": replica portal exists; "real-only": no replica, always files against the official site (no CAPTCHA observed). */
-  filing: z.enum(["demo-or-real", "real-only"]).default("demo-or-real"),
   /** Whether NYC Open Data has records for this category (duplicate check + status). */
   openDataBacked: z.boolean().default(true),
   /** Short guidance used in prompts + /help. */
@@ -58,10 +54,8 @@ export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
     officialLabel: "Pothole or Cave-In on Street",
     articleUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01093",
     officialFormUrl: "https://a841-dotvweb01.nyc.gov/potholeform",
-    demoRoute: "pothole",
     openData: { complaintType: "Street Condition", descriptors: ["Pothole", "Cave-in", "Rough, Pitted or Cracked Roads"] },
     requiredFields: ["location", "description"],
-    filing: "demo-or-real",
     openDataBacked: true,
     guidance:
       "A shallow hole or crack in the street surface, NOT inside a previously repaired patch and NOT next to a catch basin. Deep cave-ins or unprotected openings are a safety hazard: refer to 911.",
@@ -72,10 +66,8 @@ export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
     officialLabel: "Street Repair Complaint",
     articleUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01095",
     officialFormUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01095",
-    demoRoute: "street-repair",
     openData: { complaintType: "Street Condition", descriptors: ["Failed Street Repair", "Pothole"] },
     requiredFields: ["location", "description"],
-    filing: "demo-or-real",
     openDataBacked: true,
     guidance:
       "Damage inside a filled/repaired area left by street work: a street cut, trench or square patch that is heaped above street level, sunk an inch or more, or has developed a pothole or depression.",
@@ -86,10 +78,8 @@ export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
     officialLabel: "MTA Customer Feedback — Subways › Complaint › Service and schedule › Delay",
     articleUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01014",
     officialFormUrl: "https://contact.mta.info/s/customer-feedback",
-    demoRoute: "subway-delay",
     openData: { complaintType: "", descriptors: [] },
     requiredFields: ["transit", "description"],
-    filing: "real-only",
     openDataBacked: false,
     guidance:
       "A subway train or line that was delayed, held, or significantly late. NYC311 does not take these; they go to the MTA's customer feedback form. Needs the line (e.g. A, 7, L), the direction (uptown/downtown or terminal), optionally the nearest station, and when it happened.",
@@ -280,6 +270,8 @@ export const ComplaintDraft = z.object({
   classification: ClassificationResult.nullable(),
   /** Transit details for subway categories (merged across messages; conversation memory). */
   transit: TransitDetails.nullable().optional(),
+  /** Answers to questions learned from earlier filings (workflow memory, "ask-before-approval"); field → user's answer. */
+  extraFields: z.record(z.string(), z.string()).optional(),
   missingFields: z.array(z.enum(["location", "description", "category", "transit"])),
   needsEmergencyReferral: z.boolean(),
   confidence: z.number(),
@@ -310,8 +302,6 @@ export const Resident = z.object({
   telegramChatId: z.string(),
   telegramUsername: z.string().nullable(),
   preferredLanguage: z.string().nullable(),
-  /** Demo controls (set via /mode): which replica-portal behaviour the next filing should hit. */
-  demoPortalMode: z.enum(["normal", "captcha", "flaky", "reject"]).default("normal"),
   /** Conversation memory for real filings: the official DOT form requires first + last name. Only ever user-provided. */
   contactName: z.string().nullable().default(null),
   contactEmail: z.string().nullable().default(null),
@@ -322,11 +312,9 @@ export type Resident = z.infer<typeof Resident>;
 // ---------------------------------------------------------------------------
 // Filing: payload handed to the isolated worker, and what it returns
 // ---------------------------------------------------------------------------
-export const FilingTarget = z.enum(["demo", "real"]);
+/** Every filing targets the official form (DOT/NYC311 for street categories, the MTA wizard for subway delays). */
+export const FilingTarget = z.literal("real");
 export type FilingTarget = z.infer<typeof FilingTarget>;
-
-export const PortalMode = z.enum(["normal", "captcha", "flaky", "reject"]);
-export type PortalMode = z.infer<typeof PortalMode>;
 
 /** Written to /work/payload.json inside the sandbox. Contains NO secrets except the ephemeral CDP URL. */
 export const FilingPayload = z.object({
@@ -339,12 +327,11 @@ export const FilingPayload = z.object({
   formUrl: z.string().url(),
   /** Hostnames the worker may navigate within. Anything else ⇒ HUMAN_ACTION_REQUIRED. */
   allowedHosts: z.array(z.string()),
-  /** Extra HTTP headers for the target (e.g. Daytona preview-warning skip). */
+  /** Extra HTTP headers for the target (currently always {}). */
   extraHeaders: z.record(z.string(), z.string()),
   /** Anchor CDP websocket URL (ephemeral) — or null to launch a local browser (dev). */
   cdpUrl: z.string().nullable(),
   liveViewUrl: z.string().nullable(),
-  portalMode: PortalMode,
   form: z.object({
     description: z.string(),
     address: z.string().nullable(),
@@ -359,15 +346,40 @@ export const FilingPayload = z.object({
     dateObserved: z.string().nullable(),
     /** Subway categories only. */
     transit: TransitDetails.nullable().optional(),
+    /** User answers to questions learned from earlier filings (field → answer); the worker may use them for unexpected required inputs by label match. */
+    extraFields: z.record(z.string(), z.string()).optional(),
   }),
   /**
-   * True ONLY when the resident explicitly approved AND FILING_TARGET=real AND env ALLOW_REAL_SUBMIT=1.
+   * True ONLY when the resident explicitly approved AND env ALLOW_REAL_SUBMIT=1.
    * Real-site adapters must never click the final Submit unless this is true.
    */
   realSubmitAuthorized: z.boolean().optional(),
-  limits: z.object({ totalTimeoutMs: z.number(), stepTimeoutMs: z.number(), maxNavigationRetries: z.number() }),
+  /**
+   * questionTimeoutMs: how long the worker's ctx.ask() waits for the resident (worker default 180000).
+   * 0 ⇒ no live questions (the original HUMAN_ACTION_REQUIRED outcome is returned immediately).
+   */
+  limits: z.object({ totalTimeoutMs: z.number(), stepTimeoutMs: z.number(), maxNavigationRetries: z.number(), questionTimeoutMs: z.number().optional() }),
 });
 export type FilingPayload = z.infer<typeof FilingPayload>;
+
+export const DEFAULT_QUESTION_TIMEOUT_MS = 180_000;
+
+/**
+ * Live follow-up question from the worker (design: "pause, ask the resident, continue in the same browser").
+ * The worker writes <out>/question-<id>.json and emits `EVT {"message":"question","data":{"question":…}}`;
+ * the bot answers by writing <out>/answer-<id>.json (SandboxHandle.answerQuestion).
+ */
+export const WorkerQuestion = z.object({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/),
+  field: z.enum(["direction", "station", "contact_name", "contact_email", "free_text"]),
+  /** Resident-facing, no PII. */
+  prompt: z.string(),
+  options: z.array(z.string()).optional(),
+  required: z.boolean(),
+});
+export type WorkerQuestion = z.infer<typeof WorkerQuestion>;
+export const WorkerAnswer = z.object({ value: z.string(), optionIndex: z.number().int().optional() });
+export type WorkerAnswer = z.infer<typeof WorkerAnswer>;
 
 export const FilingStatus = z.enum(["SUBMITTED", "HUMAN_ACTION_REQUIRED", "SUBMISSION_UNKNOWN", "FAILED"]);
 export type FilingStatus = z.infer<typeof FilingStatus>;
@@ -398,6 +410,13 @@ export const WorkerEvent = z.object({
   data: z.record(z.string(), z.unknown()).optional(),
 });
 export type WorkerEvent = z.infer<typeof WorkerEvent>;
+
+/** The question carried by a worker `question` event, or null for any other event. */
+export function questionFromEvent(e: WorkerEvent): WorkerQuestion | null {
+  if (e.message !== "question") return null;
+  const q = WorkerQuestion.safeParse(e.data?.question);
+  return q.success ? q.data : null;
+}
 
 export const EvidenceFile = z.object({
   /** Path relative to /work/out inside the sandbox, e.g. "03-before-submit.png". */
@@ -490,7 +509,7 @@ export const OfficialRequest = z.object({
   officialRequestNumber: z.string(),
   officialCategory: z.string(),
   status: z.string().nullable(),
-  statusSource: z.enum(["confirmation", "open-data", "demo-portal"]),
+  statusSource: z.enum(["confirmation", "open-data"]),
   lastCheckedAt: z.string(),
   receiptUrl: z.string().nullable(),
 });
@@ -513,7 +532,7 @@ export const WorkflowPattern = z.object({
 export type WorkflowPattern = z.infer<typeof WorkflowPattern>;
 
 // ---------------------------------------------------------------------------
-// Transport-agnostic conversation events (lets scripts/demo.ts drive the
+// Transport-agnostic conversation events (lets the scripted runner drive the
 // orchestrator without Telegram) and outbound messages.
 // ---------------------------------------------------------------------------
 export const InboundEvent = z.discriminatedUnion("kind", [
@@ -546,6 +565,7 @@ export const CallbackAction = z.enum([
   "retry_location",
   "set_direction", // subway: data `set_direction:<id>:<version>:d=0|1` (MTA form direction option index)
   "set_time", // subway: data `set_time:<id>:<version>:now|later`
+  "answer_q", // live worker question: data `answer_q:<id>:<version>:<questionId>:<optionIndex>`
 ]);
 export type CallbackAction = z.infer<typeof CallbackAction>;
 
@@ -597,9 +617,41 @@ export interface LocationService {
 
 export interface DuplicateService {
   findPotentialDuplicates(args: { category: CategoryId; latitude: number; longitude: number }): Promise<{ candidates: DuplicateCandidate[]; dataAsOf: string | null; source: "open-data" | "unavailable" }>;
-  /** Status lookup by official SR number via Open Data (works for real SRs; demo SRs return null). */
+  /** Status lookup by official SR number via Open Data (DOT/NYC311 SRs; MTA references return null). */
   lookupStatus(uniqueKey: string): Promise<DuplicateCandidate | null>;
 }
+
+/** Remembered issues (design doc §8.1 context collector). */
+export type RelatedComplaintsQuery = {
+  /** The draft being reviewed (excluded from results). */
+  complaintId: string;
+  chatId: string;
+  category: CategoryId;
+  /** Subway: canonical line (filters doc.transit.line). */
+  line?: string | null;
+  /** Street categories: point to search around (geo::distance). */
+  lat?: number | null;
+  lon?: number | null;
+  radiusMeters?: number;
+  /** The resident's own reports newer than this (default 24 h). */
+  sinceMs?: number;
+  /** Other residents' reports newer than this (default 2 h). */
+  othersSinceMs?: number;
+};
+export type RelatedComplaint = {
+  id: string;
+  status: ComplaintState;
+  createdAt: string;
+  officialRequestNumber: string | null;
+  statusReason: string | null;
+  line: string | null;
+  distanceMeters: number | null;
+};
+export type RelatedComplaints = {
+  mine: RelatedComplaint[];
+  /** Other residents: counts only (no PII leaves the store layer except complaint ids for graph edges). */
+  others: { reports: number; residents: number; latestAt: string | null; oldestAt: string | null; ids: string[] };
+};
 
 export interface Store {
   backend: string;
@@ -629,6 +681,10 @@ export interface Store {
   // workflow memory
   recordWorkflowPattern(p: WorkflowPattern): Promise<void>;
   getWorkflowPatterns(args: { target: FilingTarget; category: CategoryId }): Promise<WorkflowPattern[]>;
+  /** Remembered issues: related complaints (same category; same line / within 100 m). Optional so test doubles stay small. */
+  findRelatedComplaints?(args: RelatedComplaintsQuery): Promise<RelatedComplaints>;
+  /** complaint->similar_to->complaint edges (dashboard cluster). */
+  linkSimilarComplaints?(complaintId: string, similarIds: string[]): Promise<void>;
   /** For the dashboard: nodes + edges of the complaint graph. */
   graph(args?: { complaintId?: string }): Promise<{ nodes: { id: string; kind: string; label: string }[]; edges: { from: string; to: string; rel: string }[] }>;
 }
@@ -636,11 +692,10 @@ export interface Store {
 export interface SandboxHandle {
   id: string;
   provider: "daytona" | "local";
-  /** Public URL of the demo portal hosted inside the sandbox (demo target), else null. */
-  portalUrl: string | null;
-  portalHeaders: Record<string, string>;
   /** Run the worker with the payload; resolves when result.json exists or on timeout. */
   runWorker(payload: FilingPayload, onEvent: (e: WorkerEvent) => void): Promise<{ result: WorkerResult | null; stdout: string; exitCode: number }>;
+  /** Answer a live worker question (writes <out>/answer-<id>.json). Absent ⇒ questions are disabled for this sandbox. */
+  answerQuestion?(questionId: string, answer: WorkerAnswer): Promise<void>;
   /** Download an evidence file produced by the worker. */
   downloadEvidence(name: string): Promise<Buffer>;
   destroy(): Promise<void>;
@@ -648,8 +703,8 @@ export interface SandboxHandle {
 
 export interface SandboxProvider {
   name: "daytona" | "local";
-  /** Create the isolated worker: upload apps/worker + apps/portal, install deps, start the portal (demo target). */
-  provision(args: { attemptId: string; target: FilingTarget; portalMode: PortalMode; onEvent: (msg: string, data?: Record<string, unknown>) => void }): Promise<SandboxHandle>;
+  /** Create the isolated worker: upload apps/worker, install deps (+ the CDP relay to Anchor where needed). */
+  provision(args: { attemptId: string; onEvent: (msg: string, data?: Record<string, unknown>) => void }): Promise<SandboxHandle>;
 }
 
 export interface BrowserSessionInfo {

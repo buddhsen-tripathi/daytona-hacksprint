@@ -57,9 +57,12 @@ export function missingFields(draft: Pick<ComplaintDraft, "category" | "location
   return missing;
 }
 
-/** Categories with no replica portal: always filed against the official site (approval still required). */
+/**
+ * Categories whose official form the worker drives end to end (the MTA wizard: no CAPTCHA; the final Submit is still
+ * gated by approval + ALLOW_REAL_SUBMIT). Street categories stop at the DOT/NYC311 CAPTCHA and hand off to the resident.
+ */
 export function isRealOnly(category: string | null | undefined): boolean {
-  return getCategory(category)?.filing === "real-only";
+  return getCategory(category)?.id === "subway-delay";
 }
 
 /** Whether NYC Open Data has records for the category (duplicate check + Open Data status). */
@@ -67,19 +70,19 @@ export function isOpenDataBacked(category: string | null | undefined): boolean {
   return getCategory(category)?.openDataBacked !== false;
 }
 
-/** The target a filing for this category actually uses: real-only categories ignore FILING_TARGET. */
-export function effectiveTarget(category: string | null | undefined, configured: FilingTarget): FilingTarget {
-  return isRealOnly(category) ? "real" : configured;
+/** The target a filing uses: always the official form (kept as a function so call sites stay stable). */
+export function effectiveTarget(_category?: string | null, _configured?: FilingTarget): FilingTarget {
+  return "real";
 }
 
 /**
  * Whether the official form for this category needs the resident's name before approval.
- * DOT pothole form (real target): first + last name required. MTA Customer Feedback: contact is
+ * DOT pothole / NYC311 street forms: first + last name required. MTA Customer Feedback: contact is
  * optional (agent G mapping), so it is passed through only if the resident set /name or /email.
  */
-export function requiresContactName(category: string | null | undefined, target: FilingTarget): boolean {
+export function requiresContactName(category: string | null | undefined, _target?: FilingTarget): boolean {
   if (isRealOnly(category)) return process.env.MTA_REQUIRE_CONTACT === "1";
-  return effectiveTarget(category, target) === "real";
+  return true;
 }
 
 /**

@@ -35,11 +35,11 @@ describe("category-aware missingFields", () => {
     expect(isRealOnly("subway-delay")).toBe(true);
     expect(isRealOnly("street-pothole")).toBe(false);
     expect(isOpenDataBacked("subway-delay")).toBe(false);
-    expect(effectiveTarget("subway-delay", "demo")).toBe("real");
-    expect(effectiveTarget("street-pothole", "demo")).toBe("demo");
-    expect(requiresContactName("subway-delay", "demo")).toBe(false);
-    expect(requiresContactName("street-pothole", "real")).toBe(true);
-    expect(requiresContactName("street-pothole", "demo")).toBe(false);
+    expect(effectiveTarget("subway-delay")).toBe("real");
+    expect(effectiveTarget("street-pothole")).toBe("real");
+    expect(requiresContactName("subway-delay")).toBe(false);
+    expect(requiresContactName("street-pothole")).toBe(true);
+    expect(requiresContactName("street-repair-defect")).toBe(true);
   });
 });
 

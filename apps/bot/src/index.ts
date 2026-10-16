@@ -1,12 +1,12 @@
 /**
  * 311Relay boot: env → providers → orchestrator → Telegram (optional) → API.
- * Works without TELEGRAM_BOT_TOKEN (API + demo event endpoint still run).
+ * Works without TELEGRAM_BOT_TOKEN (API + scripted event endpoint still run).
  */
 import type { Bot } from "grammy";
 import type { Transport } from "./core/contracts.js";
 import { createOrchestrator } from "./core/orchestrator.js";
 import { startApiServer } from "./api/server.js";
-import { env, filingTarget, hasTelegram, webhookMode } from "./integrations/env.js";
+import { env, hasTelegram, webhookMode } from "./integrations/env.js";
 import { getTracer, providerReport, resolveProviders } from "./integrations/index.js";
 import { type WebhookHandler, createBot, startBot, wireBot } from "./telegram/bot.js";
 
@@ -30,7 +30,7 @@ async function main() {
     bot = created.bot;
     transport = created.transport;
   }
-  const orchestrator = createOrchestrator({ ...providers, transport, target: filingTarget() });
+  const orchestrator = createOrchestrator({ ...providers, transport });
 
   let webhook: WebhookHandler | null = null;
   const server = await startApiServer({ store: providers.store, tracer: providers.tracer, orchestrator, getWebhook: () => webhook });
@@ -61,7 +61,7 @@ async function main() {
     `  duplicates ${p.duplicates ?? "?"}`,
     `  sandbox    ${p.sandbox ?? "?"}`,
     `  browser    ${p.browser ?? "?"}`,
-    `  filing     ${p.filing ?? "?"}  target=${filingTarget()}`,
+    `  filing     ${p.filing ?? "?"}  (official forms; ALLOW_REAL_SUBMIT=${env.ALLOW_REAL_SUBMIT === "1" ? "1" : "off"})`,
     `  status     ${p.status ?? "?"}`,
     "",
   ].join("\n");

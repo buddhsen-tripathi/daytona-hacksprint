@@ -21,13 +21,14 @@ import type {
   MediaItem,
   OfficialRequest,
   OutboundMessage,
-  PortalMode,
   Resident,
   Store,
   Tracer,
   Transport,
+  WorkerAnswer,
+  WorkerQuestion,
 } from "./contracts.js";
-import { PortalMode as PortalModeSchema, decodeCallback, encodeCallback, nowIso, shortId } from "./contracts.js";
+import { decodeCallback, encodeCallback, nowIso, shortId } from "./contracts.js";
 import {
   NYC311_CHECK_STATUS_URL,
   NYC311_REPORT_URL,
@@ -52,6 +53,18 @@ import { approvalButtons, duplicateButtons, isButtonSafeUrl, linkButton, trackin
 import type { FilingService, StatusService } from "../integrations/fallbacks.js";
 import { RUNS_DIR } from "../integrations/env.js";
 import { resolveEvidencePath } from "../services/evidence-registry.js";
+import {
+  ASK_KIND,
+  MACHINERY_FIELDS,
+  RELATED_DEFAULTS,
+  type AskHint,
+  askHints,
+  askPrompt,
+  fieldValue,
+  memoryCardLine,
+  parseLearnedAnswer,
+  relatedCardLines,
+} from "../services/memory.js";
 
 export type { FilingService, StatusService } from "../integrations/fallbacks.js";
 
@@ -64,7 +77,7 @@ export type OrchestratorDeps = {
   filing: FilingService;
   status?: StatusService;
   transport: Transport;
-  /** Defaults to "demo". */
+  /** Always "real" (official forms); kept optional for older callers. */
   target?: FilingTarget;
   /** Where Telegram media is downloaded (default .runs/media). */
   mediaDir?: string;
@@ -72,10 +85,25 @@ export type OrchestratorDeps = {
   maxFilingsPerHour?: number;
   /** Live MTA alerts for a subway line (default: public GTFS-RT feed). */
   mtaAlerts?: (line: string) => Promise<MtaAlertsResult>;
+  /**
+   * Subway: when the rider gave a direction the MTA option table can't resolve, leave it for the filing worker
+   * to ask live (same browser) instead of asking before approval. Default env SUBWAY_DIRECTION_DURING_FILING=1, else off.
+   */
+  directionDuringFiling?: boolean;
+};
+
+/** A live worker question waiting for the resident (in-memory, keyed by complaint id). */
+type PendingQuestion = {
+  chatId: string;
+  complaintId: string;
+  version: number;
+  attemptId: string;
+  question: WorkerQuestion;
+  resolve: (a: WorkerAnswer | null) => void;
 };
 
 export type HandleOptions = {
-  /** Override the transport for this event (API demo endpoint). */
+  /** Override the transport for this event (API event endpoint). */
   transport?: Transport;
   /** Await the filing job before resolving (scripts/tests). Default false: filing runs in the background. */
   waitForFiling?: boolean;
@@ -98,13 +126,15 @@ export function looksLikeAddress(text: string): boolean {
 
 export function createOrchestrator(deps: OrchestratorDeps) {
   const { store, tracer, classifier, location, duplicates, filing } = deps;
-  const target: FilingTarget = deps.target ?? "demo";
+  const target: FilingTarget = "real";
   const mediaRoot = deps.mediaDir ?? resolve(RUNS_DIR, "media");
   const maxPerHour = deps.maxFilingsPerHour ?? 6;
   const complaints = createComplaintService(store);
   const chains = new Map<string, Promise<void>>();
   const filingJobs = new Map<string, Promise<void>>();
   const approvalsLog = new Map<string, number[]>();
+  const pendingQuestions = new Map<string, PendingQuestion>();
+  const directionDuringFiling = deps.directionDuringFiling ?? process.env.SUBWAY_DIRECTION_DURING_FILING === "1";
 
   // ---------------------------------------------------------------- helpers
   async function send(ctx: Ctx, msg: Omit<OutboundMessage, "chatId">) {
@@ -172,7 +202,9 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     if (opts && !opts.includes(t.direction ?? "")) {
       const hit = resolveDirection(t.line, t.direction);
       if (hit) draft = complaints.setTransit(draft, { direction: hit });
-      else {
+      else if (directionDuringFiling && t.direction?.trim()) {
+        /* the worker asks live against the form's own options (browser.ask_resident) */
+      } else {
         draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: direction");
         await send(ctx, {
           text: [...prefix, M.askDirection(t.line, t.direction)].join("\n\n"),
@@ -223,6 +255,122 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     }
   }
 
+  // ------------------------------------------- SurrealDB memory (services/memory.ts)
+  /** Learned questions already asked per draft (`<draftId>:<field>`), so a "skip" is never re-asked. */
+  const learnedAsked = new Set<string>();
+  const LEARNED = "missing: learned:";
+  const gotIt = (v: string) => `Got it: <b>${esc(v)}</b>.`;
+
+  /** A. Workflow memory: ask-before-approval patterns for this route (RETRIEVER span, patterns as documents). */
+  async function loadAskHints(draft: ComplaintDraft): Promise<AskHint[]> {
+    if (!draft.category) return [];
+    const route = { target: effectiveTarget(draft.category, target), category: draft.category };
+    try {
+      return await tracer.span("surrealdb.read_context", { "query.kind": "workflow_pattern", "openinference.span.kind": "RETRIEVER", "filing.target": route.target, "complaint.category": route.category }, async (set, oi) => {
+        oi.input(route);
+        const patterns = await store.getWorkflowPatterns(route);
+        const hints = askHints(patterns);
+        set("patterns.count", patterns.length);
+        set("patterns.ask_before_approval", hints.length);
+        oi.retriever(
+          patterns.slice(0, 10).map((p) => {
+            const h = p.hint as { field?: unknown; count?: unknown };
+            return { id: p.id, content: `${p.kind}: ${p.description}`, score: p.kind === ASK_KIND ? 1 : 0.3, metadata: { kind: p.kind, field: h.field ?? null, count: h.count ?? null, observedInAttemptId: p.observedInAttemptId } };
+          }),
+        );
+        return hints;
+      });
+    } catch (err) {
+      console.warn("[orchestrator] workflow patterns unavailable:", (err as Error).message);
+      return [];
+    }
+  }
+
+  /** Ask the first learned field that is still empty (one question at a time). Returns the draft when a question was sent. */
+  async function askLearned(ctx: Ctx, draft: ComplaintDraft, hints: AskHint[], prefix: string[]): Promise<ComplaintDraft | null> {
+    for (const h of hints) {
+      const key = `${draft.id}:${h.field}`;
+      if (learnedAsked.has(key)) continue;
+      // Direction: reuse the MTA option-table question (buttons) when the rider's words don't resolve.
+      if (h.field === "direction" && needsTransit(draft) && draft.transit?.line && directionUnresolved(draft)) {
+        learnedAsked.add(key);
+        const line = draft.transit.line;
+        const said = draft.transit.direction;
+        draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: direction");
+        const opts = mtaDirectionOptions(line) ?? [];
+        await send(ctx, {
+          text: [...prefix, memoryCardLine([h]) ?? "", M.askDirection(line, said)].filter(Boolean).join("\n\n"),
+          buttons: opts.map((label, i) => [{ text: label, data: `${encodeCallback("set_direction", draft.id, draft.draftVersion)}:d=${i}` }]),
+        });
+        return draft;
+      }
+      if (MACHINERY_FIELDS.has(h.field) || fieldValue(draft, ctx.resident, h.field)) continue;
+      learnedAsked.add(key);
+      draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", `${LEARNED}${h.field}`);
+      await send(ctx, { text: [...prefix, askPrompt(h)].join("\n\n") });
+      return draft;
+    }
+    return null;
+  }
+
+  /** Typed answer to a learned question. Returns true when consumed. */
+  async function answerLearned(ctx: Ctx, draft: ComplaintDraft, text: string): Promise<boolean> {
+    if (draft.status !== "NEEDS_INFORMATION" || !draft.statusReason?.startsWith(LEARNED)) return false;
+    const field = draft.statusReason.slice(LEARNED.length);
+    const h = (await loadAskHints(draft)).find((x) => x.field === field) ?? { field };
+    const a = parseLearnedAnswer(h, text);
+    switch (a.kind) {
+      case "invalid":
+        await send(ctx, { text: a.message });
+        return true;
+      case "skip":
+        await advance(ctx, draft, ["OK, I'll leave that out."]);
+        return true;
+      case "transit":
+        draft = await store.saveComplaint(complaints.setTransit(draft, a.patch));
+        await advance(ctx, draft, [gotIt(a.patch.station)]);
+        return true;
+      case "resident":
+        ctx.resident = await store.updateResident(ctx.resident.id, a.patch);
+        await advance(ctx, draft, [gotIt(a.patch.contactName ?? a.patch.contactEmail ?? "")]);
+        return true;
+      case "extra":
+        draft = await store.saveComplaint({ ...draft, extraFields: { ...(draft.extraFields ?? {}), [a.field]: a.value }, updatedAt: nowIso() });
+        await advance(ctx, draft, [gotIt(a.value)]);
+        return true;
+    }
+  }
+
+  /** B. Remembered issues: your own recent report + other residents' (counts only). Also RELATEs similar_to edges. */
+  async function relatedLines(ctx: Ctx, draft: ComplaintDraft): Promise<string[]> {
+    if (!store.findRelatedComplaints || !draft.category) return [];
+    const line = needsTransit(draft) ? (draft.transit?.line ?? null) : null;
+    const lat = line ? null : draft.location.latitude;
+    const lon = line ? null : draft.location.longitude;
+    if (!line && (lat == null || lon == null)) return [];
+    const q = { complaintId: draft.id, chatId: ctx.chatId, category: draft.category, line, lat, lon, ...RELATED_DEFAULTS };
+    try {
+      const r = await tracer.span("surrealdb.read_context", { "query.kind": "related_complaints", "openinference.span.kind": "RETRIEVER", "complaint.id": draft.id, "complaint.category": draft.category, "transit.line": line ?? "" }, async (set, oi) => {
+        oi.input({ category: q.category, line, lat: lat != null ? Number(lat.toFixed(4)) : null, lon: lon != null ? Number(lon.toFixed(4)) : null, radiusMeters: q.radiusMeters, sinceMs: q.sinceMs, othersSinceMs: q.othersSinceMs });
+        const res = await store.findRelatedComplaints!(q);
+        set("related.mine", res.mine.length);
+        set("related.others_reports", res.others.reports);
+        set("related.others_residents", res.others.residents);
+        oi.retriever([
+          ...res.mine.map((m) => ({ id: m.id, content: `your ${m.status} report at ${m.createdAt}${m.officialRequestNumber ? ` (SR ${m.officialRequestNumber})` : ""}`, score: 1, metadata: { status: m.status, distanceMeters: m.distanceMeters } })),
+          ...res.others.ids.map((id) => ({ id, content: "another resident's report (same category, same line / nearby)", score: 0.8 })),
+        ]);
+        return res;
+      });
+      const ids = [...r.mine.map((m) => m.id), ...r.others.ids];
+      if (ids.length) await store.linkSimilarComplaints?.(draft.id, ids).catch((e) => console.warn("[orchestrator] linkSimilarComplaints:", (e as Error).message));
+      return relatedCardLines(q, r);
+    } catch (err) {
+      console.warn("[orchestrator] related complaints unavailable:", (err as Error).message);
+      return [];
+    }
+  }
+
   // ------------------------------------------------------------ the pipeline
   /** After any update to an open draft: decide the next state and message. */
   async function advance(ctx: Ctx, draft: ComplaintDraft, prefix: string[] = []): Promise<ComplaintDraft> {
@@ -246,6 +394,11 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       await send(ctx, { text: [...prefix, M.askLocation()].join("\n\n"), requestLocation: true });
       return draft;
     }
+
+    // [memory] Ask what earlier filings stalled on, before READY_FOR_APPROVAL (workflow_pattern "ask-before-approval").
+    const hints = await loadAskHints(draft);
+    const asked = await askLearned(ctx, draft, hints, prefix);
+    if (asked) return asked;
 
     // Complete → duplicate check (once per location/category). Not for categories without Open Data (subway → MTA).
     const notes: string[] = [...prefix];
@@ -286,13 +439,15 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         draft = { ...draft, duplicateReviewed: true, duplicates: [], duplicatesDataAsOf: found.dataAsOf };
       }
     }
-    return presentDraft(ctx, draft, notes);
+    return presentDraft(ctx, draft, notes, "system", hints);
   }
 
-  async function presentDraft(ctx: Ctx, draft: ComplaintDraft, notes: string[] = [], actor: "system" | "user" = "system"): Promise<ComplaintDraft> {
+  async function presentDraft(ctx: Ctx, draft: ComplaintDraft, notes: string[] = [], actor: "system" | "user" = "system", knownHints?: AskHint[]): Promise<ComplaintDraft> {
     if (draft.status !== "READY_FOR_APPROVAL") draft = await complaints.moveTo(draft, "READY_FOR_APPROVAL", "draft complete", actor);
     const realOnly = isRealOnly(draft.category);
-    const alertLine = realOnly ? await mtaAlertLine(draft) : null;
+    const [alertLine, related, hints] = await Promise.all([realOnly ? mtaAlertLine(draft) : Promise.resolve(null), relatedLines(ctx, draft), knownHints ? Promise.resolve(knownHints) : loadAskHints(draft)]);
+    const memoLine = memoryCardLine(hints);
+    const contextLines = [...related, ...(memoLine ? [memoLine] : [])];
     const summary = await tracer.span("draft.generate", { "complaint.id": draft.id, "draft.version": draft.draftVersion }, async (_set, oi) => {
       const real = effectiveTarget(draft.category, target) === "real";
       const s = complaints.buildSummary(draft, {
@@ -300,6 +455,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         contactEmail: realOnly ? ctx.resident.contactEmail : null,
         target: effectiveTarget(draft.category, target),
         alertLine,
+        contextLines,
       });
       oi.output({ category: draft.category, version: draft.draftVersion, photos: draft.media.length, transit: draft.transit ?? null });
       return s;
@@ -446,6 +602,8 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const trimmed = text.trim();
     if (!trimmed) return;
     let draft = await openOrNewDraft(ctx);
+    // [memory] typed answer to a question learned from earlier filings
+    if (await answerLearned(ctx, draft, trimmed)) return;
     // Subway: direct answers to our own direction / time questions are resolved deterministically (no LLM round trip).
     if (draft.status === "NEEDS_INFORMATION" && needsTransit(draft) && draft.transit?.line) {
       if (draft.statusReason === "missing: direction" && directionUnresolved(draft)) {
@@ -558,16 +716,6 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         await replyStatus(ctx, sr);
         return;
       }
-      case "mode": {
-        const parsed = PortalModeSchema.safeParse(args.trim().toLowerCase());
-        if (!parsed.success) {
-          await send(ctx, { text: `${M.modeUsage()}\nCurrent: <b>${ctx.resident.demoPortalMode}</b>` });
-          return;
-        }
-        ctx.resident = await store.updateResident(ctx.resident.id, { demoPortalMode: parsed.data as PortalMode });
-        await send(ctx, { text: M.modeSet(parsed.data) });
-        return;
-      }
       case "email": {
         const email = args.trim();
         if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,}$/i.test(email)) {
@@ -609,26 +757,9 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         return;
       }
     }
-    if (/^DEMO-/i.test(sr)) {
-      // The demo portal lived in a sandbox that is destroyed after filing: answer from the recorded OfficialRequest.
-      const reqs = await tracer.span("surrealdb.read_context", { "query.kind": "official_request" }, async () => store.listOfficialRequests(ctx.chatId));
-      const r = reqs.find((x) => x.officialRequestNumber.toUpperCase() === sr.toUpperCase());
-      const c = r ? await store.getComplaint(r.complaintId) : null;
-      await send(ctx, {
-        text: r
-          ? M.status(sr, {
-              found: true,
-              status: r.status ?? "Open",
-              detail: `${r.officialCategory}, filed ${new Date(c?.createdAt ?? r.lastCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}. This is the status recorded at filing time (demo portal).`,
-              source: "demo-portal",
-            })
-          : M.status(sr, { found: false, status: null }),
-      });
-      return;
-    }
-    const res = await tracer.span("nyc311.status_lookup", { "sr.is_demo": /^DEMO-/i.test(sr) }, async (set) => {
+    const res = await tracer.span("nyc311.status_lookup", { "sr.length": sr.length }, async (set) => {
       if (!deps.status) return null;
-      const r = await deps.status.lookup(sr, { target: /^DEMO-/i.test(sr) ? "demo" : target }).catch((err) => {
+      const r = await deps.status.lookup(sr, { target }).catch((err) => {
         console.warn("[orchestrator] status lookup failed:", (err as Error).message);
         return null;
       });
@@ -715,7 +846,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
           await send(ctx, { text: `Confirmation page for service request <b>${sr}</b>, captured by the filing worker.`, photoPath: shot });
           return;
         }
-        const url = r?.receiptUrl && !/^DEMO-/.test(sr) ? r.receiptUrl : NYC311_CHECK_STATUS_URL;
+        const url = r?.receiptUrl ?? NYC311_CHECK_STATUS_URL;
         await send(ctx, { text: `Service request <b>${sr}</b>\n${url}` });
         return;
       }
@@ -749,6 +880,10 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         await send(ctx, { text: M.askTimeTyped() });
         return;
       }
+      case "answer_q":
+        // Live answers are consumed in handle() while the question is pending; anything reaching here is stale.
+        await send(ctx, { text: "That question is no longer open — the filing has already moved on." });
+        return;
       case "retry_location":
         await send(ctx, { text: M.askLocation(), requestLocation: true });
         return;
@@ -866,10 +1001,13 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     };
     try {
       const resident = (await store.getOrCreateResident(ctx.chatId, ctx.resident.telegramUsername)) ?? ctx.resident;
-      outcome = await filing.executeFiling(approved, { resident, onProgress, onRecording });
+      const onQuestion = (q: WorkerQuestion & { attemptId: string; timeoutMs: number }) => askResidentLive(ctx, approved, q);
+      outcome = await filing.executeFiling(approved, { resident, onProgress, onRecording, onQuestion });
     } catch (err) {
       console.error("[orchestrator] executeFiling threw:", err);
       outcome = { complaintId: approved.id, attemptId: approved.activeAttemptId ?? "unknown", status: "FAILED", errorCode: "WORKER_CRASH", message: "the filing worker crashed" };
+    } finally {
+      pendingQuestions.get(approved.id)?.resolve(null);
     }
     await chain;
     await tracer.withSession({ sessionId: ctx.chatId, metadata: { complaintId: approved.id } }, () =>
@@ -877,6 +1015,83 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         await renderOutcome(ctx, approved, outcome);
       }),
     ).finally(() => outcomeSent());
+  }
+
+  /**
+   * Live follow-up question from the filing worker: one Telegram message with the official options as buttons
+   * (`answer_q:<id>:<v>:<qid>:<i>`) or a typed answer. Resolves on the answer (handle() fast path) or null on timeout.
+   */
+  function askResidentLive(ctx: Ctx, approved: ComplaintDraft, q: WorkerQuestion & { attemptId: string; timeoutMs: number }): Promise<WorkerAnswer | null> {
+    pendingQuestions.get(approved.id)?.resolve(null);
+    return new Promise<WorkerAnswer | null>((resolveAnswer) => {
+      let timer: NodeJS.Timeout | undefined;
+      const entry: PendingQuestion = {
+        chatId: ctx.chatId,
+        complaintId: approved.id,
+        version: approved.draftVersion,
+        attemptId: q.attemptId,
+        question: { id: q.id, field: q.field, prompt: q.prompt, required: q.required, ...(q.options ? { options: q.options } : {}) },
+        resolve: (a) => {
+          clearTimeout(timer);
+          if (pendingQuestions.get(approved.id) === entry) pendingQuestions.delete(approved.id);
+          resolveAnswer(a);
+        },
+      };
+      timer = setTimeout(() => entry.resolve(null), q.timeoutMs);
+      pendingQuestions.set(approved.id, entry);
+      const opts = q.options ?? [];
+      const mins = Math.max(1, Math.round(q.timeoutMs / 60_000));
+      const where = isRealOnly(approved.category) ? "The MTA form" : "The form";
+      const text = [
+        `⏸ <b>${where} needs one answer from you</b>`,
+        esc(q.prompt),
+        opts.length ? "Tap one below, or type your answer." : "Type your answer here.",
+        `<i>Waiting for your answer — the browser is holding the page (up to ${mins} min).</i>`,
+      ].join("\n\n");
+      const buttons = opts.map((o, i) => [{ text: o.slice(0, 64), data: `${encodeCallback("answer_q", approved.id, approved.draftVersion)}:${q.id}:${i}` }]);
+      void tracer
+        .withSession({ sessionId: ctx.chatId, metadata: { complaintId: approved.id } }, () =>
+          tracer.span("telegram.ask_question", { "complaint.id": approved.id, "question.id": q.id, "question.field": q.field }, async () => {
+            await ctx.t.send({ chatId: ctx.chatId, text, parseMode: "HTML", ...(buttons.length ? { buttons } : {}) });
+          }),
+        )
+        .catch((err) => console.warn("[orchestrator] could not send the worker question:", (err as Error).message));
+    });
+  }
+
+  /**
+   * Fast path (outside the per-chat queue, which may be awaiting the filing job): an `answer_q` tap or any typed
+   * text while a worker question is pending answers it. Returns true when the event was consumed.
+   */
+  async function tryAnswerQuestion(event: InboundEvent, opts: HandleOptions): Promise<boolean> {
+    let entry: PendingQuestion | undefined;
+    let answer: WorkerAnswer;
+    if (event.kind === "callback" && event.data.startsWith("answer_q:")) {
+      const [, cid, v, qid, idx] = event.data.split(":");
+      entry = cid ? pendingQuestions.get(cid) : undefined;
+      if (!entry || entry.chatId !== event.chatId || entry.question.id !== qid || entry.version !== Number(v)) return false;
+      const i = Number(idx);
+      const label = Number.isInteger(i) ? entry.question.options?.[i] : undefined;
+      if (label === undefined) return false;
+      answer = { value: label, optionIndex: i };
+    } else if (event.kind === "text" && event.text.trim()) {
+      entry = [...pendingQuestions.values()].find((p) => p.chatId === event.chatId);
+      if (!entry) return false;
+      const typed = event.text.trim().slice(0, 500);
+      const i = (entry.question.options ?? []).findIndex((o) => o.toLowerCase() === typed.toLowerCase());
+      answer = i >= 0 ? { value: entry.question.options![i]!, optionIndex: i } : { value: typed };
+    } else return false;
+    if (!(await store.markUpdateProcessed(event.updateId))) return true;
+    const e = entry;
+    const t = opts.transport ?? deps.transport;
+    await tracer.withSession({ sessionId: event.chatId, metadata: { complaintId: e.complaintId } }, () =>
+      tracer.span("user.answer_question", { "complaint.id": e.complaintId, "attempt.id": e.attemptId, "question.id": e.question.id, "question.field": e.question.field, "answer.kind": answer.optionIndex !== undefined ? "option" : "text" }, async () => {
+        e.resolve(answer);
+        const ack = answer.optionIndex !== undefined ? `Got it: <b>${esc(answer.value)}</b>. Continuing in the same browser…` : "Got it. Continuing in the same browser…";
+        await t.send({ chatId: event.chatId, text: ack, parseMode: "HTML" }).catch(() => {});
+      }),
+    );
+    return true;
   }
 
   /** Bring the persisted complaint to the outcome state, tolerating a FilingService that already transitioned it. */
@@ -910,7 +1125,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
           officialRequestNumber: o.officialRequestNumber,
           officialCategory: getCategory(d.category)?.officialLabel ?? "Unknown",
           status: "Submitted",
-          statusSource: /^DEMO-/.test(o.officialRequestNumber) ? "demo-portal" : "confirmation",
+          statusSource: "confirmation",
           lastCheckedAt: nowIso(),
           receiptUrl: o.officialReceiptUrl ?? null,
         };
@@ -918,14 +1133,12 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         if (!known) await store.saveOfficialRequest(req).catch((e) => console.warn("[orchestrator] saveOfficialRequest:", e.message));
         if (d.status === "SUBMITTED") d = await transition(store, d, "TRACKING", { reason: "tracking official request", actor: "system" });
         tracer.evaluate("filing_outcome", { label: "submitted", score: 1 });
-        // Demo receipts live in a destroyed sandbox (and carry a signed URL): show the confirmation screenshot instead.
-        const isDemo = /^DEMO-/.test(o.officialRequestNumber);
         if (!isOpenDataBacked(d.category)) {
           // MTA: no public status page; "View official request" shows the captured confirmation screenshot.
           await send(ctx, { text: M.mtaSubmitted(o.officialRequestNumber), buttons: trackingButtons(d, o.officialReceiptUrl ?? null) });
           return;
         }
-        await send(ctx, { text: o.message ? esc(o.message) : M.submitted(o), buttons: trackingButtons(d, isDemo ? null : (o.officialReceiptUrl ?? NYC311_CHECK_STATUS_URL)) });
+        await send(ctx, { text: o.message ? esc(o.message) : M.submitted(o), buttons: trackingButtons(d, o.officialReceiptUrl ?? NYC311_CHECK_STATUS_URL) });
         return;
       }
       case "HUMAN_ACTION_REQUIRED": {
@@ -1013,6 +1226,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
   }
 
   async function handle(event: InboundEvent, opts: HandleOptions = {}): Promise<void> {
+    if (pendingQuestions.size && (await tryAnswerQuestion(event, opts).catch((err) => (console.warn("[orchestrator] answer failed:", (err as Error).message), false)))) return;
     const prev = chains.get(event.chatId) ?? Promise.resolve();
     const run = prev.then(() => processEvent(event, opts)).catch(async (err) => {
       console.error("[orchestrator] unhandled:", err);
@@ -1029,7 +1243,12 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     while (filingJobs.size) await Promise.allSettled([...filingJobs.values()]);
   }
 
-  return { handle, idle, complaints };
+  /** Live worker questions currently waiting for an answer (API/scripts/evals). */
+  function pendingQuestionsFor(chatId: string) {
+    return [...pendingQuestions.values()].filter((p) => p.chatId === chatId).map((p) => ({ complaintId: p.complaintId, version: p.version, attemptId: p.attemptId, question: p.question }));
+  }
+
+  return { handle, idle, complaints, pendingQuestions: pendingQuestionsFor };
 }
 
 export type Orchestrator = ReturnType<typeof createOrchestrator>;

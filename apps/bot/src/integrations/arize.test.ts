@@ -25,7 +25,7 @@ describe("arize tracer", () => {
     const cap = capture();
     const t = createTracer({ spanProcessors: [cap.processor], endpoint: "http://localhost:6006", projectName: "test" });
     let traceId: string | null = null;
-    await t.withSession({ sessionId: "tg-123", userId: "res_123", metadata: { complaintId: "cmp_1" }, tags: ["demo"] }, () =>
+    await t.withSession({ sessionId: "tg-123", userId: "res_123", metadata: { complaintId: "cmp_1" }, tags: ["test"] }, () =>
       t.span("telegram.message", { "telegram.kind": "text" }, async () => {
         traceId = t.currentTraceId();
         await t.span("draft.generate", {}, async () => "ok");
@@ -151,6 +151,6 @@ describe("arize tracer", () => {
     expect(r.note).not.toContain("abc123");
     expect((r.nested as Record<string, unknown>).cdpUrl).toBe("[REDACTED]");
     expect(redactString("x".repeat(5000)).length).toBeLessThan(4100);
-    expect(redactString("DEMO-20261016-ABC123 at 40.7359, -73.9911")).toBe("DEMO-20261016-ABC123 at 40.7359, -73.9911");
+    expect(redactString("SR 31124680 at 40.7359, -73.9911")).toBe("SR 31124680 at 40.7359, -73.9911");
   });
 });

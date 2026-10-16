@@ -141,7 +141,7 @@ function attempt(id: string, c: ComplaintDraft, over: Partial<FilingAttempt>): F
     id,
     complaintId: c.id,
     approvedVersion: c.approvedVersion ?? 1,
-    target: "demo",
+    target: "real",
     category: c.category!,
     sandboxId: `sbx-seed-${id}`,
     sandboxProvider: "daytona",
@@ -178,22 +178,23 @@ if (reset) {
 // residents
 const alice = await store.getOrCreateResident("seed-chat-1", "seed_alice");
 const bob = await store.getOrCreateResident("seed-chat-2", "seed_bob");
-await store.updateResident(bob.id, { demoPortalMode: "captcha" });
+await store.updateResident(alice.id, { contactName: "Alice Seed" });
+await store.updateResident(bob.id, { contactName: "Bob Seed" });
 
-// complaint 1: filed + confirmed on the demo portal, now tracking
-const c1 = complaint("cmp_seed_pothole", "seed-chat-1", f1, { residentId: alice.id, status: "TRACKING", officialRequestNumber: "DEMO-20261016-SEED01", activeAttemptId: "att_seed_1" });
+// complaint 1: filed on the official DOT form (resident finished the CAPTCHA in the live view), now tracking
+const c1 = complaint("cmp_seed_pothole", "seed-chat-1", f1, { residentId: alice.id, status: "TRACKING", officialRequestNumber: "311-26101601", activeAttemptId: "att_seed_1" });
 const d1 = candidatesNear(c1.location.latitude!, c1.location.longitude!, "street-pothole");
 await store.createComplaint({ ...c1, duplicates: d1 });
 await store.linkDuplicates(c1.id, d1);
-const a1 = attempt("att_seed_1", c1, { outcome: "SUBMITTED", officialRequestNumber: "DEMO-20261016-SEED01", verified: true, verificationNotes: "SR parsed from confirmation page" });
+const a1 = attempt("att_seed_1", c1, { outcome: "SUBMITTED", officialRequestNumber: "311-26101601", verified: true, verificationNotes: "SR parsed from confirmation page" });
 await store.createAttempt(a1);
 const or1: OfficialRequest = {
   id: "or_seed_1",
   complaintId: c1.id,
-  officialRequestNumber: "DEMO-20261016-SEED01",
+  officialRequestNumber: "311-26101601",
   officialCategory: CATEGORIES["street-pothole"].officialLabel,
   status: "Open",
-  statusSource: "demo-portal",
+  statusSource: "confirmation",
   lastCheckedAt: iso(5),
   receiptUrl: null,
 };
@@ -214,10 +215,10 @@ await store.createAttempt(a2);
 const patterns: WorkflowPattern[] = [
   {
     id: "wp_seed_borough_first",
-    target: "demo",
+    target: "real",
     category: "street-pothole",
     kind: "address-needs-borough-first",
-    description: "demo-portal: the address field validates only after the borough select is set; choose borough first.",
+    description: "real-dot: the address field validates only after the borough select is set; choose borough first.",
     hint: { fieldOrder: ["borough", "address", "description"] },
     observedInAttemptId: "att_seed_1",
     outcome: "SUBMITTED",
@@ -236,7 +237,7 @@ const patterns: WorkflowPattern[] = [
   },
   {
     id: "wp_seed_captcha_stop",
-    target: "demo",
+    target: "real",
     category: "street-repair-defect",
     kind: "captcha-seen-on-submit",
     description: "captcha-seen-on-submit → stop: hand the URL to the resident instead of retrying.",
@@ -259,8 +260,8 @@ console.log(`\n1-hop neighbourhood of ${c1.id}:`);
 const label = new Map(one.nodes.map((n) => [n.id, `${n.kind}:${n.label}`]));
 for (const e of one.edges) console.log(`  ${label.get(e.from)}  -[${e.rel}]->  ${label.get(e.to)}`);
 
-const memory = await store.getWorkflowPatterns({ target: "demo", category: "street-repair-defect" });
-console.log(`\nWorkflow memory for demo/street-repair-defect: ${memory.map((p) => p.kind).join(", ") || "(none)"}`);
+const memory = await store.getWorkflowPatterns({ target: "real", category: "street-repair-defect" });
+console.log(`\nWorkflow memory for real/street-repair-defect: ${memory.map((p) => p.kind).join(", ") || "(none)"}`);
 
 // The query a judge should see: location-aware + graph traversal in one statement.
 const SAMPLE = `-- Complaints within 100 m of Times Square, with their official requests and nearby 311 reports

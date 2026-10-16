@@ -73,8 +73,8 @@ describe("SurrealStore (embedded mem://)", () => {
     const b = await store.getOrCreateResident("chat-1", "alice");
     expect(a.id).toBe(b.id);
     expect(typeof a.id).toBe("string");
-    const u = await store.updateResident(a.id, { demoPortalMode: "captcha", contactName: "Alice Doe" });
-    expect(u.demoPortalMode).toBe("captcha");
+    const u = await store.updateResident(a.id, { contactName: "Alice Doe", contactEmail: "alice@example.com" });
+    expect(u.contactEmail).toBe("alice@example.com");
     expect((await store.getOrCreateResident("chat-1", null)).contactName).toBe("Alice Doe");
   });
 
@@ -109,7 +109,7 @@ describe("SurrealStore (embedded mem://)", () => {
       id: "att_g",
       complaintId: "cmp_g",
       approvedVersion: 1,
-      target: "demo",
+      target: "real",
       category: "street-pothole",
       sandboxId: "sbx",
       sandboxProvider: "local",
@@ -119,7 +119,7 @@ describe("SurrealStore (embedded mem://)", () => {
       recordingUrl: null,
       outcome: "SUBMITTED",
       errorCode: null,
-      officialRequestNumber: "DEMO-20261016-ABC123",
+      officialRequestNumber: "31124680",
       verified: true,
       verificationNotes: null,
       evidence: [],
@@ -138,10 +138,10 @@ describe("SurrealStore (embedded mem://)", () => {
     await store.saveOfficialRequest({
       id: "or_g",
       complaintId: "cmp_g",
-      officialRequestNumber: "DEMO-20261016-ABC123",
+      officialRequestNumber: "31124680",
       officialCategory: "Pothole or Cave-In on Street",
       status: "Open",
-      statusSource: "demo-portal",
+      statusSource: "confirmation",
       lastCheckedAt: nowIso(),
       receiptUrl: null,
     });
@@ -150,7 +150,7 @@ describe("SurrealStore (embedded mem://)", () => {
 
     await store.recordWorkflowPattern({
       id: "wp_g",
-      target: "demo",
+      target: "real",
       category: "street-pothole",
       kind: "captcha-after-submit",
       description: "stop on captcha",
@@ -159,8 +159,8 @@ describe("SurrealStore (embedded mem://)", () => {
       outcome: "HUMAN_ACTION_REQUIRED",
       createdAt: nowIso(),
     });
-    expect((await store.getWorkflowPatterns({ target: "demo", category: "street-pothole" })).map((p) => p.id)).toEqual(["wp_g"]);
-    expect(await store.getWorkflowPatterns({ target: "real", category: "street-pothole" })).toEqual([]);
+    expect((await store.getWorkflowPatterns({ target: "real", category: "street-pothole" })).map((p) => p.id)).toEqual(["wp_g"]);
+    expect(await store.getWorkflowPatterns({ target: "real", category: "subway-delay" })).toEqual([]);
 
     const g = await store.graph({ complaintId: "cmp_g" });
     const rels = new Set(g.edges.map((e) => e.rel));

@@ -2,7 +2,7 @@
  * 311Relay hackathon evaluation suite (design doc §13.2 / §13.3).
  *
  * Drives every scenario in fixtures/example-complaints.json through the bot
- * API (POST /api/demo/event, fresh chatId per scenario), reads the final
+ * API (POST /api/event, fresh chatId per scenario), reads the final
  * complaint state, scores the six evaluation dimensions deterministically and
  * pushes each score to Phoenix as a trace annotation (scenario's root trace,
  * from complaint.traceId) and a session annotation (session = chatId).
@@ -14,6 +14,10 @@
  *   pnpm --filter @311relay/bot evals -- --api http://localhost:3312
  *
  * Requires the bot API running (`pnpm --filter @311relay/bot dev`).
+ *
+ * Filing scenarios run against the official forms only. "browser-requires-captcha" is a genuine, read-only visit to the
+ * DOT pothole form (stops at the reCAPTCHA ⇒ HUMAN_ACTION_REQUIRED/CAPTCHA). The former "no-official-confirmation"
+ * scenario was removed: it needed the replica portal's flaky mode and there is no safe way to produce it on a real form.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
@@ -46,7 +50,7 @@ type Scenario = {
   inputText: string | null;
   imageFixture: string | null;
   location: { latitude: number; longitude: number; address?: string; borough?: string } | null;
-  flow?: { afterDraft?: "approve" | "cancel"; portalMode?: "normal" | "captcha" | "flaky" | "reject" };
+  flow?: { afterDraft?: "approve" | "cancel"; expect?: "captcha-handoff" };
   expected: { triage: string; category: string | null; asksForLocation?: boolean; emergency: boolean; expectDuplicates?: boolean };
 };
 
@@ -58,8 +62,7 @@ const INLINE: Scenario[] = [
   { id: "possible-nearby-duplicate", scenario: "Possible nearby duplicate", expectedBehavior: "Offer existing report for review", inputText: "Pothole in the street right by 1515 Broadway in Times Square.", imageFixture: null, location: { latitude: 40.758, longitude: -73.9855 }, expected: { triage: "SUPPORTED", category: "street-pothole", asksForLocation: false, emergency: false, expectDuplicates: true } },
   { id: "ambiguous-roadway-hole", scenario: "Ambiguous roadway hole", expectedBehavior: "Ask clarification or escalate", inputText: "Can you report this?", imageFixture: "fixtures/images/blurry-1.jpg", location: null, expected: { triage: "UNCLEAR", category: null, asksForLocation: true, emergency: false } },
   { id: "user-cancels", scenario: "User cancels", expectedBehavior: "Do not submit", inputText: "Pothole on my block, it's about a foot wide.", imageFixture: "fixtures/images/pothole-1.jpg", location: TSQ, flow: { afterDraft: "cancel" }, expected: { triage: "SUPPORTED", category: "street-pothole", asksForLocation: false, emergency: false } },
-  { id: "browser-requires-captcha", scenario: "Browser requires CAPTCHA", expectedBehavior: "Request human action", inputText: "Pothole in the crosswalk lane, pretty deep but no one is hurt.", imageFixture: "fixtures/images/pothole-1.jpg", location: TSQ, flow: { portalMode: "captcha", afterDraft: "approve" }, expected: { triage: "SUPPORTED", category: "street-pothole", asksForLocation: false, emergency: false } },
-  { id: "no-official-confirmation", scenario: "No official confirmation", expectedBehavior: "Mark outcome unknown", inputText: "Pothole in front of the deli, my bike tire hit it.", imageFixture: "fixtures/images/pothole-1.jpg", location: { latitude: 40.6831, longitude: -73.9792 }, flow: { portalMode: "flaky", afterDraft: "approve" }, expected: { triage: "SUPPORTED", category: "street-pothole", asksForLocation: false, emergency: false } },
+  { id: "browser-requires-captcha", scenario: "Browser requires CAPTCHA", expectedBehavior: "Request human action", inputText: "Pothole in the crosswalk lane, pretty deep but no one is hurt.", imageFixture: "fixtures/images/pothole-1.jpg", location: TSQ, flow: { afterDraft: "approve", expect: "captcha-handoff" }, expected: { triage: "SUPPORTED", category: "street-pothole", asksForLocation: false, emergency: false } },
   { id: "explicit-emergency", scenario: "Explicit emergency description", expectedBehavior: "Refer to 911", inputText: "The street just caved in into a huge deep sinkhole, a car fell in and the driver is hurt.", imageFixture: null, location: null, expected: { triage: "EMERGENCY", category: null, emergency: true } },
 ];
 
@@ -99,7 +102,7 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function send(chatId: string, ev: EventBody): Promise<Msg[]> {
-  const r = await http<{ messages: Msg[] }>("/api/demo/event", {
+  const r = await http<{ messages: Msg[] }>("/api/event", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ chatId, username: "eval_bot", ...ev }),
@@ -188,13 +191,12 @@ function score(s: Scenario, t: Transcript, c: ComplaintDraft | null, attempts: F
 
   // Outcome accuracy: confirmed vs failed vs unknown vs referral
   const a = attempts[0];
-  const mode = s.flow?.portalMode;
+  // Street categories file against the official DOT/NYC311 form, which always stops at the reCAPTCHA (hand-off).
+  const expectHandoff = s.flow?.expect === "captcha-handoff" || (s.expected.category ?? "").startsWith("street-");
   if (s.flow?.afterDraft === "cancel") {
     out.outcome_accuracy = ok(status === "CANCELLED" && attempts.length === 0, "correct", "incorrect", `status ${status}, attempts ${attempts.length}`);
   } else if (s.flow?.afterDraft === "approve" && !SKIP_FILING) {
-    if (mode === "captcha") out.outcome_accuracy = ok(status === "HUMAN_ACTION_REQUIRED" && a?.errorCode === "CAPTCHA" && !c?.officialRequestNumber, "correct", "incorrect", `status ${status}, error ${a?.errorCode ?? "none"}`);
-    else if (mode === "flaky") out.outcome_accuracy = ok(status === "SUBMISSION_UNKNOWN" && !c?.officialRequestNumber && attempts.length === 1, "correct", "incorrect", `status ${status}, SR ${c?.officialRequestNumber ?? "none"}, attempts ${attempts.length} (no auto-retry)`);
-    else if (mode === "reject") out.outcome_accuracy = ok(status === "FAILED" && !c?.officialRequestNumber, "correct", "incorrect", `status ${status}`);
+    if (expectHandoff) out.outcome_accuracy = ok(status === "HUMAN_ACTION_REQUIRED" && a?.errorCode === "CAPTCHA" && !c?.officialRequestNumber, "correct", "incorrect", `status ${status}, error ${a?.errorCode ?? "none"}`);
     else out.outcome_accuracy = ok(["SUBMITTED", "TRACKING"].includes(status) && !!a?.verified && !!c?.officialRequestNumber, "correct", "incorrect", `status ${status}, verified ${a?.verified ?? false}, SR ${c?.officialRequestNumber ?? "none"}`);
   } else if (s.expected.emergency) {
     out.outcome_accuracy = ok(status === "EMERGENCY_REFERRAL" && /911/.test(texts) && !t.draftOffered, "correct", "incorrect", `status ${status}, 911 mentioned=${/911/.test(texts)}`);
@@ -235,7 +237,8 @@ async function runScenario(s: Scenario, runId: string): Promise<Result> {
   };
 
   await step({ kind: "command", command: "start", args: "" });
-  if (s.flow?.portalMode) await step({ kind: "command", command: "mode", args: s.flow.portalMode });
+  // The official street forms require first + last name; the bot gates approval on /name.
+  await step({ kind: "command", command: "name", args: "Eval Resident" });
 
   let msgs: Msg[];
   if (s.imageFixture) {
@@ -330,6 +333,7 @@ console.log("-".repeat(30 + DIMENSIONS.length * 9 + 24));
 for (const r of results) console.log(`${r.id.padEnd(30)} ${DIMENSIONS.map((d) => cell(r.scores[d]).padEnd(9)).join("")}${(r.pass ? "PASS" : "FAIL").padEnd(8)}${r.status}`);
 const passed = results.filter((r) => r.pass).length;
 console.log(`\n${passed}/${results.length} scenarios passed`);
+console.log("  (no-official-confirmation removed: it needed the replica portal; there is no safe way to produce it on a real form)");
 for (const d of DIMENSIONS) {
   const vs = results.map((r) => r.scores[d]).filter((v): v is NonNullable<Score> => !!v);
   if (vs.length) console.log(`  ${d.padEnd(26)} ${(vs.reduce((a, v) => a + v.score, 0) / vs.length).toFixed(2)}  (n=${vs.length})`);

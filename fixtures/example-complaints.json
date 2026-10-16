@@ -63,23 +63,12 @@
   {
     "id": "browser-requires-captcha",
     "scenario": "Browser requires CAPTCHA",
-    "expectedBehavior": "Request human action (portalMode=captcha → HUMAN_ACTION_REQUIRED/CAPTCHA)",
+    "expectedBehavior": "Request human action (official DOT form, read-only visit: worker fills the fields, stops at the reCAPTCHA → HUMAN_ACTION_REQUIRED/CAPTCHA with the Anchor live view)",
     "clear": false,
     "inputText": "Pothole in the crosswalk lane, pretty deep but no one is hurt.",
     "imageFixture": "fixtures/images/pothole-1.jpg",
     "location": { "latitude": 40.7576, "longitude": -73.9858, "address": "1515 Broadway, Manhattan", "borough": "Manhattan" },
-    "flow": { "portalMode": "captcha", "afterDraft": "approve" },
-    "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
-  },
-  {
-    "id": "no-official-confirmation",
-    "scenario": "No official confirmation",
-    "expectedBehavior": "Mark outcome unknown (portalMode=flaky → SUBMISSION_UNKNOWN, no auto-retry)",
-    "clear": false,
-    "inputText": "Pothole in front of the deli, my bike tire hit it.",
-    "imageFixture": "fixtures/images/pothole-1.jpg",
-    "location": { "latitude": 40.6831, "longitude": -73.9792, "address": "32 4th Avenue, Brooklyn", "borough": "Brooklyn" },
-    "flow": { "portalMode": "flaky", "afterDraft": "approve" },
+    "flow": { "afterDraft": "approve", "expect": "captcha-handoff" },
     "expected": { "triage": "SUPPORTED", "category": "street-pothole", "asksForLocation": false, "emergency": false }
   },
   {

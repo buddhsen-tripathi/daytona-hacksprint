@@ -118,13 +118,12 @@ describe("createDuplicateService (mocked fetch)", () => {
 });
 
 describe("createStatusService", () => {
-  it("routes DEMO- numbers to the demo portal", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      expect(url).toBe("http://localhost:3311/api/status/DEMO-20261016-ABC123");
-      return new Response(JSON.stringify({ sr: "DEMO-20261016-ABC123", status: "Open", category: "pothole", createdAt: "2026-10-16T15:00:00Z" }), { status: 200 });
-    }));
-    const r = await createStatusService().lookup("DEMO-20261016-ABC123", { target: "demo", demoPortalUrl: "http://localhost:3311/" });
-    expect(r).toMatchObject({ status: "Open", source: "demo-portal" });
+  it("does not treat non-numeric references as NYC311 numbers (no fetch)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await createStatusService().lookup("MTA-CASE-ABC");
+    expect(r).toMatchObject({ status: null, source: "unknown" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
   it("unknown when Open Data has no record", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("[]", { status: 200 })));

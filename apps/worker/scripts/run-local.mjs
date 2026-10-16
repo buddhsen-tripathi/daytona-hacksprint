@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Local end-to-end check of the worker against the demo portal (or the real DOT form, read-only).
-//   node scripts/run-local.mjs [normal|captcha|flaky|reject] [--category street-repair] [--target real] [--no-name]
+// Local read-only check of the worker against the official NYC DOT pothole form. The worker fills the resident's
+// fields and stops at the reCAPTCHA (HUMAN_ACTION_REQUIRED/CAPTCHA_REQUIRED) — it never submits.
+//   node scripts/run-local.mjs [--category street-repair] [--no-name]
 // Requires `pnpm --filter @311relay/worker build` first. Uses local Chrome (cdpUrl null); CHROME_PATH overrides.
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -9,29 +10,18 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const workerDir = resolve(here, "..");
-const portalDir = resolve(workerDir, "../portal");
 const args = process.argv.slice(2);
 const flag = (n) => {
   const i = args.indexOf(n);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const mode = args.find((a) => ["normal", "captcha", "flaky", "reject"].includes(a)) ?? "normal";
 const category = flag("--category") === "street-repair" ? "street-repair-defect" : "street-pothole";
-const target = flag("--target") === "real" ? "real" : "demo";
 const noName = args.includes("--no-name");
 
 const today = new Date();
 const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-let portal = null;
-let base = null;
-if (target === "demo") {
-  const { startPortal } = await import(join(portalDir, "server.js"));
-  portal = await startPortal({ port: 0, host: "127.0.0.1", mode, log: () => {} });
-  base = `http://127.0.0.1:${portal.port}`;
-}
-
-const runId = `local_${mode}_${category === "street-pothole" ? "pothole" : "repair"}_${target}_${Date.now().toString(36)}`;
+const runId = `local_${category === "street-pothole" ? "pothole" : "repair"}_real_${Date.now().toString(36)}`;
 const workDir = resolve(workerDir, "../../.runs", runId);
 const outDir = join(workDir, "out");
 mkdirSync(outDir, { recursive: true });
@@ -39,14 +29,14 @@ const payload = {
   attemptId: runId,
   complaintId: "cmp_local",
   approvedVersion: 1,
-  target,
+  target: "real",
   category,
-  formUrl: target === "demo" ? `${base}/report/${category === "street-pothole" ? "pothole" : "street-repair"}` : "https://a841-dotvweb01.nyc.gov/potholeform",
-  allowedHosts: target === "demo" ? ["127.0.0.1", "localhost"] : ["a841-dotvweb01.nyc.gov"],
+  formUrl: category === "street-pothole" ? "https://a841-dotvweb01.nyc.gov/potholeform" : "https://portal.311.nyc.gov/",
+  allowedHosts: ["a841-dotvweb01.nyc.gov", "portal.311.nyc.gov"],
   extraHeaders: {},
   cdpUrl: null,
   liveViewUrl: null,
-  portalMode: mode,
+  realSubmitAuthorized: false,
   form: {
     description:
       category === "street-pothole" ? "Pothole about 2 ft wide in the right lane" : "Sunken trench patch about 3 ft long, an inch below street level",
@@ -64,7 +54,7 @@ const payload = {
 const payloadPath = join(workDir, "payload.json");
 writeFileSync(payloadPath, JSON.stringify(payload, null, 2));
 
-console.log(`[run-local] ${runId}: target=${target} category=${category} mode=${mode}${base ? ` portal=${base}` : ""}`);
+console.log(`[run-local] ${runId}: target=real category=${category} (read-only)`);
 const t0 = Date.now();
 const child = spawn(process.execPath, [join(workerDir, "dist/main.js"), payloadPath, outDir], { stdio: ["ignore", "pipe", "inherit"] });
 let events = 0;
@@ -96,14 +86,5 @@ console.log(
 );
 console.log("evidence:");
 for (const e of result.evidence) console.log(`  ${e.name}  (${e.type}, ${e.step}) ${e.summary}`);
-if (portal) {
-  const { requests } = await (await fetch(`${base}/api/requests`)).json();
-  console.log(`portal /api/requests: ${requests.length} record(s) ${requests.map((r) => `${r.sr}${r.responseDelivered ? "" : " (response NOT delivered)"}`).join(", ")}`);
-  if (result.officialRequestNumber) {
-    const st = await fetch(`${base}/api/status/${result.officialRequestNumber}`);
-    console.log(`portal /api/status/${result.officialRequestNumber}: ${st.status} ${await st.text()}`);
-  }
-  portal.server.close();
-}
 console.log(`out dir: ${outDir}`);
 process.exit(0);

@@ -4,7 +4,7 @@
 
 311Relay is a Telegram agent that turns a photo or message about a city problem into a reviewable, trackable NYC311 service request, or, for subway delays, an MTA complaint.
 
-Categories: **street pothole** and **street repair defect** (NYC311 / DOT; replica portal for demos) and **subway delay** (filed for real on the MTA Customer Feedback form, `contact.mta.info`).
+Categories: **street pothole** and **street repair defect** (official NYC DOT / NYC311 routes, CAPTCHA hand-off) and **subway delay** (the official MTA Customer Feedback form, `contact.mta.info`). There is no replica or demo portal: every filing targets the official form.
 
 1. Send a photo, a description, or a voice note to the bot.
 2. Share the location (pin or address).
@@ -24,7 +24,7 @@ Built for Daytona HackSprint NYC, Oct 16 2026. Design doc in `.context/attachmen
 |---|---|
 | Interface | Telegram Bot API via grammY (long polling by default) |
 | Reasoning | OpenRouter, strict JSON-schema structured output, vision for photos |
-| Execution | Daytona sandbox per filing attempt, hosting the worker and the demo portal |
+| Execution | Daytona sandbox per filing attempt, hosting the isolated filing worker |
 | Browser | Anchor Browser session, Playwright over CDP from inside the sandbox |
 | Data | SurrealDB (Cloud or embedded `mem://`) with a graph of residents, complaints, locations, official requests |
 | Public records | NYC Open Data `erm2-nwe9` for duplicate detection and status |
@@ -35,7 +35,6 @@ Built for Daytona HackSprint NYC, Oct 16 2026. Design doc in `.context/attachmen
 ```
 apps/bot         grammY bot + orchestrator + services + integrations + JSON API (:3312)
 apps/worker      isolated filing worker (runs inside the Daytona sandbox)
-apps/portal      zero-dependency replica of the NYC DOT pothole flow for safe repeated demos (:3311)
 apps/dashboard   read-only operations console (:4000)
 fixtures/        example complaints, sample 311 records, test photos
 ```
@@ -55,20 +54,21 @@ Providers auto-select: Daytona and Anchor are used when their keys are present, 
 Without a Telegram token you can still drive the whole flow:
 
 ```bash
-pnpm demo -- --scenario happy        # photo → location → duplicates → approve → filing
-pnpm demo -- --scenario captcha      # hand-off path
-pnpm --filter @311relay/bot evals    # the 9 evaluation scenarios, results pushed to Phoenix
+pnpm demo -- --scenario happy        # photo → location → /name → duplicates → approve → real DOT form, stops at the CAPTCHA (hand-off, read-only)
+pnpm demo -- --scenario happy --no-filing   # same, stopping at the approval card
+pnpm --filter @311relay/bot evals    # the evaluation scenarios, results pushed to Phoenix
 ```
 
-## Why the demo portal
+## Real filing targets
 
-The official DOT pothole form (`a841-dotvweb01.nyc.gov/potholeform`) has reCAPTCHA on its first step. We do not bypass CAPTCHAs. With `FILING_TARGET=real` the worker fills only user-provided details, stops at the CAPTCHA, and hands you the Anchor live-view link to finish in the same browser. For repeatable demos, `FILING_TARGET=demo` (default) runs a faithful two-step replica of that form inside the sandbox, with `/mode normal|captcha|flaky|reject` to exercise the confirmed, hand-off, unknown, and failed outcomes.
+- **Street pothole → NYC DOT pothole form** (`a841-dotvweb01.nyc.gov/potholeform`). The form requires your first and last name, so the bot asks for `/name First Last` before it offers Approve (it never invents one). The form has reCAPTCHA on its first step and we do not bypass CAPTCHAs: the worker fills only the details you gave, stops at the CAPTCHA (`HUMAN_ACTION_REQUIRED` / `CAPTCHA`), and sends you the Anchor live-view link so you finish in the same browser. The Anchor session stays open for you.
+- **Street repair defect → NYC311 Street Repair route** (`portal.311.nyc.gov`). It needs an interactive session, so the bot prepares everything and hands you the official link.
+- **Subway delay → MTA Customer Feedback wizard** (`contact.mta.info`). Full automation, but a dry run unless `ALLOW_REAL_SUBMIT=1` (see below).
 
 ## Subway delays: real filing, dry run by default
 
 NYC311 doesn't take subway complaints; they go to the MTA. Tell the bot something like "The A train sat at 14 St for 25 minutes this morning, downtown". It pulls out the line, direction, station and time from your words (it asks once if the line or direction is missing, and never asks for a street address), checks the live MTA alerts feed for that line, and shows a card with "Where it's filed: MTA Customer Feedback — Subways › Complaint › Service and schedule › Delay".
 
-- There is no replica for this form, so subway delays always use the official site, whatever `FILING_TARGET` is set to.
 - `ALLOW_REAL_SUBMIT` is unset by default, which makes it a **dry run**: the worker fills the whole MTA form, stops before "Submit your feedback", and sends you a screenshot. Set `ALLOW_REAL_SUBMIT=1` to really submit. The final click also needs your approval of that exact draft version.
 - **Honesty rule:** only file a delay that actually happened to you. The approval card says "This files a real complaint with the MTA. Only approve if this actually happened to you." Contact details are optional on the MTA form. `/name` and `/email` are only sent if you set them.
 - `/status <reference>` answers from the stored confirmation. The MTA replies by email and has no public status lookup.
@@ -83,8 +83,8 @@ After every filing attempt, the bot sends you the Anchor session recording on Te
 ## How a filing attempt runs (about 25 seconds on Daytona + Anchor)
 
 1. The bot creates an Anchor browser session (recording on) and a fresh Daytona sandbox from the `daytona-medium` snapshot in parallel.
-2. It uploads the compiled worker and the demo portal into the sandbox, installs `playwright-core`, starts the portal, and exposes it through a signed, time-limited preview URL.
-3. The sandbox has no general internet egress on this Daytona tier (only the npm registry), so the bot bridges the Anchor CDP websocket into the sandbox over a second signed preview URL. The Anchor API key and CDP URL never enter the sandbox.
+2. It uploads the compiled worker into the sandbox, installs `playwright-core`, and starts a small CDP relay.
+3. The sandbox has no general internet egress on this Daytona tier (only the npm registry), so the bot bridges the Anchor CDP websocket into the sandbox over a signed, time-limited preview URL for the relay. The Anchor API key and CDP URL never enter the sandbox.
 4. The worker drives the form step by step (navigate, inspect, fill, validate, submit, confirm), writing a screenshot after every step and a structured `result.json`.
 5. The bot downloads the evidence, verifies the receipt (request number pattern, confirmation text, confirmation screenshot), persists the attempt and a workflow-memory pattern to SurrealDB, destroys the sandbox, and replies on Telegram.
 

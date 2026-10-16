@@ -1,23 +1,21 @@
 /**
  * StatusService (design doc §15): /status <SR>.
- *  - DEMO-YYYYMMDD-XXXXXX ⇒ controlled demo portal GET /api/status/<sr>
- *  - anything else        ⇒ NYC Open Data (erm2-nwe9, refreshed daily)
+ *  - DOT / NYC311 SR numbers ⇒ NYC Open Data (erm2-nwe9, refreshed daily)
+ *  - MTA references are answered by the orchestrator from the stored OfficialRequest (no public status feed)
  * Never throws; unknown is a valid answer.
  */
 import type { DuplicateService } from "../core/contracts.js";
 import { createDuplicateService } from "./duplicates.js";
 
-export const DEMO_SR_RE = /^DEMO-\d{8}-[A-Z0-9]{6}$/i;
-
 export type StatusLookup = {
   sr: string;
   status: string | null;
-  source: "open-data" | "demo-portal" | "unknown";
+  source: "open-data" | "unknown";
   detail: string;
 };
 
 export type StatusService = {
-  lookup(sr: string, opts: { target: "demo" | "real"; demoPortalUrl?: string; demoPortalHeaders?: Record<string, string> }): Promise<StatusLookup>;
+  lookup(sr: string, opts?: { target?: "real" }): Promise<StatusLookup>;
 };
 
 function fmtDate(s: string | null | undefined): string | null {
@@ -30,31 +28,9 @@ export function createStatusService(deps: { duplicates?: DuplicateService; timeo
   const duplicates = deps.duplicates ?? createDuplicateService();
   const timeoutMs = deps.timeoutMs ?? 8_000;
   return {
-    async lookup(rawSr, opts) {
+    async lookup(rawSr) {
       const sr = rawSr.trim().replace(/^#/, "").toUpperCase();
       if (!sr) return { sr, status: null, source: "unknown", detail: "No service request number given." };
-
-      if (DEMO_SR_RE.test(sr)) {
-        const base = (opts.demoPortalUrl ?? process.env.DEMO_PORTAL_URL ?? "").replace(/\/+$/, "");
-        if (!base) return { sr, status: null, source: "unknown", detail: "This is a demo-portal request number, but the demo portal isn't running right now." };
-        try {
-          const res = await fetch(`${base}/api/status/${encodeURIComponent(sr)}`, {
-            headers: { Accept: "application/json", ...(opts.demoPortalHeaders ?? {}) },
-            signal: AbortSignal.timeout(timeoutMs),
-          });
-          if (res.status === 404) return { sr, status: null, source: "unknown", detail: "The demo portal has no record of this request number." };
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const j = (await res.json()) as { status?: string; category?: string; createdAt?: string };
-          const parts = [`Status: ${j.status ?? "unknown"}`];
-          if (j.category) parts.push(`Category: ${j.category}`);
-          const created = fmtDate(j.createdAt);
-          if (created) parts.push(`Submitted: ${created}`);
-          parts.push("Source: NYC311 Demo Portal (not the official site)");
-          return { sr, status: j.status ?? null, source: "demo-portal", detail: parts.join("\n") };
-        } catch (err) {
-          return { sr, status: null, source: "unknown", detail: `Couldn't reach the demo portal (${(err as Error).message}).` };
-        }
-      }
 
       const digits = sr.replace(/\D/g, "");
       if (!/^\d{5,12}$/.test(digits)) return { sr, status: null, source: "unknown", detail: "That doesn't look like a NYC311 service request number." };

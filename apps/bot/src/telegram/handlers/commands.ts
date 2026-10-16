@@ -9,7 +9,6 @@ export const BOT_COMMANDS = [
   { command: "cancel", description: "Cancel the current draft" },
   { command: "help", description: "Supported problems and safety info" },
   { command: "name", description: "Set contact name for official forms" },
-  { command: "mode", description: "Demo portal mode (normal|captcha|flaky|reject)" },
 ];
 
 const CMD_RE = /^\/([a-zA-Z0-9_]+)(?:@\w+)?(?:\s+([\s\S]*))?$/;

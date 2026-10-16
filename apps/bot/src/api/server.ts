@@ -1,5 +1,5 @@
 /**
- * Read-mostly JSON API for the dashboard (+ demo event endpoint and the
+ * Read-mostly JSON API for the dashboard (+ scripted event endpoint POST /api/event and the
  * optional Telegram webhook). node:http, CORS *.
  */
 import { createReadStream, statSync } from "node:fs";
@@ -8,10 +8,10 @@ import type { CategoryId, Store, Tracer } from "../core/contracts.js";
 import { CATEGORIES, InboundEvent } from "../core/contracts.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
-import { env, filingTarget, hasTelegram } from "../integrations/env.js";
+import { env, hasTelegram } from "../integrations/env.js";
 import { resolveEvidencePath } from "../services/evidence-registry.js";
 import type { WebhookHandler } from "../telegram/bot.js";
-import { createCaptureTransport } from "./capture-transport.js";
+import { capturedQuestions, createCaptureTransport } from "./capture-transport.js";
 
 export type ApiDeps = {
   store: Store;
@@ -67,7 +67,7 @@ export function createApiServer(deps: ApiDeps): Server {
       if (req.method === "GET") {
         switch (seg[1]) {
           case "health":
-            return json(res, 200, { ok: true, startedAt: started, store: store.backend, telegram: hasTelegram(), filingTarget: filingTarget(), providers: providerReport() });
+            return json(res, 200, { ok: true, startedAt: started, store: store.backend, telegram: hasTelegram(), providers: providerReport() });
           case "complaints": {
             if (seg[2]) {
               const c = await store.getComplaint(decodeURIComponent(seg[2]));
@@ -121,15 +121,27 @@ export function createApiServer(deps: ApiDeps): Server {
         }
       }
 
-      if (req.method === "POST" && seg[1] === "demo" && seg[2] === "event") {
+      // POST /api/event (legacy alias: /api/demo/event).
+      if (req.method === "POST" && (seg[1] === "event" || (seg[1] === "demo" && seg[2] === "event"))) {
         const body = JSON.parse((await readBody(req)) || "{}");
         const parsed = InboundEvent.safeParse({ updateId: `api-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, username: null, ...body });
         if (!parsed.success) return json(res, 400, { error: "invalid InboundEvent", issues: parsed.error.issues });
-        const transport = createCaptureTransport();
+        // A live worker question returns the response early (the filing keeps running): answer it with another
+        // POST of a callback event using questions[].options[i].data, or a text event.
+        let questionAsked!: () => void;
+        const asked = new Promise<"question">((r) => (questionAsked = () => r("question")));
+        const transport = createCaptureTransport({ onQuestion: () => questionAsked() });
         const waitForFiling = url.searchParams.get("waitForFiling") !== "false";
-        await orchestrator.handle(parsed.data, { transport, waitForFiling });
+        const handled = orchestrator.handle(parsed.data, { transport, waitForFiling });
+        const first = await Promise.race([handled.then(() => "done" as const), asked]);
         const complaint = await store.getActiveComplaint(parsed.data.chatId);
-        return json(res, 200, { messages: transport.messages, activeComplaint: complaint ? redactComplaint(complaint) : null });
+        return json(res, 200, {
+          messages: transport.messages,
+          questions: capturedQuestions(transport.messages),
+          pendingQuestions: orchestrator.pendingQuestions?.(parsed.data.chatId) ?? [],
+          filingStillRunning: first === "question",
+          activeComplaint: complaint ? redactComplaint(complaint) : null,
+        });
       }
 
       return json(res, 404, { error: "not found" });
@@ -163,7 +175,7 @@ async function listTransitions(store: Store, complaintId: string): Promise<Trans
 }
 
 async function allPatterns(store: Store) {
-  const combos = (["demo", "real"] as const).flatMap((target) => (Object.keys(CATEGORIES) as CategoryId[]).map((category) => ({ target, category })));
+  const combos = (["real"] as const).flatMap((target) => (Object.keys(CATEGORIES) as CategoryId[]).map((category) => ({ target, category })));
   const lists = await Promise.all(combos.map((c) => store.getWorkflowPatterns(c).catch(() => [])));
   return lists.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

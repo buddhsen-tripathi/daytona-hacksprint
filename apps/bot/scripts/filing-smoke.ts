@@ -1,15 +1,15 @@
 /**
- * Filing smoke test: runs filing.executeFiling end-to-end on a fake APPROVED complaint.
+ * Filing smoke test: runs filing.executeFiling end-to-end on a fake APPROVED street-pothole complaint against the
+ * official DOT form. The worker fills the fields and stops at the reCAPTCHA (HUMAN_ACTION_REQUIRED/CAPTCHA): read-only.
  *
- *   tsx scripts/filing-smoke.ts --mode normal|captcha|flaky|reject [--local] [--target real] [--hold <sec>]
+ *   tsx scripts/filing-smoke.ts [--local]
  *
  * Default: Daytona sandbox + Anchor cloud browser (needs DAYTONA_API_KEY + ANCHOR_API_KEY).
- * --local: local child-process portal/worker + local Chrome.
- * --hold: keep browser+sandbox for a human handoff (default 0 here so cleanup can be verified).
+ * --local: local child-process worker + local Chrome.
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ComplaintDraft, PortalMode, Resident, SpanHelpers, Tracer } from "../src/core/contracts.js";
+import type { ComplaintDraft, Resident, SpanHelpers, Tracer } from "../src/core/contracts.js";
 import { EMPTY_LOCATION, nowIso, shortId } from "../src/core/contracts.js";
 import { REPO_ROOT } from "../src/integrations/env.js";
 
@@ -18,14 +18,8 @@ if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
-const opt = (n: string) => {
-  const i = args.indexOf(`--${n}`);
-  return i >= 0 ? args[i + 1] : undefined;
-};
-const mode = (opt("mode") ?? "normal") as PortalMode;
 const local = flag("local");
-const target = opt("target") === "real" ? "real" : "demo";
-const holdSec = Number(opt("hold") ?? 0);
+const target = "real" as const;
 
 const t0 = Date.now();
 const stamp = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
@@ -82,7 +76,7 @@ async function main() {
   }
   const store = await loadStore();
   const tracer = consoleTracer();
-  const filing = createFilingService({ store, tracer, sandboxProvider: sandbox, browserProvider: browser, target, handoffHoldMs: holdSec * 1000 });
+  const filing = createFilingService({ store, tracer, sandboxProvider: sandbox, browserProvider: browser, target });
 
   const now = nowIso();
   const resident: Resident = {
@@ -90,7 +84,6 @@ async function main() {
     telegramChatId: "smoke-chat",
     telegramUsername: "smoke",
     preferredLanguage: "en",
-    demoPortalMode: mode,
     contactName: "Ada Lovelace",
     contactEmail: null,
     createdAt: now,
@@ -124,7 +117,7 @@ async function main() {
   };
   await store.createComplaint(complaint);
 
-  console.log(`== filing smoke: mode=${mode} target=${target} providers=${sandbox.name}+${browser.name}`);
+  console.log(`== filing smoke: target=${target} providers=${sandbox.name}+${browser.name}`);
   const outcome = await filing.executeFiling(complaint, { resident, onProgress: (t) => console.log(`${stamp()} > ${t}`) });
   console.log(`${stamp()} executeFiling returned`);
 

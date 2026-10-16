@@ -62,7 +62,7 @@ export const M = {
   },
   draftChanged: () => "The draft changed since you saw it. Here's the latest:",
   needName: () =>
-    "The official form asks for your first and last name. Send <code>/name First Last</code> and I'll add it. I never make one up.",
+    "The official DOT form requires your first and last name. Send <code>/name First Last</code> to continue.",
   nameSaved: (name: string) => `Thanks, I'll use <b>${esc(name)}</b> as the contact name on official forms.`,
   filingNow: () => "Filing now… I'll send updates. ⏳",
   progress: (t: string) => `⚙️ ${esc(t)}`,
@@ -73,8 +73,6 @@ export const M = {
       ? "Sure. What should I change? Tell me the correct line, direction, station, time or description."
       : "Sure. What should I change? Tell me the correct details (description or location), or send a new photo.",
   dupReview: () => "You can look up the existing request on NYC311. If it's the same problem, there's no need to file again. Tap <b>Continue with new report</b> if it's different.",
-  modeSet: (mode: string) => `Demo portal mode set to <b>${esc(mode)}</b>. Your next filing will use it.`,
-  modeUsage: () => "Usage: <code>/mode normal|captcha|flaky|reject</code>",
   statusUsage: () => "Send <code>/status &lt;service request number&gt;</code>, or tap <b>Check status</b> on a filed report.",
   error: () => "Something went wrong on my side; nothing was filed.",
   voiceUnsupported: () => "I can't understand voice messages yet. Could you type a short description instead?",
@@ -141,14 +139,15 @@ export const M = {
 
   myReports: (drafts: ComplaintDraft[], requests: OfficialRequest[]) => {
     if (!drafts.length && !requests.length) return "You don't have any reports yet. Send a photo or description to start one.";
-    const lines = ["<b>Your reports</b>", ""];
-    for (const d of drafts.slice(0, 10)) {
+    const lines = [drafts.length > 5 ? "<b>Your last 5 reports</b>" : "<b>Your reports</b>", ""];
+    for (const d of drafts.slice(0, 5)) {
       const cat = getCategory(d.category)?.label ?? "Uncategorized";
       const where = d.transit?.line
         ? `${/^[0-9A-Z]$/.test(d.transit.line) ? `${d.transit.line} train` : d.transit.line}${d.transit.direction ? `, ${d.transit.direction}` : ""}`
         : (d.location.address ?? (d.location.latitude != null ? `${d.location.latitude.toFixed(4)}, ${d.location.longitude?.toFixed(4)}` : "no location"));
       const sr = d.officialRequestNumber ? ` · SR <code>${esc(d.officialRequestNumber)}</code>` : "";
-      lines.push(`• ${esc(cat)} · ${esc(where)} · <i>${esc(humanStatus(d.status))}</i>${sr}`);
+      const dryRun = d.status === "HUMAN_ACTION_REQUIRED" && /dry-run/i.test(d.statusReason ?? "") ? "dry run, nothing sent" : null;
+      lines.push(`• ${esc(cat)} · ${esc(where)} · <i>${esc(dryRun ?? humanStatus(d.status))}</i>${sr} · ${esc(fmtWhen(d.createdAt))}`);
     }
     const unlisted = requests.filter((r) => !drafts.some((d) => d.officialRequestNumber === r.officialRequestNumber));
     for (const r of unlisted) lines.push(`• SR <code>${esc(r.officialRequestNumber)}</code> · ${esc(r.status ?? "status unknown")}`);
@@ -187,13 +186,20 @@ export function fmtDate(s: string | null | undefined): string | null {
   return Number.isFinite(d.getTime()) ? d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "America/New_York" }) : s;
 }
 
-const SOURCE_LABEL: Record<string, string> = { "open-data": "NYC Open Data (311 Service Requests)", "demo-portal": "NYC311 Demo Portal", unknown: "" };
+const SOURCE_LABEL: Record<string, string> = { "open-data": "NYC Open Data (311 Service Requests)", unknown: "" };
 
 export function ago(days: number): string {
   const d = Math.max(0, Math.round(days));
   if (d === 0) return "today";
   if (d === 1) return "1 day ago";
   return `${d} days ago`;
+}
+
+/** "Oct 16, 1:02 PM" in New York time. */
+export function fmtWhen(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
 }
 
 export function humanStatus(s: ComplaintDraft["status"]): string {
