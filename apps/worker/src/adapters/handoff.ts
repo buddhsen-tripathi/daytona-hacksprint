@@ -8,7 +8,7 @@
 import { Outcome, sanitizeUrl } from "../protocol.js";
 import { detectCaptcha, detectLogin } from "../safety.js";
 import { gotoWithRetries } from "./common.js";
-import { FIELD_SELECTOR, NEVER_FILL_TYPES, listFields, matchFieldByLabel, normLabel } from "./fields.js";
+import { FIELD_SELECTOR, NEVER_FILL_TYPES, emitFormSchema, listFields, matchFieldByLabel, normLabel, schemaFields } from "./fields.js";
 import type { AdapterContext, FormAdapter } from "./types.js";
 
 export function createHandoffAdapter(): FormAdapter {
@@ -41,6 +41,7 @@ export function createHandoffAdapter(): FormAdapter {
     async inspect(ctx) {
       await safetyStop(ctx, "inspect");
       const fields = await listFields(ctx.page);
+      emitFormSchema(ctx, "inspect", "handoff", [{ name: "form", fields: schemaFields(fields) }], true);
       return { requiredKnown: fields.filter((f) => f.required).map((f) => f.label) };
     },
 

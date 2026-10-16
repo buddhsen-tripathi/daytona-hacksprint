@@ -23,10 +23,10 @@
  * Page text is data: it only selects among the recipe's own steps (when/inspect), never adds actions.
  */
 import type { Locator } from "playwright-core";
-import { Outcome, SUBWAY_LINES, sanitizeUrl, type FilingPayload, type QuestionField, type WorkerStep } from "../protocol.js";
+import { Outcome, SUBWAY_LINES, sanitizeUrl, type FilingPayload, type FormSchemaField, type FormSchemaStep, type QuestionField, type WorkerStep } from "../protocol.js";
 import { detectCaptcha, detectLogin } from "../safety.js";
 import { gotoWithRetries, matchByTokens, nameCandidates, needField, needFieldOutcome } from "./common.js";
-import { labelOf, listFields } from "./fields.js";
+import { choiceField, emitFormSchema, labelOf, listFields, schemaFields } from "./fields.js";
 import type { AdapterContext, ConfirmResult, FormAdapter } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -222,6 +222,8 @@ export interface RecipeDriver {
   buttonEnabled(name: string): Promise<boolean | null>;
   /** Labels of visible required fields that are still empty. */
   emptyRequiredFields(): Promise<string[]>;
+  /** PII-free schema of the visible fields (labels/types/required/options, never values). */
+  captureFields(): Promise<FormSchemaField[]>;
   /** The real submit click (only ever called after the realSubmitAuthorized gate). */
   clickSubmit(name: string): Promise<void>;
   url(): string;
@@ -336,6 +338,7 @@ export function playwrightDriver(ctx: AdapterContext): RecipeDriver {
       }
       return out;
     },
+    captureFields: async () => schemaFields(await listFields(page)),
     async clickSubmit(name) {
       const btn = page.getByRole("button", { name, exact: true }).first();
       await btn.click({ noWaitAfter: true, timeout: 10_000 });
@@ -359,6 +362,14 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
   let d: RecipeDriver | null = null;
   const filled: { fields: { ref: FieldRef; name: string; value: string; readBackOk: boolean }[]; chosen: string[]; picked: string[]; skipped: string[]; answered: string[] } = { fields: [], chosen: [], picked: [], skipped: [], answered: [] };
   const drv = (ctx: AdapterContext) => (d ??= driverFor(ctx));
+  // form_schema: the current step's choice fields + visible fields, closed at each `continue`.
+  const schemaSteps: FormSchemaStep[] = [];
+  let pendingChoices: FormSchemaField[] = [];
+  const closeSchemaStep = async (ctx: AdapterContext, name: string) => {
+    const fields = await drv(ctx).captureFields().catch(() => [] as FormSchemaField[]);
+    schemaSteps.push({ name, fields: [...pendingChoices, ...fields] });
+    pendingChoices = [];
+  };
   const vars = (ctx: AdapterContext) => templateVars(ctx.payload);
 
   async function askOrThrow(ctx: AdapterContext, ask: RecipeAsk | undefined, options: string[] | undefined, required: boolean, fallback: Outcome) {
@@ -408,12 +419,14 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
         pick = a.optionIndex !== undefined ? (options[a.optionIndex] ?? null) : c.match === "tokens" ? matchByTokens(a.value, options, core) : (options.find((o) => o === a.value) ?? null);
         if (!pick) throw fallback;
       }
+      pendingChoices.push(choiceField(field, options.length ? options : [pick], true));
       await D.clickButton(pick);
       filled.chosen.push(pick);
       ctx.action({ kind: "choose", target: pick });
       ctx.log(phase, "info", `chose "${pick}"`, { field });
     } else if ("continue" in step) {
       const name = step.continue.name ?? "Continue";
+      if (phase === "fill") await closeSchemaStep(ctx, step.continue.what ?? `step ${schemaSteps.length + 1}`);
       await D.advance(name, step.continue.what ?? "this step");
       ctx.action({ kind: "continue", target: name });
     } else if ("pick" in step) {
@@ -518,6 +531,12 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
         await ctx.shot("inspect", "unexpected-step");
         needField(`The form changed: recipe "${recipe.id}" expected a different page here.`, { page: clean(await D.text(), 500) });
       }
+      const first = await D.captureFields().catch(() => [] as FormSchemaField[]);
+      if (i.expectButtons) {
+        const re = new RegExp(renderTemplate(i.expectButtons.nameRegex, v, true));
+        first.unshift(choiceField("choice", (await D.buttonNames()).filter((n) => re.test(n)), true));
+      }
+      emitFormSchema(ctx, "inspect", `recipe:${recipe.id}`, [{ name: "first step", fields: first }], false);
       return { requiredKnown: fillSteps.flatMap((s) => ("fill" in s && s.fill.required ? [s.fill.label] : "choose" in s ? [s.choose.field ?? "choice"] : [])) };
     },
 
@@ -538,6 +557,8 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
         if (!f.readBackOk || (back !== null && back !== f.value)) problems.push(`${f.name}: read-back did not match`);
       }
       for (const l of await D.emptyRequiredFields()) problems.push(`required field "${l}" is empty`);
+      await closeSchemaStep(ctx, "final");
+      emitFormSchema(ctx, "validate", `recipe:${recipe.id}`, schemaSteps, true);
       if (submitStep) {
         const en = await D.buttonEnabled(submitStep.button);
         if (!en) problems.push(`"${submitStep.button}" button not available`);

@@ -100,6 +100,34 @@ export interface WorkerAnswer {
   optionIndex?: number;
 }
 
+/**
+ * Form schema captured by every adapter's inspect() (#9, consumed by #11): what the official form asks, per step.
+ * Emitted as a WorkerEvent `{"message":"form_schema","data":{"schema":FormSchema}}`. PII-free: labels, types,
+ * required flags and option labels read from the page; never a field value.
+ * `complete: false` from inspect() (pages seen so far); adapters that walk a multi-step wizard emit `complete: true`
+ * again from validate() once every step was seen.
+ */
+export interface FormSchemaField {
+  label: string;
+  /** input type ("text", "email", …), "select", "textarea", "choice" (button group), "listbox" (picker). */
+  type: string;
+  required: boolean;
+  options?: string[];
+}
+export interface FormSchemaStep {
+  name: string;
+  fields: FormSchemaField[];
+}
+export interface FormSchema {
+  adapter: string;
+  category: string;
+  /** Sanitized (no query/fragment). */
+  url: string | null;
+  complete: boolean;
+  steps: FormSchemaStep[];
+}
+export const FORM_SCHEMA_EVENT = "form_schema";
+
 export type FilingStatus = "SUBMITTED" | "HUMAN_ACTION_REQUIRED" | "SUBMISSION_UNKNOWN" | "FAILED";
 
 export type FilingErrorCode =

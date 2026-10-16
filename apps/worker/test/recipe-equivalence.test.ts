@@ -81,6 +81,17 @@ describe.skipIf(!HAS_CHROME)("recipe ≡ hand-written MTA adapter on the dry run
       { kind: "stop", target: "Submit your feedback" },
     ]);
     expect([hand.submitClicked, rec.submitClicked, handSubmitted, recSubmitted]).toEqual([false, false, false, false]);
+    // form_schema: inspect (partial) + validate (complete) from both; never a typed value.
+    for (const r of [hand, rec]) {
+      const schemas = r.events.filter((e) => e.message === "form_schema").map((e) => e.data!.schema as { complete: boolean; steps: { name: string; fields: { label: string; type: string }[] }[] });
+      expect(schemas.map((s) => s.complete)).toEqual([false, true]);
+      const full = JSON.stringify(schemas[1]);
+      expect(full).toContain("A Train-Downtown & Queens");
+      expect(full).toContain("Tell us more (Required)");
+      expect(full).toContain("Email (optional)");
+      expect(full).not.toContain("ada@example.com");
+      expect(full).not.toContain("no announcements");
+    }
   });
 
   it("no station, no contact, unmatched direction with questions disabled: identical hand-off", async () => {

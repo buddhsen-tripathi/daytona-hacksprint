@@ -463,6 +463,35 @@ export function questionFromEvent(e: WorkerEvent): WorkerQuestion | null {
   return q.success ? q.data : null;
 }
 
+/**
+ * Form schema captured by every worker adapter's inspect() (#9; consumed by #11 to learn CatalogEntry.requiredFields).
+ * Carried by a worker event `{"message":"form_schema","data":{"schema":…}}`. PII-free: labels, types, required flags,
+ * option labels — never a value. `complete` = every step of a multi-step wizard was seen (emitted again from validate).
+ */
+export const FormSchemaField = z.object({
+  label: z.string(),
+  /** input type ("text", "email", …), "select", "textarea", "choice" (button group), "listbox" (picker). */
+  type: z.string(),
+  required: z.boolean(),
+  options: z.array(z.string()).optional(),
+});
+export type FormSchemaField = z.infer<typeof FormSchemaField>;
+export const FormSchema = z.object({
+  adapter: z.string(),
+  category: z.string(),
+  url: z.string().nullable(),
+  complete: z.boolean(),
+  steps: z.array(z.object({ name: z.string(), fields: z.array(FormSchemaField) })),
+});
+export type FormSchema = z.infer<typeof FormSchema>;
+
+/** The schema carried by a worker `form_schema` event, or null for any other event. */
+export function formSchemaFromEvent(e: WorkerEvent): FormSchema | null {
+  if (e.message !== "form_schema") return null;
+  const s = FormSchema.safeParse(e.data?.schema);
+  return s.success ? s.data : null;
+}
+
 export const EvidenceFile = z.object({
   /** Path relative to /work/out inside the sandbox, e.g. "03-before-submit.png". */
   name: z.string(),

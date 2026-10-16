@@ -74,6 +74,9 @@ class FakePage implements RecipeDriver {
       .filter((f) => f.required && !f.value)
       .map((f) => f.label);
   }
+  async captureFields() {
+    return Object.values(this.fields).map((f) => ({ label: f.label, type: "text", required: f.required }));
+  }
   async clickSubmit(name: string) {
     this.calls.push(`submit ${name}`);
     this.pageText = this.afterSubmitText;
@@ -86,12 +89,13 @@ class FakePage implements RecipeDriver {
 function fakeCtx(payload: FilingPayload, answers: Record<string, WorkerAnswer> = {}) {
   const actions: AdapterAction[] = [];
   const questions: WorkerQuestion[] = [];
+  const logs: { message: string; data?: Record<string, unknown> }[] = [];
   const ctx: AdapterContext = {
     page: {} as Page,
     payload,
     guard: { offAllowlist: false, offAllowlistUrl: null, mainFrameFailures: [] },
     state: { submitClicked: false, finalUrl: null },
-    log: () => {},
+    log: (_step, _level, message, data) => logs.push({ message, ...(data ? { data } : {}) }),
     shot: async () => null,
     saveHtml: async () => null,
     checkGuard: () => {},
@@ -103,7 +107,7 @@ function fakeCtx(payload: FilingPayload, answers: Record<string, WorkerAnswer> =
     },
     action: (a) => actions.push(a),
   };
-  return { ctx, actions, questions };
+  return { ctx, actions, questions, logs };
 }
 
 async function run(adapter: FormAdapter, ctx: AdapterContext) {
@@ -184,6 +188,25 @@ describe("recipe interpreter (fake page)", () => {
       { kind: "stop", target: "Send" },
     ]);
     expect(ctx.state.submitClicked).toBe(false);
+  });
+
+  it("emits form_schema from inspect (partial) and validate (complete), PII-free", async () => {
+    const fp = page();
+    const { ctx, logs } = fakeCtx(payload({ form: { contactEmail: "secret@person.org" } }));
+    await run(createRecipeAdapter(recipe(BASIC), () => fp), ctx);
+    const schemas = logs.filter((l) => l.message === "form_schema").map((l) => l.data!.schema as { complete: boolean; adapter: string; steps: { fields: { label: string }[] }[] });
+    expect(schemas.map((s) => [s.adapter, s.complete])).toEqual([
+      ["recipe:test-form", false],
+      ["recipe:test-form", true],
+    ]);
+    expect(schemas[1]!.steps.at(-1)!.fields).toEqual([
+      { label: "kind", type: "choice", required: true, options: ["Noise"] },
+      { label: "Describe it", type: "text", required: true },
+      { label: "Email (optional)", type: "text", required: false },
+    ]);
+    const all = JSON.stringify(schemas);
+    expect(all).not.toContain("secret@person.org");
+    expect(all).not.toContain("Loud music");
   });
 
   it("authorized: clicks submit exactly once with submitClicked set first, parses the reference", async () => {

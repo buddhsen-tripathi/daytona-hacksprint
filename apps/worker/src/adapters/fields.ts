@@ -3,6 +3,8 @@
  * only — never field values — so the result is PII-free and safe to log. Page text is data, never instructions.
  */
 import type { Locator, Page } from "playwright-core";
+import { FORM_SCHEMA_EVENT, sanitizeUrl, type FormSchema, type FormSchemaField, type FormSchemaStep, type WorkerStep } from "../protocol.js";
+import type { AdapterContext } from "./types.js";
 
 export interface PageField {
   /** Index into document.querySelectorAll(FIELD_SELECTOR) (use page.locator(FIELD_SELECTOR).nth(index)). */
@@ -87,4 +89,39 @@ export async function labelOf(loc: Locator): Promise<string> {
     .evaluate((e) => (e as HTMLInputElement).labels?.[0]?.innerText || e.getAttribute("aria-label") || e.getAttribute("placeholder") || "")
     .catch(() => "");
   return raw.replace(/\s+/g, " ").trim().slice(0, 60);
+}
+
+// ---------------------------------------------------------------------------
+// form_schema capture (#9 → #11)
+// ---------------------------------------------------------------------------
+const MAX_FIELDS = 40;
+const MAX_OPTIONS = 30;
+const cap = (s: string, n = 120) => s.replace(/\s+/g, " ").trim().slice(0, n);
+
+/** PII-free schema fields: label/type/required/options of the visible fields (never values). */
+export function schemaFields(fields: PageField[]): FormSchemaField[] {
+  return fields.slice(0, MAX_FIELDS).map((f) => ({ label: cap(f.label), type: f.type, required: f.required, ...(f.options ? { options: f.options.slice(0, MAX_OPTIONS).map((o) => cap(o)) } : {}) }));
+}
+
+/** A "choice" (button group) or "listbox" (picker) pseudo-field. */
+export function choiceField(label: string, options: string[], required: boolean, type: "choice" | "listbox" = "choice"): FormSchemaField {
+  return { label: cap(label), type, required, ...(options.length ? { options: options.slice(0, MAX_OPTIONS).map((o) => cap(o)) } : {}) };
+}
+
+/** One step of the schema: the page's visible fields plus any choice/listbox fields the adapter knows about. */
+export async function captureSchemaStep(page: Page, name: string, extra: FormSchemaField[] = []): Promise<FormSchemaStep> {
+  return { name: cap(name, 60), fields: [...extra, ...schemaFields(await listFields(page))].slice(0, MAX_FIELDS) };
+}
+
+/** Emit the `form_schema` event. */
+export function emitFormSchema(ctx: AdapterContext, step: WorkerStep, adapter: string, steps: FormSchemaStep[], complete: boolean): FormSchema {
+  let url: string | null = null;
+  try {
+    url = sanitizeUrl(ctx.page.url());
+  } catch {
+    /* fake page */
+  }
+  const schema: FormSchema = { adapter, category: ctx.payload.category, url, complete, steps };
+  ctx.log(step, "info", FORM_SCHEMA_EVENT, { schema });
+  return schema;
 }

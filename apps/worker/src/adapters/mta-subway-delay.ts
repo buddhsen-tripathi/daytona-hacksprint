@@ -19,7 +19,8 @@ import type { Locator, Page } from "playwright-core";
 import { Outcome, SUBWAY_LINES, sanitizeUrl, type TransitDetails } from "../protocol.js";
 import { detectCaptcha, detectLogin } from "../safety.js";
 import { gotoWithRetries, matchByTokens, nameCandidates, needField, needFieldOutcome, normalizeBorough } from "./common.js";
-import { labelOf } from "./fields.js";
+import { captureSchemaStep, choiceField, emitFormSchema, labelOf } from "./fields.js";
+import type { FormSchemaStep } from "../protocol.js";
 import type { AdapterContext, ConfirmResult, FormAdapter } from "./types.js";
 
 export const MTA_FEEDBACK_URL = "https://contact.mta.info/s/customer-feedback";
@@ -153,6 +154,12 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
     /** Fields answered live by the resident (ctx.ask). */
     answered: string[];
   } = { line: null, direction: null, station: null, dateTime: null, breadcrumb: null, descriptionLen: 0, descriptionOk: false, contact: [], skipped: [], answered: [] };
+  /** form_schema: one entry per wizard step seen (inspect emits the first, validate the complete schema). */
+  const schemaSteps: FormSchemaStep[] = [];
+  const schemaStep = async (ctx: AdapterContext, name: string, extra: Parameters<typeof captureSchemaStep>[2] = []) => {
+    if (schemaSteps.some((s) => s.name === name)) return;
+    schemaSteps.push(await captureSchemaStep(ctx.page, name, extra).catch(() => ({ name, fields: extra ?? [] })));
+  };
 
   const stepMs = (ctx: AdapterContext) => Math.max(5000, ctx.payload.limits.stepTimeoutMs || 20000);
 
@@ -213,6 +220,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
     const opts = (await page.getByRole("button").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label") ?? (b as HTMLElement).innerText.trim()))).filter(
       (a): a is string => !!a && /Train-|Shuttle-|Railway-/.test(a),
     );
+    await schemaStep(ctx, "direction", [choiceField("Which direction?", opts, true)]);
     let pick = matchDirection(t?.direction, opts);
     let byResident = false;
     if (!pick) {
@@ -250,6 +258,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
   async function doStation(ctx: AdapterContext, t: TransitDetails | null) {
     const page = ctx.page;
     await page.waitForTimeout(1500); // borough labels + picker render late
+    await schemaStep(ctx, "station", [choiceField("Which station was nearest (if known)?", [], false, "listbox")]);
     const want = t?.station?.trim();
     if (!want) {
       filled.skipped.push("station (not given)");
@@ -338,6 +347,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
 
   async function doDetails(ctx: AdapterContext, t: TransitDetails | null) {
     const page = ctx.page;
+    await schemaStep(ctx, "details");
     const desc = (ctx.payload.form.description ?? "").trim();
     if (!desc) needField("The MTA form requires a description (\"Tell us more\").", { field: "description" });
     const text = desc.slice(0, DESCRIPTION_MAX);
@@ -394,6 +404,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
   async function doContact(ctx: AdapterContext) {
     const page = ctx.page;
     const f = ctx.payload.form;
+    await schemaStep(ctx, "contact");
     let parts = (f.contactName ?? "").trim().split(/\s+/).filter(Boolean);
     const nameParts = () => ({ first: parts[0] ?? null, last: parts.length > 1 ? parts.slice(1).join(" ") : null });
     let email = f.contactEmail;
@@ -490,6 +501,9 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         await ctx.shot("inspect", "unexpected-step");
         needField(`The MTA form changed: expected the subway line question after "Delay" but found something else.`, { page: clean(await wizardText(ctx.page), 500) });
       }
+      const lines = (await ctx.page.getByRole("button", { name: / Line$/ }).evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label") ?? (b as HTMLElement).innerText.trim()))).filter(Boolean);
+      await schemaStep(ctx, "line", [choiceField("Select the line", lines, true)]);
+      emitFormSchema(ctx, "inspect", "mta-subway-delay", schemaSteps, false);
       return { requiredKnown: ["line", "direction", "Tell us more"] };
     },
 
@@ -506,6 +520,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         else if (kind === "direction") await doDirection(ctx, t);
         else if (kind === "station") await doStation(ctx, t);
         else if (kind === "additional") {
+          await schemaStep(ctx, "additional");
           filled.skipped.push("car number (optional, not known)");
           await ctx.shot("fill", "additional-info", "Optional car number left empty");
           await advance(ctx, "fill", "additional information");
@@ -542,6 +557,7 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
       if ((await newsletter.count()) && (await newsletter.isChecked().catch(() => false))) problems.push("newsletter checkbox is checked (must stay unchecked)");
       const submit = page.getByRole("button", { name: SUBMIT_LABEL, exact: true });
       if (!(await submit.count()) || !(await submit.first().isEnabled())) problems.push(`"${SUBMIT_LABEL}" button not available`);
+      emitFormSchema(ctx, "validate", "mta-subway-delay", schemaSteps, true);
       const summary = { line: filled.line, direction: filled.direction, station: filled.station, dateTime: filled.dateTime, breadcrumb: filled.breadcrumb, descriptionChars: filled.descriptionLen, contactFields: filled.contact.map((c) => c.label), skipped: filled.skipped };
       ctx.log("validate", problems.length ? "warn" : "info", problems.length ? "verification problems" : "all chosen values reflected on the form", { ...summary, problems });
       await ctx.shot("validate", "final-pre-submit", `Final MTA page, filled, before "${SUBMIT_LABEL}"`);
