@@ -44,6 +44,11 @@ export function createMemoryStore(): MemoryStore {
   const patterns: WorkflowPattern[] = [];
   const transitions: TransitionRecord[] = [];
   const similar = new Map<string, Set<string>>();
+  /** #5: supporter id → original id (complaint->same_issue_as->complaint), insertion order = oldest first. */
+  const sameIssue = new Map<string, string>();
+  /** #5: complaint id → ids it is not the same as (complaint->not_same_as->complaint). */
+  const notSame = new Map<string, Set<string>>();
+  const joinedTo = (originalId: string) => [...sameIssue.entries()].filter(([, o]) => o === originalId).map(([s]) => s);
   const memories = new Map<string, MemoryRecord>();
 
   const store: MemoryStore = {
@@ -89,6 +94,9 @@ export function createMemoryStore(): MemoryStore {
       return clone(c);
     },
     async saveComplaint(c) {
+      // #5: `supporters` is derived from same_issue_as edges (a stale copy of the original never resets it)
+      const n = joinedTo(c.id).length;
+      if (n > 0) c = { ...c, supporters: n };
       complaints.set(c.id, clone(c));
       if (c.location.source !== "none") {
         const locId = await store.upsertLocation(c.location);
@@ -177,6 +185,23 @@ export function createMemoryStore(): MemoryStore {
       for (const id of similarIds) if (id !== complaintId) set.add(id);
       similar.set(complaintId, set);
     },
+    async linkSameIssue(supporterId, originalId) {
+      if (supporterId !== originalId) sameIssue.set(supporterId, originalId);
+      const n = joinedTo(originalId).length;
+      const o = complaints.get(originalId);
+      if (o && n > 0) complaints.set(originalId, { ...o, supporters: n });
+      return n;
+    },
+    async linkNotSameIssue(complaintId, otherId) {
+      if (complaintId === otherId) return;
+      const set = notSame.get(complaintId) ?? new Set<string>();
+      set.add(otherId);
+      notSame.set(complaintId, set);
+    },
+    async getIssueLinks(complaintId) {
+      const joined = joinedTo(complaintId);
+      return { sameIssueAs: sameIssue.get(complaintId) ?? null, joined, notSameAs: [...(notSame.get(complaintId) ?? [])], supporters: joined.length };
+    },
     async getWorkflowPatterns(args: { target: FilingTarget; category: CategoryId }) {
       return clone(patterns.filter((p) => p.target === args.target && p.category === args.category));
     },
@@ -244,6 +269,16 @@ export function createMemoryStore(): MemoryStore {
           if (!o) continue;
           nodes.set(o.id, { id: o.id, kind: "complaint", label: `${o.category ?? "uncategorized"} · ${o.status}` });
           edges.push({ from: c.id, to: o.id, rel: "similar_to" });
+        }
+        const issueEdges: [string, string | undefined][] = [
+          ["same_issue_as", sameIssue.get(c.id)],
+          ...[...(notSame.get(c.id) ?? [])].map((o): [string, string] => ["not_same_as", o]),
+        ];
+        for (const [rel, other] of issueEdges) {
+          const o = other ? complaints.get(other) : undefined;
+          if (!o) continue;
+          nodes.set(o.id, { id: o.id, kind: "complaint", label: `${o.category ?? "uncategorized"} · ${o.status}` });
+          edges.push({ from: c.id, to: o.id, rel });
         }
         for (const a of attempts.values()) {
           if (a.complaintId !== c.id) continue;

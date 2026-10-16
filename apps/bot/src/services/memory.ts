@@ -22,9 +22,11 @@ import type {
   AgentMemory,
   CategoryId,
   ComplaintDraft,
+  ComplaintState,
   FilingErrorCode,
   FilingStatus,
   FilingTarget,
+  MemoryItem,
   RelatedComplaint,
   RelatedComplaints,
   RelatedComplaintsQuery,
@@ -35,7 +37,8 @@ import type {
   WorkflowPattern,
 } from "../core/contracts.js";
 import { haversineMeters, nowIso, questionFromEvent } from "../core/contracts.js";
-import { getCategory } from "../core/knowledge.js";
+import { getCategory, isOpenDataBacked, requiredFieldsFor, resolveDirection } from "../core/knowledge.js";
+import { readyForApprovalItem } from "./agent-memory.js";
 import { esc } from "../telegram/messages.js";
 
 // ---------------------------------------------------------------------------
@@ -425,4 +428,242 @@ export async function readRelated(
     ...related.others.ids.map((id) => ({ id, content: "another resident's report (same category, same line / nearby)", score: 0.8 })),
   ];
   return { related, docs };
+}
+
+// ---------------------------------------------------------------------------
+// D. same issue across residents (#5): "this was already raised — raise another?"
+//
+// Match = the top episodic recall hit ACROSS residents (no chatId scope; scope = category + line / geo)
+// whose recall score ≥ SAME_ISSUE.threshold AND structural agreement with the authoritative complaint row:
+// same category; transit: same line + compatible direction + |Δ incident time| ≤ 3 h; geo: ≤ 100 m.
+// Privacy: other residents' chat ids / contact fields never leave this function; a match carries only the
+// neutral (classifier) description, a time bucket, the status and the official reference.
+// ---------------------------------------------------------------------------
+export const SAME_ISSUE = {
+  /**
+   * On the recall score (0.5·relevance + 0.3·recency + 0.2·importance); tuned on fixtures/duplicates/*.json
+   * (hash embedder): matches 0.78 (40 min apart, other station) / 0.83 (paraphrase) / 0.88 (same words);
+   * an unrelated report on the same line + direction + time scores 0.65. Structural misses (other line,
+   * opposite direction, 5 h apart) score 0.81–0.88 and are rejected by the gate, not by the threshold.
+   */
+  threshold: 0.7,
+  maxDeltaMs: 3 * 3600_000,
+  radiusMeters: 100,
+  /** Recall window (the time gate decides; this only bounds the candidate pool). */
+  sinceMs: 24 * 3600_000,
+  /** "N people reported this in the last 2 hours". */
+  countWindowMs: 2 * 3600_000,
+  limit: 30,
+} as const;
+
+/** Statuses an original must NOT be in to count as "already raised". */
+export const NOT_RAISED: readonly string[] = NOT_REPORTED_OTHERS;
+
+export type SameIssueChoice = "join" | "different";
+
+export type SameIssueBreakdown = {
+  score: number;
+  threshold: number;
+  relevance: number;
+  relevanceKind: ScoredMemory["breakdown"]["relevanceKind"];
+  recency: number;
+  importance: number;
+  sameLine: boolean | null;
+  direction: "same" | "unknown" | null;
+  deltaMinutes: number | null;
+  distanceMeters: number | null;
+};
+
+export type SameIssueMatch = {
+  originalId: string;
+  memoryId: string;
+  category: CategoryId;
+  line: string | null;
+  /** Canonical MTA direction label of the original (or as said), null when unknown. */
+  direction: string | null;
+  station: string | null;
+  /** The original's classifier description (neutral by construction), never the resident's own words. */
+  neutralDescription: string;
+  /** "40 min ago", "about 2 hours ago" (from the incident time, else when it was reported). */
+  timeBucket: string;
+  status: ComplaintState;
+  officialRequestNumber: string | null;
+  /** Residents who already joined the original. */
+  supporters: number;
+  /** Distinct other residents who reported / joined this issue in the last 2 hours. */
+  recentReporters: number;
+  breakdown: SameIssueBreakdown;
+};
+
+type AgreementInput = Pick<ComplaintDraft, "category" | "transit" | "location" | "createdAt">;
+export type SameIssueAgreement = { ok: boolean; reason: string | null; sameLine: boolean | null; direction: "same" | "unknown" | null; deltaMinutes: number | null; distanceMeters: number | null };
+
+const canonDirection = (line: string | null | undefined, d: string | null | undefined): string | null => (d?.trim() ? (resolveDirection(line, d) ?? d.trim().toLowerCase()) : null);
+const incidentMs = (d: Pick<ComplaintDraft, "transit" | "createdAt">) => {
+  const t = d.transit?.incidentTime ? Date.parse(d.transit.incidentTime) : NaN;
+  return Number.isFinite(t) ? t : Date.parse(d.createdAt);
+};
+
+/** Structural agreement between the draft and another resident's complaint (the authoritative store row). */
+export function sameIssueAgreement(draft: AgreementInput, other: AgreementInput): SameIssueAgreement {
+  const no = (reason: string): SameIssueAgreement => ({ ok: false, reason, sameLine: null, direction: null, deltaMinutes: null, distanceMeters: null });
+  if (!draft.category || draft.category !== other.category) return no("category");
+  if (requiredFieldsFor(draft.category).includes("transit")) {
+    const line = draft.transit?.line ?? null;
+    if (!line || other.transit?.line !== line) return no("line");
+    const a = canonDirection(line, draft.transit?.direction);
+    const b = canonDirection(line, other.transit?.direction);
+    if (a && b && a !== b) return no("direction");
+    const deltaMs = Math.abs(incidentMs(draft) - incidentMs(other));
+    if (!Number.isFinite(deltaMs) || deltaMs > SAME_ISSUE.maxDeltaMs) return no("time");
+    return { ok: true, reason: null, sameLine: true, direction: a && b ? "same" : "unknown", deltaMinutes: Math.round(deltaMs / 60_000), distanceMeters: null };
+  }
+  // geo categories (none today; the code path stays for later)
+  const p = draft.location;
+  const q = other.location;
+  if (p.latitude == null || p.longitude == null || q.latitude == null || q.longitude == null) return no("geo");
+  const distanceMeters = haversineMeters(p.latitude, p.longitude, q.latitude, q.longitude);
+  if (distanceMeters > SAME_ISSUE.radiusMeters) return no("distance");
+  return { ok: true, reason: null, sameLine: null, direction: null, deltaMinutes: null, distanceMeters: Math.round(distanceMeters) };
+}
+
+export function timeBucket(at: string | number, nowMs = Date.now()): string {
+  const min = Math.max(0, Math.round((nowMs - (typeof at === "number" ? at : Date.parse(at))) / 60_000));
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  return h === 1 ? "about an hour ago" : `about ${h} hours ago`;
+}
+
+/** The recall query for a draft: its own neutral memory text (classifier description + transit facts). */
+export function sameIssueQueryText(draft: ComplaintDraft): string {
+  return readyForApprovalItem(draft).text;
+}
+
+/** Episodic memory of the resident's choice (neutral: the draft's classifier description + transit facts). */
+export function sameIssueChoiceItem(draft: ComplaintDraft, originalId: string, choice: SameIssueChoice): MemoryItem {
+  const what = choice === "join" ? "Added to an existing report instead of filing a new one" : "Said this is a different issue from an existing report";
+  return {
+    id: `mem_same_${draft.id}_${originalId}`,
+    kind: "episodic",
+    text: `${what}: ${sameIssueQueryText(draft)}`,
+    category: draft.category,
+    chatId: draft.telegramChatId,
+    line: draft.transit?.line ?? null,
+    geo: draft.location.latitude != null && draft.location.longitude != null ? { lat: draft.location.latitude, lon: draft.location.longitude } : null,
+    importance: choice === "join" ? 0.6 : 0.4,
+    data: { complaintId: draft.id, sameIssueAs: originalId, sameIssueChoice: choice, incidentTime: draft.transit?.incidentTime ?? null, direction: draft.transit?.direction ?? null },
+    source: `complaint:${draft.id}`,
+    about: [
+      { table: "complaint", id: draft.id },
+      { table: "complaint", id: originalId },
+    ],
+  };
+}
+
+/**
+ * Has another resident already raised the same issue? The best match (recall score ≥ threshold + structural
+ * agreement) or null. Joined supporters' memory items count towards the original.
+ */
+export async function findSameIssue(
+  deps: { store: Store; memory: AgentMemory | null | undefined; now?: () => number },
+  draft: ComplaintDraft,
+  opts: { queryText?: string; threshold?: number } = {},
+): Promise<SameIssueMatch | null> {
+  const { store, memory } = deps;
+  if (!memory || !draft.category) return null;
+  const nowMs = deps.now?.() ?? Date.now();
+  const threshold = opts.threshold ?? SAME_ISSUE.threshold;
+  const transit = requiredFieldsFor(draft.category).includes("transit");
+  const line = transit ? (draft.transit?.line ?? null) : null;
+  const lat = draft.location.latitude;
+  const lon = draft.location.longitude;
+  const geo = !transit && lat != null && lon != null ? { lat, lon, radiusMeters: SAME_ISSUE.radiusMeters } : null;
+  if (transit ? !line : !geo) return null;
+  const queryText = opts.queryText ?? sameIssueQueryText(draft);
+  // ACROSS residents: no chatId in the scope (privacy is enforced below: nothing but neutral facts leaves).
+  const hits = await recallWithin(memory, { kind: "episodic", text: queryText, scope: { category: draft.category, line, geo }, sinceMs: SAME_ISSUE.sinceMs, limit: SAME_ISSUE.limit });
+  const links = await store.getIssueLinks?.(draft.id).catch(() => null);
+  const dismissed = new Set(links?.notSameAs ?? []);
+  const rows = new Map<string, Promise<ComplaintDraft | null>>();
+  const load = (id: string) => {
+    if (!rows.has(id)) rows.set(id, store.getComplaint(id).catch(() => null));
+    return rows.get(id)!;
+  };
+  type Cand = { original: ComplaintDraft; hit: ScoredMemory; ag: SameIssueAgreement };
+  const cands: Cand[] = [];
+  for (const h of hits) {
+    if (h.chatId == null || h.chatId === draft.telegramChatId) continue; // other residents only (own reports: relatedCardLines)
+    const data = h.data as { complaintId?: unknown; sameIssueAs?: unknown; sameIssueChoice?: unknown };
+    if (data.sameIssueChoice === "different" || typeof data.complaintId !== "string" || data.complaintId === draft.id) continue;
+    let original = await load(data.sameIssueChoice === "join" && typeof data.sameIssueAs === "string" ? data.sameIssueAs : data.complaintId);
+    if (original?.sameIssueAs) original = await load(original.sameIssueAs);
+    if (!original || original.id === draft.id || original.telegramChatId === draft.telegramChatId || dismissed.has(original.id)) continue;
+    if (NOT_RAISED.includes(original.status)) continue;
+    const ag = sameIssueAgreement(draft, original);
+    if (!ag.ok || h.score < threshold) continue;
+    cands.push({ original, hit: h, ag });
+  }
+  if (!cands.length) return null;
+  const best = cands.reduce((a, b) => (b.hit.score > a.hit.score ? b : a));
+  const recent = new Set(cands.filter((c) => Date.parse(c.hit.createdAt) >= nowMs - SAME_ISSUE.countWindowMs).map((c) => c.hit.chatId));
+  const o = best.original;
+  const supporters = (await store.getIssueLinks?.(o.id).catch(() => null))?.supporters ?? o.supporters ?? 0;
+  const b = best.hit.breakdown;
+  return {
+    originalId: o.id,
+    memoryId: best.hit.id,
+    category: o.category!,
+    line: o.transit?.line ?? null,
+    direction: o.transit?.direction?.trim() ? (resolveDirection(o.transit.line, o.transit.direction) ?? o.transit.direction.trim()) : null,
+    station: o.transit?.station ?? null,
+    neutralDescription: o.classification?.description?.trim() ?? "",
+    timeBucket: timeBucket(transit ? incidentMs(o) : Date.parse(o.createdAt), nowMs),
+    status: o.status,
+    officialRequestNumber: o.officialRequestNumber,
+    supporters,
+    recentReporters: recent.size,
+    breakdown: {
+      score: best.hit.score,
+      threshold,
+      relevance: b.relevance,
+      relevanceKind: b.relevanceKind,
+      recency: b.recency,
+      importance: b.importance,
+      sameLine: best.ag.sameLine,
+      direction: best.ag.direction,
+      deltaMinutes: best.ag.deltaMinutes,
+      distanceMeters: best.ag.distanceMeters,
+    },
+  };
+}
+
+/** Human status of an original for the prompt ("filed", "draft, not filed", …) + its official reference. */
+export function sameIssueStatus(m: Pick<SameIssueMatch, "status" | "officialRequestNumber" | "category">): string {
+  const s = statusText({ id: "", status: m.status, createdAt: "", officialRequestNumber: null, statusReason: null, line: null, distanceMeters: null });
+  if (!m.officialRequestNumber) return s;
+  return `${s}, ${isOpenDataBacked(m.category) ? "SR" : "MTA ref"} ${m.officialRequestNumber}`;
+}
+
+/** "an A train delay, Downtown & Brooklyn, around 14 St" */
+export function sameIssueLabel(m: Pick<SameIssueMatch, "category" | "line" | "direction" | "station">): string {
+  return [issueLabel(m.category, m.line, false), m.direction, m.station ? `around ${m.station}` : null].filter(Boolean).join(", ");
+}
+
+/** "Looks like this was already raised: …" (HTML). Only neutral facts; the breakdown line is for the demo. */
+export function sameIssuePrompt(m: SameIssueMatch): string {
+  const lines = [`🔁 Looks like this was already raised: ${esc(sameIssueLabel(m))}, ${esc(m.timeBucket)} (status: ${esc(sameIssueStatus(m))}).`];
+  if (m.neutralDescription) lines.push(`<i>“${esc(m.neutralDescription)}”</i>`);
+  if (m.recentReporters > 0) {
+    const n = m.recentReporters;
+    lines.push(`👥 ${n} ${n === 1 ? "person" : "people"} reported this in the last ${Math.round(SAME_ISSUE.countWindowMs / 3600_000)} hours.`);
+  }
+  if (m.supporters > 0) lines.push(`➕ ${m.supporters} ${m.supporters === 1 ? "person has" : "people have"} added themselves to it.`);
+  lines.push("", "Do you want to raise another issue, or add yourself to that one?");
+  const b = m.breakdown;
+  const facts = [b.sameLine ? "same line" : null, b.direction === "same" ? "same direction" : b.direction === "unknown" ? "direction unknown" : null, b.deltaMinutes != null ? `${b.deltaMinutes} min apart` : null, b.distanceMeters != null ? `${b.distanceMeters} m apart` : null]
+    .filter(Boolean)
+    .join(", ");
+  lines.push(`<i>🧠 match ${b.score.toFixed(2)} ≥ ${b.threshold} (relevance ${b.relevance.toFixed(2)} ${b.relevanceKind} · recency ${b.recency.toFixed(2)} · importance ${b.importance.toFixed(2)}${facts ? `; ${facts}` : ""})</i>`);
+  return lines.join("\n");
 }
