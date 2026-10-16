@@ -1,12 +1,20 @@
 /**
  * Read-mostly JSON API for the dashboard (+ scripted event endpoint POST /api/event and the
  * optional Telegram webhook). node:http, CORS *.
+ *
+ * Auth (#23): with OPERATOR_API_TOKEN set, GET /api/* needs `Authorization: Bearer <token>`; with it unset,
+ * only loopback callers are trusted (local dev). /api/health is always open. An untrusted caller may still
+ * read GET /api/memory?complaintId=… (the complaint id acts as a capability), with chat ids / contact fields
+ * redacted. Everything else ⇒ 401 JSON. POST /api/event and /telegram/webhook are unchanged.
  */
+import { timingSafeEqual } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
-import type { CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
-import { CATEGORIES, InboundEvent } from "../core/contracts.js";
+import type { AgentMemory, CatalogEntry, CategoryId, Store, Tracer } from "../core/contracts.js";
+import { CATEGORIES, InboundEvent, MemoryKind } from "../core/contracts.js";
+import { createAgentMemory, recallForComplaintCached } from "../services/agent-memory.js";
+import { categorySchemaView } from "../services/form-schema-memory.js";
 import type { Orchestrator } from "../core/orchestrator.js";
 import { providerReport } from "../integrations/index.js";
 import { env, hasTelegram, REPO_ROOT } from "../integrations/env.js";
@@ -18,9 +26,36 @@ export type ApiDeps = {
   store: Store;
   tracer: Tracer;
   orchestrator: Orchestrator;
+  /** Agent memory (#4) for GET /api/memory. Absent ⇒ keyword-only recall over the store. */
+  memory?: AgentMemory | null;
   /** Set when Telegram runs in webhook mode. Read lazily so the bot can start after the server. */
   getWebhook?: () => WebhookHandler | null;
 };
+
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+/** Bearer token match when OPERATOR_API_TOKEN is set; otherwise a loopback caller counts as the operator. */
+export function isOperator(req: IncomingMessage, token = env.OPERATOR_API_TOKEN): boolean {
+  if (!token) return LOOPBACK.has(req.socket.remoteAddress ?? "");
+  const m = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "");
+  if (!m) return false;
+  const a = Buffer.from(m[1].trim());
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+const SENSITIVE_KEYS = new Set(["telegramChatId", "chatId", "residentId", "contactName", "contactEmail", "contactPhone"]);
+
+/** Deep-copy with chat ids and contact fields replaced, for responses to unauthenticated callers. */
+export function redactSensitive<T>(v: T): T {
+  if (Array.isArray(v)) return v.map(redactSensitive) as T;
+  if (v && typeof v === "object") {
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [k, SENSITIVE_KEYS.has(k) ? (x == null ? x : "(redacted)") : redactSensitive(x)]),
+    ) as T;
+  }
+  return v;
+}
 
 function json(res: ServerResponse, status: number, body: unknown) {
   const s = JSON.stringify(body);
@@ -41,12 +76,13 @@ async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<string
 
 export function createApiServer(deps: ApiDeps): Server {
   const { store, orchestrator } = deps;
+  const memory = deps.memory ?? createAgentMemory({ store });
   const started = new Date().toISOString();
 
   return createServer(async (req, res) => {
     res.setHeader("access-control-allow-origin", "*");
     res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-    res.setHeader("access-control-allow-headers", "content-type");
+    res.setHeader("access-control-allow-headers", "content-type, authorization");
     if (req.method === "OPTIONS") {
       res.writeHead(204).end();
       return;
@@ -66,6 +102,11 @@ export function createApiServer(deps: ApiDeps): Server {
       if (seg[0] !== "api") return json(res, 404, { error: "not found" });
 
       if (req.method === "GET") {
+        const authed = isOperator(req);
+        const capabilityRead = seg[1] === "memory" && !seg[2] && url.searchParams.has("complaintId");
+        if (!authed && seg[1] !== "health" && !capabilityRead) {
+          return json(res, 401, { error: "unauthorized", message: "Authorization: Bearer <OPERATOR_API_TOKEN> required" });
+        }
         switch (seg[1]) {
           case "health":
             return json(res, 200, { ok: true, startedAt: started, store: store.backend, telegram: hasTelegram(), providers: providerReport() });
@@ -77,7 +118,8 @@ export function createApiServer(deps: ApiDeps): Server {
               const evidence = attempts.flatMap((a) => a.evidence);
               const traceUrl = c.traceId ? deps.tracer.traceUrl(c.traceId) : null;
               const transitions = await listTransitions(store, c.id);
-              return json(res, 200, { complaint: redactComplaint(c), attempts, evidence, transitions, traceUrl, sessionUrl: deps.tracer.sessionUrl(c.telegramChatId) });
+              const sameIssue = await sameIssueOf(store, c.id);
+              return json(res, 200, { complaint: redactComplaint(c), attempts, evidence, transitions, sameIssue, traceUrl, sessionUrl: deps.tracer.sessionUrl(c.telegramChatId) });
             }
             const list = await store.listComplaints({ chatId: url.searchParams.get("chatId") ?? undefined, limit: Number(url.searchParams.get("limit") ?? 100) });
             return json(res, 200, { complaints: list.map(redactComplaint) });
@@ -115,6 +157,28 @@ export function createApiServer(deps: ApiDeps): Server {
               return hit ? json(res, 200, { entry: hit, source }) : json(res, 404, { error: "catalog entry not found" });
             }
             return json(res, 200, { entries, count: entries.length, source });
+          }
+          case "categories": {
+            // #11: GET /api/categories/:id/schema → the form structure learned from filing runs, with provenance
+            if (!seg[2] || seg[3] !== "schema" || seg.length > 4) return json(res, 404, { error: "not found" });
+            const view = await categorySchemaView(store, decodeURIComponent(seg[2]));
+            return view ? json(res, 200, view) : json(res, 404, { error: "no form schema learned for this category yet" });
+          }
+          case "memory": {
+            // What the agent recalls and why: { items: ScoredMemory[] } with score breakdowns (UI in #14).
+            const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 10) || 10));
+            const complaintId = url.searchParams.get("complaintId");
+            if (complaintId) {
+              const c = await store.getComplaint(complaintId);
+              if (!c) return json(res, 404, { error: "complaint not found" });
+              // cached: true ⇒ answered from the recall run right after the approval card was sent (#22)
+              const { query, items, cached } = await recallForComplaintCached(memory, c, limit);
+              const body = { complaintId: c.id, query, items, cached };
+              return json(res, 200, authed ? body : redactSensitive(body));
+            }
+            const kind = MemoryKind.safeParse(url.searchParams.get("kind"));
+            const items = await memory.recall({ text: url.searchParams.get("q") ?? undefined, kind: kind.success ? kind.data : undefined, limit });
+            return json(res, 200, { items });
           }
           case "workflow-patterns":
             return json(res, 200, { patterns: await allPatterns(store) });
@@ -186,6 +250,23 @@ async function listTransitions(store: Store, complaintId: string): Promise<Trans
     console.warn("[api] listTransitions failed:", (err as Error).message);
   }
   return [];
+}
+
+/**
+ * #5 cluster for the dashboard (UI in #14): the original this complaint belongs to (itself when others joined it),
+ * its supporters' complaint ids, and the reports the resident said are different. Complaint ids only.
+ */
+async function sameIssueOf(store: Store, complaintId: string): Promise<{ originalId: string | null; supporters: number; joined: string[]; notSameAs: string[] } | null> {
+  if (!store.getIssueLinks) return null;
+  try {
+    const own = await store.getIssueLinks(complaintId);
+    const originalId = own.sameIssueAs ?? (own.joined.length ? complaintId : null);
+    const cluster = originalId && originalId !== complaintId ? await store.getIssueLinks(originalId) : own;
+    return { originalId, supporters: originalId ? cluster.supporters : 0, joined: originalId ? cluster.joined : [], notSameAs: own.notSameAs };
+  } catch (err) {
+    console.warn("[api] getIssueLinks failed:", (err as Error).message);
+    return null;
+  }
 }
 
 async function allPatterns(store: Store) {

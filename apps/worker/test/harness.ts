@@ -39,6 +39,8 @@ export interface RunResult {
   questions: WorkerQuestion[];
   events: Recorder["events"];
   submitClicked: boolean;
+  /** ctx.state.formSchema at the end of the run (what main.ts copies into WorkerResult.formSchema). */
+  formSchema: WorkerState["formSchema"];
   session: BrowserSession;
 }
 
@@ -49,7 +51,7 @@ export interface RunResult {
 export async function runAdapter(adapter: FormAdapter, payload: FilingPayload, answers: Record<string, WorkerAnswer> = {}): Promise<RunResult> {
   const rec = new Recorder(mkdtempSync(join(tmpdir(), "relay-worker-test-")));
   const session = await openBrowser(payload, () => {});
-  const state: WorkerState = { submitClicked: false, finalUrl: null };
+  const state: WorkerState = { submitClicked: false, finalUrl: null, formSchema: null };
   const actions: AdapterAction[] = [];
   const questions: WorkerQuestion[] = [];
   let current: WorkerStep = "navigate";
@@ -94,5 +96,5 @@ export async function runAdapter(adapter: FormAdapter, payload: FilingPayload, a
     if (!(err instanceof Outcome)) throw err;
     outcome = { status: err.status, errorCode: err.errorCode, message: err.message, data: err.data };
   }
-  return { outcome, actions, questions, events: rec.events, submitClicked: state.submitClicked, session };
+  return { outcome, actions, questions, events: rec.events, submitClicked: state.submitClicked, formSchema: state.formSchema, session };
 }

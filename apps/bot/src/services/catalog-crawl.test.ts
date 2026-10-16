@@ -10,6 +10,9 @@ import {
   extractPhone,
   fileableCatalogEntries,
   filingScore,
+  isEmergencyArticle,
+  isGenericNav,
+  mergeCatalog,
   parseServiceRequestCall,
   type RawArticle,
   serviceRequestUrl,
@@ -88,6 +91,7 @@ describe("text helpers", () => {
     expect(filingScore("Report illegal parking.")).toBe(3);
     expect(filingScore("Submit a Reduced-Fare MetroCard claim form.")).toBe(2);
     expect(filingScore("Learn more about X")).toBe(0);
+    expect(filingScore("Street Lighting Repair Form")).toBe(1);
   });
   it("slugify", () => {
     expect(slugify("Noise from Bar, Club, or Restaurant")).toBe("noise-from-bar-club-or-restaurant");
@@ -109,7 +113,8 @@ describe("buildCatalogEntry", () => {
     expect(e.officialUrl).toBe(`https://portal.311.nyc.gov/servicerequest-create/?caid=${CAID}&kasid=${KASID}`);
     expect(e.agency).toBe("NYPD");
     expect(e.automation).toBe("handoff");
-    expect(e.hasCaptcha).toBe(false);
+    // Page 1 of an SR form shows no CAPTCHA; a later step might → unknown (#28).
+    expect(e.hasCaptcha).toBeNull();
     expect(e.requiresLogin).toBe(true);
   });
 
@@ -165,5 +170,83 @@ describe("fileableCatalogEntries", () => {
     expect(e.automation).toBe("adapter:mta-subway-delay");
     expect(e.requiredFields).toEqual(["transit", "description"]);
     expect(e.lastVerifiedAt).toBe(NOW);
+  });
+});
+
+describe("mergeCatalog (#28)", () => {
+  it("dedupes by KA number, keeping the fileable row", () => {
+    const fileable = fileableCatalogEntries(NOW);
+    const ka = fileable[0].kaNumber;
+    const base = buildCatalogEntry(srArticle("NYPD"), { topic: null, summary: null, probe: null, now: NOW });
+    const merged = mergeCatalog(fileable, [{ ...base, id: "buses-and-subways", kaNumber: ka }, base]);
+    expect(merged.filter((e) => e.kaNumber === ka).map((e) => e.id)).toEqual([fileable[0].id]);
+    expect(merged.map((e) => e.id)).toContain("noise-from-bar-club-or-restaurant");
+  });
+});
+
+describe("filing link selection (#28)", () => {
+  const ctx = { topic: null, summary: null, probe: null, now: NOW };
+  const ext = (text: string, href: string) => ({ cls: "externallink", text, href, onclick: null });
+  const art = (cards: RawArticle["cards"]): RawArticle => ({ kaNumber: "KA-09999", title: "X", cards });
+
+  it("finds a 'Repair Form' link (street-light-complaint)", () => {
+    const e = buildCatalogEntry(
+      art([
+        { title: null, text: "Report a street light problem.", links: [] },
+        { title: "Report Street Light Conditions", text: "", links: [ext("Street Lighting Repair Form", "https://service.nyctmc.org/alias3/main.asp")] },
+      ]),
+      ctx,
+    );
+    expect(e).toMatchObject({ channel: "external-site", officialUrl: "https://service.nyctmc.org/alias3/main.asp", automation: "handoff" });
+  });
+
+  it("prefers the intro's link over an equally worded one in another complaint section (gym)", () => {
+    const e = buildCatalogEntry(
+      art([
+        { title: null, text: "", links: [ext("Report a problem with a gym or health spa membership.", "https://www.nyc.gov/site/dca/consumers/file-complaint.page")] },
+        { title: '"Click to Cancel" Complaint', text: "", links: [ext('File a "Click to Cancel" complaint against a gym.', "https://www.nyc.gov/main/click-to-cancel")] },
+      ]),
+      ctx,
+    );
+    expect(e.officialUrl).toBe("https://www.nyc.gov/site/dca/consumers/file-complaint.page");
+  });
+
+  it("never picks generic navigation (find-a-school, dog license lookup)", () => {
+    expect(isGenericNav("https://www.schools.nyc.gov/find-a-school")).toBe(true);
+    expect(isGenericNav("https://a816-healthpsi.nyc.gov/DogLicense/")).toBe(true);
+    expect(isGenericNav("https://www.nyc.gov/site/dca/consumers/file-complaint.page")).toBe(false);
+    const e = buildCatalogEntry(
+      art([{ title: "Reporting a Student Absence", text: "", links: [ext("Contact your school.", "https://www.schools.nyc.gov/find-a-school")] }]),
+      ctx,
+    );
+    expect(e.officialUrl).toBeNull();
+  });
+});
+
+describe("emergency (Call 911) articles (#28)", () => {
+  const ctx = { topic: null, summary: null, probe: null, now: NOW };
+  const banner = (cards: RawArticle["cards"], emergencyBanner = true): RawArticle => ({ kaNumber: "KA-02048", title: "Gas Leak", cards, emergencyBanner });
+
+  it("a 911 banner with no filing route is an emergency with automation none", () => {
+    const raw = banner([{ title: null, text: "", links: [] }]);
+    expect(isEmergencyArticle(raw)).toBe(true);
+    const e = buildCatalogEntry(raw, ctx);
+    expect(e).toMatchObject({ emergency: true, automation: "none", officialUrl: null });
+    expect(CatalogEntry.parse(e).emergency).toBe(true);
+  });
+
+  it("an intro that opens with 'Call 911' is an emergency", () => {
+    expect(isEmergencyArticle(banner([{ title: null, text: "Call 911 if you smell gas.", links: [] }], false))).toBe(true);
+  });
+
+  it("a banner next to an SR form is not an emergency (it only says 'if it is an emergency…')", () => {
+    const raw = { ...srArticle("NYPD"), emergencyBanner: true };
+    expect(isEmergencyArticle(raw)).toBe(false);
+    expect(buildCatalogEntry(raw, ctx)).toMatchObject({ emergency: false, automation: "handoff" });
+  });
+
+  it("emergency defaults to false for rows written before #28", () => {
+    const { emergency: _e, ...old } = buildCatalogEntry(srArticle("NYPD"), ctx);
+    expect(CatalogEntry.parse(old).emergency).toBe(false);
   });
 });

@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "check": "pnpm -r typecheck && pnpm --filter @311relay/worker build && pnpm --filter @311relay/bot exec vitest run",
     "seed": "pnpm --filter @311relay/bot seed",
     "demo": "pnpm --filter @311relay/bot demo"
   }

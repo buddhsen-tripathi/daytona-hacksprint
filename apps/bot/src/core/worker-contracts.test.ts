@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { FilingErrorCode, FilingPayload, FormRecipe, formSchemaFromEvent, type WorkerEvent } from "./contracts.js";
+import { FilingErrorCode, FilingPayload, FormRecipe, FormSchema } from "./contracts.js";
 
-// #9 additive worker contracts: automation / recipe on the payload, NO_ADAPTER, form_schema events.
+// #9 additive worker contracts: automation / recipe on the payload, NO_ADAPTER. The form_schema event/shape is #11's (FormSchema).
 describe("worker contracts (#9)", () => {
   const base = {
     attemptId: "a",
@@ -30,11 +30,9 @@ describe("worker contracts (#9)", () => {
     expect(FilingErrorCode.parse("NO_ADAPTER")).toBe("NO_ADAPTER");
   });
 
-  it("formSchemaFromEvent", () => {
-    const schema = { adapter: "handoff", category: "graffiti", url: "https://portal.311.nyc.gov/x", complete: true, steps: [{ name: "form", fields: [{ label: "Describe", type: "textarea", required: true }] }] };
-    const e: WorkerEvent = { ts: "t", step: "inspect", level: "info", message: "form_schema", data: { schema } };
-    expect(formSchemaFromEvent(e)).toEqual(schema);
-    expect(formSchemaFromEvent({ ...e, message: "action" })).toBeNull();
-    expect(formSchemaFromEvent({ ...e, data: { schema: { adapter: 1 } } })).toBeNull();
+  it("the hand-off / recipe adapters' form schema is #11's FormSchema", () => {
+    const schema = { steps: [{ title: "form", fields: [{ label: "Describe", type: "textarea", required: true, step: "form" }, { label: "Line", type: "button-choice", required: true, options: ["A Line"], step: "form" }] }], capturedAt: "2026-10-16T00:00:00.000Z" };
+    expect(FormSchema.parse(schema)).toEqual(schema);
+    expect(FormSchema.safeParse({ ...schema, steps: [{ title: "form", fields: [{ label: "x", type: "choice", required: true, step: "form" }] }] }).success).toBe(false);
   });
 });

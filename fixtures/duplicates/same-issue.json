@@ -1,0 +1,21 @@
+{
+  "name": "same issue, same line + direction, 10 min apart",
+  "original": {
+    "line": "A",
+    "direction": "Downtown & Queens",
+    "station": "14 St",
+    "description": "The A train was held at 14 St for about 25 minutes with no announcements.",
+    "incidentMinutesAgo": 30,
+    "reportedMinutesAgo": 25
+  },
+  "incoming": {
+    "line": "A",
+    "direction": "downtown",
+    "station": "14 St",
+    "description": "The A train was held at 14 St for 25 minutes and there were no announcements.",
+    "incidentMinutesAgo": 20
+  },
+  "expect": "match",
+  "reason": null,
+  "category": "subway-delay"
+}

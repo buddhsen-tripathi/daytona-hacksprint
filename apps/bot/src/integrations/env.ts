@@ -47,6 +47,10 @@ export const env = {
   get OPENROUTER_MODEL() { return str("OPENROUTER_MODEL", "anthropic/claude-sonnet-4.5"); },
   get OPENROUTER_VISION_MODEL() { return str("OPENROUTER_VISION_MODEL", str("OPENROUTER_MODEL", "anthropic/claude-sonnet-4.5")); },
   get OPENROUTER_STT_MODEL() { return str("OPENROUTER_STT_MODEL"); },
+  /** Agent-memory embeddings (#4). */
+  get OPENROUTER_EMBED_MODEL() { return str("OPENROUTER_EMBED_MODEL", "openai/text-embedding-3-small"); },
+  /** Embedding cache directory relative to the repo root ("off" disables the on-disk cache). */
+  get OPENROUTER_EMBED_CACHE_DIR() { return str("OPENROUTER_EMBED_CACHE_DIR", ".runs/embed-cache"); },
   get DAYTONA_API_KEY() { return str("DAYTONA_API_KEY"); },
   get DAYTONA_SNAPSHOT() { return str("DAYTONA_SNAPSHOT"); },
   get SANDBOX_PROVIDER() { return str("SANDBOX_PROVIDER"); },
@@ -66,6 +70,8 @@ export const env = {
   /** "1" lets real-site adapters click the FINAL Submit (after the resident's approval). Unset ⇒ dry run: fill everything, stop before Submit. */
   get ALLOW_REAL_SUBMIT() { return str("ALLOW_REAL_SUBMIT"); },
   get PORT_API() { return int("PORT_API", 3312); },
+  /** Bearer token for the operator API (#23). Unset ⇒ only loopback callers are trusted. */
+  get OPERATOR_API_TOKEN() { return str("OPERATOR_API_TOKEN"); },
 };
 
 export function hasTelegram(): boolean {

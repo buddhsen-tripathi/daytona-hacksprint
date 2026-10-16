@@ -110,7 +110,8 @@ function cleanAttrs(attrs: Record<string, string | number | boolean | null | und
 // ---------------------------------------------------------------------------
 export function spanKindFor(name: string): OpenInferenceSpanKind {
   if (name === "intake.extract" || name === "routing.classify" || name.startsWith("llm.")) return OpenInferenceSpanKind.LLM;
-  if (name === "nyc311.search_duplicates" || name === "mta.live_alerts") return OpenInferenceSpanKind.RETRIEVER;
+  if (name === "nyc311.search_duplicates" || name === "mta.live_alerts" || name === "memory.recall") return OpenInferenceSpanKind.RETRIEVER;
+  if (name === "memory.remember") return OpenInferenceSpanKind.TOOL;
   if (name === "location.validate" || name === "telegram.respond" || name === "receipt.verify") return OpenInferenceSpanKind.TOOL;
   if (/^(daytona|anchor|browser|sandbox|worker|geosearch|nyc311)\./.test(name)) return OpenInferenceSpanKind.TOOL;
   if (/^(eval|evaluation)\./.test(name)) return OpenInferenceSpanKind.EVALUATOR;
@@ -258,7 +259,7 @@ export function createTracer(opts: TracerOptions = {}): PhoenixTracer {
     return {
       set(k, v) {
         if (SENSITIVE_KEY.test(k)) return;
-        span.setAttribute(k, typeof v === "string" ? redactString(v) : v);
+        span.setAttribute(k, typeof v === "string" ? redactString(v) : Array.isArray(v) ? v.map((s) => redactString(String(s))) : v);
       },
       input(value) {
         setAll(

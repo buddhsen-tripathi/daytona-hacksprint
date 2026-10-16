@@ -12,6 +12,7 @@ type SpotCheck = {
   automation: string;
   officialUrlPrefix: string | null;
   hasCaptcha: boolean | null;
+  emergency?: boolean;
 };
 
 const read = <T>(rel: string): T => JSON.parse(readFileSync(resolve(REPO_ROOT, rel), "utf8")) as T;
@@ -36,8 +37,16 @@ describe("fixtures/nyc311-catalog.json", () => {
   });
 });
 
-describe("fixtures/catalog-spot-checks.json (15 hand-verified entries)", () => {
-  it("has 15 entries", () => expect(spot).toHaveLength(15));
+describe("fixtures/catalog-spot-checks.json (hand-verified entries)", () => {
+  it("has 18 entries (15 from #7 minus the KA-01014 duplicate, plus 4 #28 cases)", () => expect(spot).toHaveLength(18));
+
+  it("has one row per KA number and flags Call 911 articles as emergencies (#28)", () => {
+    const kas = catalog.map((e) => e.kaNumber);
+    expect(new Set(kas).size).toBe(kas.length);
+    for (const e of catalog) if (e.emergency) expect(e.automation, e.id).toBe("none");
+    expect(catalog.filter((e) => e.emergency).length).toBeGreaterThan(30);
+    for (const s of spot) expect(byId.get(s.id)?.emergency ?? false, s.id).toBe(s.emergency ?? false);
+  });
 
   it.each(spot.map((s) => [s.id, s] as const))("%s matches the snapshot", (_id, s) => {
     const e = byId.get(s.id);

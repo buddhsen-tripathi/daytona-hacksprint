@@ -3,6 +3,7 @@
  * scripted runner, and as the fallback when SurrealDB can't initialize.
  */
 import type {
+  CatalogEntry,
   CategoryId,
   ComplaintDraft,
   ComplaintLocation,
@@ -10,6 +11,7 @@ import type {
   DuplicateCandidate,
   FilingAttempt,
   FilingTarget,
+  MemoryRecord,
   OfficialRequest,
   Resident,
   Store,
@@ -17,6 +19,7 @@ import type {
 } from "../core/contracts.js";
 import { nowIso, shortId } from "../core/contracts.js";
 import { filterRelated } from "../services/memory.js";
+import { memoryMatches, searchMemoryRows } from "../services/agent-memory.js";
 
 const TERMINAL: ComplaintState[] = ["CANCELLED", "EMERGENCY_REFERRAL", "OUT_OF_SCOPE", "TRACKING", "SUBMITTED"];
 
@@ -27,6 +30,9 @@ const clone = <T>(v: T): T => structuredClone(v);
 export type MemoryStore = Store & {
   transitions: TransitionRecord[];
   listTransitions(complaintId: string): Promise<TransitionRecord[]>;
+  /** Same contract as SurrealStore's (#7/#28): upsert by id (merge), list everything. */
+  upsertCatalog(entries: CatalogEntry[]): Promise<number>;
+  listCatalog(): Promise<CatalogEntry[]>;
 };
 
 export function createMemoryStore(): MemoryStore {
@@ -42,6 +48,14 @@ export function createMemoryStore(): MemoryStore {
   const patterns: WorkflowPattern[] = [];
   const transitions: TransitionRecord[] = [];
   const similar = new Map<string, Set<string>>();
+  /** #5: supporter id → original id (complaint->same_issue_as->complaint), insertion order = oldest first. */
+  const sameIssue = new Map<string, string>();
+  /** #5: complaint id → ids it is not the same as (complaint->not_same_as->complaint). */
+  const notSame = new Map<string, Set<string>>();
+  const joinedTo = (originalId: string) => [...sameIssue.entries()].filter(([, o]) => o === originalId).map(([s]) => s);
+  const memories = new Map<string, MemoryRecord>();
+  const catalog = new Map<string, CatalogEntry>();
+  const learnedSchemas = new Map<string, Pick<CatalogEntry, "requiredFields" | "formSchema">>();
 
   const store: MemoryStore = {
     backend: "memory",
@@ -86,6 +100,9 @@ export function createMemoryStore(): MemoryStore {
       return clone(c);
     },
     async saveComplaint(c) {
+      // #5: `supporters` is derived from same_issue_as edges (a stale copy of the original never resets it)
+      const n = joinedTo(c.id).length;
+      if (n > 0) c = { ...c, supporters: n };
       complaints.set(c.id, clone(c));
       if (c.location.source !== "none") {
         const locId = await store.upsertLocation(c.location);
@@ -174,8 +191,71 @@ export function createMemoryStore(): MemoryStore {
       for (const id of similarIds) if (id !== complaintId) set.add(id);
       similar.set(complaintId, set);
     },
+    async linkSameIssue(supporterId, originalId) {
+      if (supporterId !== originalId) sameIssue.set(supporterId, originalId);
+      const n = joinedTo(originalId).length;
+      const o = complaints.get(originalId);
+      if (o && n > 0) complaints.set(originalId, { ...o, supporters: n });
+      return n;
+    },
+    async linkNotSameIssue(complaintId, otherId) {
+      if (complaintId === otherId) return;
+      const set = notSame.get(complaintId) ?? new Set<string>();
+      set.add(otherId);
+      notSame.set(complaintId, set);
+    },
+    async getIssueLinks(complaintId) {
+      const joined = joinedTo(complaintId);
+      return { sameIssueAs: sameIssue.get(complaintId) ?? null, joined, notSameAs: [...(notSame.get(complaintId) ?? [])], supporters: joined.length };
+    },
     async getWorkflowPatterns(args: { target: FilingTarget; category: CategoryId }) {
       return clone(patterns.filter((p) => p.target === args.target && p.category === args.category));
+    },
+
+    // -- NYC311 catalog (#7) + learned form schemas (#11): same semantics as surrealdb.ts
+    async upsertCatalog(entries) {
+      for (const e of entries) {
+        const prev = catalog.get(e.id);
+        const learned = learnedSchemas.get(e.id);
+        // a learned requiredFields list (from filing runs) survives a re-crawl
+        catalog.set(e.id, clone({ ...prev, ...e, ...(learned ? { requiredFields: learned.requiredFields, formSchema: learned.formSchema } : {}) }));
+      }
+      return entries.length;
+    },
+    async listCatalog() {
+      return clone([...catalog.values()].sort((a, b) => a.id.localeCompare(b.id)));
+    },
+    async updateCategorySchema(id, learned) {
+      learnedSchemas.set(id, clone({ requiredFields: learned.requiredFields, formSchema: learned.formSchema }));
+      const row = catalog.get(id);
+      if (row) catalog.set(id, clone({ ...row, ...learned }));
+    },
+
+    // -- agent memory (#4): same semantics as the SurrealQL in surrealdb.ts (shared helpers in services/agent-memory.ts)
+    async insertMemory(row) {
+      memories.set(row.id, clone(row));
+    },
+    async searchMemory(q) {
+      return clone(searchMemoryRows(memories.values(), q));
+    },
+    async listMemoryNeedingEmbedding({ model, limit }) {
+      return [...memories.values()]
+        .filter((m) => m.embedModel !== model)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .slice(0, limit)
+        .map((m) => ({ id: m.id, text: m.text, embedModel: m.embedModel }));
+    },
+    async setMemoryEmbedding(id, embedding, embedModel) {
+      const m = memories.get(id);
+      if (m) memories.set(id, { ...m, embedding: [...embedding], embedModel });
+    },
+    async listMemory(args) {
+      const list = [...memories.values()]
+        .filter((m) => memoryMatches(m, { kind: args?.kind, category: args?.category, chatId: args?.chatId, about: args?.about }))
+        .filter((m) => !args?.source || m.source === args.source)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, args?.limit ?? 100);
+      return clone(list.map(({ embedding: _e, ...rest }) => rest));
     },
 
     async graph(args) {
@@ -214,6 +294,16 @@ export function createMemoryStore(): MemoryStore {
           if (!o) continue;
           nodes.set(o.id, { id: o.id, kind: "complaint", label: `${o.category ?? "uncategorized"} · ${o.status}` });
           edges.push({ from: c.id, to: o.id, rel: "similar_to" });
+        }
+        const issueEdges: [string, string | undefined][] = [
+          ["same_issue_as", sameIssue.get(c.id)],
+          ...[...(notSame.get(c.id) ?? [])].map((o): [string, string] => ["not_same_as", o]),
+        ];
+        for (const [rel, other] of issueEdges) {
+          const o = other ? complaints.get(other) : undefined;
+          if (!o) continue;
+          nodes.set(o.id, { id: o.id, kind: "complaint", label: `${o.category ?? "uncategorized"} · ${o.status}` });
+          edges.push({ from: c.id, to: o.id, rel });
         }
         for (const a of attempts.values()) {
           if (a.complaintId !== c.id) continue;

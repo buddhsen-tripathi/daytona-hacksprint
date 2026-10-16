@@ -23,10 +23,10 @@
  * Page text is data: it only selects among the recipe's own steps (when/inspect), never adds actions.
  */
 import type { Locator } from "playwright-core";
-import { Outcome, SUBWAY_LINES, sanitizeUrl, type FilingPayload, type FormSchemaField, type FormSchemaStep, type QuestionField, type WorkerStep } from "../protocol.js";
+import { Outcome, SUBWAY_LINES, sanitizeUrl, type FilingPayload, type FormField, type QuestionField, type WorkerStep } from "../protocol.js";
 import { detectCaptcha, detectLogin } from "../safety.js";
-import { gotoWithRetries, matchByTokens, nameCandidates, needField, needFieldOutcome } from "./common.js";
-import { choiceField, emitFormSchema, labelOf, listFields, schemaFields } from "./fields.js";
+import { emitFormStep, gotoWithRetries, matchByTokens, nameCandidates, needField, needFieldOutcome } from "./common.js";
+import { choiceField, labelOf, listFields, schemaFields } from "./fields.js";
 import type { AdapterContext, ConfirmResult, FormAdapter } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -222,8 +222,8 @@ export interface RecipeDriver {
   buttonEnabled(name: string): Promise<boolean | null>;
   /** Labels of visible required fields that are still empty. */
   emptyRequiredFields(): Promise<string[]>;
-  /** PII-free schema of the visible fields (labels/types/required/options, never values). */
-  captureFields(): Promise<FormSchemaField[]>;
+  /** PII-free schema of the visible fields (labels/types/required/options, never values), as #11 FormFields of `step`. */
+  captureFields(step: string): Promise<FormField[]>;
   /** The real submit click (only ever called after the realSubmitAuthorized gate). */
   clickSubmit(name: string): Promise<void>;
   url(): string;
@@ -338,7 +338,7 @@ export function playwrightDriver(ctx: AdapterContext): RecipeDriver {
       }
       return out;
     },
-    captureFields: async () => schemaFields(await listFields(page)),
+    captureFields: async (step) => schemaFields(await listFields(page), step),
     async clickSubmit(name) {
       const btn = page.getByRole("button", { name, exact: true }).first();
       await btn.click({ noWaitAfter: true, timeout: 10_000 });
@@ -362,13 +362,19 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
   let d: RecipeDriver | null = null;
   const filled: { fields: { ref: FieldRef; name: string; value: string; readBackOk: boolean }[]; chosen: string[]; picked: string[]; skipped: string[]; answered: string[] } = { fields: [], chosen: [], picked: [], skipped: [], answered: [] };
   const drv = (ctx: AdapterContext) => (d ??= driverFor(ctx));
-  // form_schema: the current step's choice fields + visible fields, closed at each `continue`.
-  const schemaSteps: FormSchemaStep[] = [];
-  let pendingChoices: FormSchemaField[] = [];
-  const closeSchemaStep = async (ctx: AdapterContext, name: string) => {
-    const fields = await drv(ctx).captureFields().catch(() => [] as FormSchemaField[]);
-    schemaSteps.push({ name, fields: [...pendingChoices, ...fields] });
+  // form_schema (#11): the current step's choice fields + visible fields, emitted (emitFormStep) at each fill-phase
+  // `continue` under its `what` (else "step <n>"), and at validate() as "final". inspect() emits the first step early
+  // under the first top-level fill `continue.what`; the close re-emits it under the same title (merged in place).
+  let stepNo = 0;
+  const firstContinue = fillSteps.find((s): s is Extract<RecipeStep, { continue: unknown }> => "continue" in s);
+  const firstTitle = firstContinue ? (firstContinue.continue.what ?? "step 1") : "final"; // single-page form ⇒ validate's "final"
+  let pendingChoices: FormField[] = [];
+  const closeSchemaStep = async (ctx: AdapterContext, what: string | undefined) => {
+    const title = what ?? `step ${stepNo + 1}`;
+    const fields = await drv(ctx).captureFields(title).catch(() => [] as FormField[]);
+    emitFormStep(ctx, { title, fields: [...pendingChoices.map((f) => ({ ...f, step: title })), ...fields] });
     pendingChoices = [];
+    stepNo++;
   };
   const vars = (ctx: AdapterContext) => templateVars(ctx.payload);
 
@@ -421,9 +427,9 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
       }
       if (phase === "fill") {
         // A choice the inspect step already listed (e.g. all lines) takes this step's field name; else record it.
-        const known = pendingChoices.find((f) => f.type === "choice" && f.label === "choice" && f.options?.includes(pick!));
+        const known = pendingChoices.find((f) => f.type === "button-choice" && f.label === "choice" && f.options?.includes(pick!));
         if (known) known.label = field;
-        else pendingChoices.push(choiceField(field, options.length ? options : [pick], true));
+        else pendingChoices.push(choiceField(field, options.length ? options : [pick], true, "")); // step set on close
       }
       await D.clickButton(pick);
       filled.chosen.push(pick);
@@ -431,12 +437,12 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
       ctx.log(phase, "info", `chose "${pick}"`, { field });
     } else if ("continue" in step) {
       const name = step.continue.name ?? "Continue";
-      if (phase === "fill") await closeSchemaStep(ctx, step.continue.what ?? `step ${schemaSteps.length + 1}`);
+      if (phase === "fill") await closeSchemaStep(ctx, step.continue.what);
       await D.advance(name, step.continue.what ?? "this step");
       ctx.action({ kind: "continue", target: name });
     } else if ("pick" in step) {
       const p = step.pick;
-      if (phase === "fill") pendingChoices.push(choiceField(p.field, [], false, "listbox"));
+      if (phase === "fill") pendingChoices.push(choiceField(p.field, [], false, "", "select"));
       if (p.settleMs) await D.settle(p.settleMs);
       const want = renderTemplate(p.value, v).trim();
       if (!want) {
@@ -537,13 +543,15 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
         await ctx.shot("inspect", "unexpected-step");
         needField(`The form changed: recipe "${recipe.id}" expected a different page here.`, { page: clean(await D.text(), 500) });
       }
-      const first = await D.captureFields().catch(() => [] as FormSchemaField[]);
+      const title = firstTitle;
+      const first = await D.captureFields(title).catch(() => [] as FormField[]);
       if (i.expectButtons) {
         const re = new RegExp(renderTemplate(i.expectButtons.nameRegex, v, true));
-        first.unshift(choiceField("choice", (await D.buttonNames()).filter((n) => re.test(n)), true));
+        first.unshift(choiceField("choice", (await D.buttonNames()).filter((n) => re.test(n)), true, title));
       }
-      emitFormSchema(ctx, "inspect", `recipe:${recipe.id}`, [{ name: "first step", fields: first }], false);
-      pendingChoices = first.filter((f) => f.type === "choice").map((f) => ({ ...f })); // copies: the emitted event stays as sent
+      // Partial first step; fill() re-emits it under the same title (merged in place) once its choice is known.
+      emitFormStep(ctx, { title, fields: first });
+      pendingChoices = first.filter((f) => f.type === "button-choice").map((f) => ({ ...f })); // copies: the emitted event stays as sent
       return { requiredKnown: fillSteps.flatMap((s) => ("fill" in s && s.fill.required ? [s.fill.label] : "choose" in s ? [s.choose.field ?? "choice"] : [])) };
     },
 
@@ -565,7 +573,6 @@ export function createRecipeAdapter(recipe: FormRecipe, driverFor: (ctx: Adapter
       }
       for (const l of await D.emptyRequiredFields()) problems.push(`required field "${l}" is empty`);
       await closeSchemaStep(ctx, "final");
-      emitFormSchema(ctx, "validate", `recipe:${recipe.id}`, schemaSteps, true);
       if (submitStep) {
         const en = await D.buttonEnabled(submitStep.button);
         if (!en) problems.push(`"${submitStep.button}" button not available`);

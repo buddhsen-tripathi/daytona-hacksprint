@@ -105,6 +105,10 @@ export const CatalogEntry = z.object({
   requiredFields: z.array(z.string()).nullable(),
   automation: CatalogAutomation,
   lastVerifiedAt: z.string(),
+  /** A "Call 911" article (gas leak, fire, overdose, …): route to the 911 referral, never to a form. */
+  emergency: z.boolean().default(false),
+  /** Merged form structure learned from filing runs (#11, structure only); absent until a run reported one. */
+  formSchema: z.lazy(() => FormSchema).nullable().optional(),
 });
 export type CatalogEntry = z.infer<typeof CatalogEntry>;
 
@@ -137,7 +141,7 @@ export const TRANSITIONS: Record<ComplaintState, ComplaintState[]> = {
   OUT_OF_SCOPE: ["TRIAGING", "CANCELLED"],
   EMERGENCY_REFERRAL: ["CANCELLED"],
   NEEDS_INFORMATION: ["TRIAGING", "NEEDS_INFORMATION", "DUPLICATE_REVIEW", "READY_FOR_APPROVAL", "CANCELLED"],
-  DUPLICATE_REVIEW: ["READY_FOR_APPROVAL", "NEEDS_INFORMATION", "CANCELLED"],
+  DUPLICATE_REVIEW: ["READY_FOR_APPROVAL", "NEEDS_INFORMATION", "TRACKING", "CANCELLED"],
   READY_FOR_APPROVAL: ["APPROVED", "NEEDS_INFORMATION", "TRIAGING", "CANCELLED"],
   APPROVED: ["FILING", "CANCELLED"],
   FILING: ["SUBMITTED", "HUMAN_ACTION_REQUIRED", "SUBMISSION_UNKNOWN", "FAILED"],
@@ -153,6 +157,8 @@ export const TRANSITIONS: Record<ComplaintState, ComplaintState[]> = {
 export const USER_GATED: ReadonlyArray<`${ComplaintState}->${ComplaintState}`> = [
   "READY_FOR_APPROVAL->APPROVED",
   "DUPLICATE_REVIEW->READY_FOR_APPROVAL",
+  /** #5: "Add me to the existing report" — the resident joins another resident's report; nothing is filed. */
+  "DUPLICATE_REVIEW->TRACKING",
 ];
 
 // ---------------------------------------------------------------------------
@@ -226,6 +232,20 @@ export const EMPTY_TRANSIT: TransitDetails = { line: null, direction: null, stat
 // ---------------------------------------------------------------------------
 // Classification (LLM output, Zod-validated; backend re-validates category)
 // ---------------------------------------------------------------------------
+/** Stage 2 of the router: the LLM's pick among retrieved catalog candidates. The catalog is the allowlist. */
+export const CatalogRoute = z.object({
+  /** A CatalogEntry id, or null when no candidate fits (EMERGENCY / UNCLEAR / nothing matches). */
+  catalogId: z.string().nullable(),
+  /** 0..1 for catalogId; < ROUTE_CONFIDENCE_THRESHOLD ⇒ ask "Which of these is it?" with the top 3. */
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  /** Up to 3 other candidate ids, best first. */
+  alternatives: z.array(z.string()),
+});
+export type CatalogRoute = z.infer<typeof CatalogRoute>;
+
+export const ROUTE_CONFIDENCE_THRESHOLD = 0.6;
+
 export const ClassificationResult = z.object({
   triage: TriageOutcome,
   /** Required when triage === SUPPORTED. */
@@ -244,8 +264,11 @@ export const ClassificationResult = z.object({
   clarifyingQuestion: z.string().nullable(),
   /** Transit details extracted from the text for subway categories; null when not applicable or not mentioned. Never invented. */
   transit: TransitDetails.nullable().optional(),
+  /** Two-stage router (#8): the NYC311 catalog entry this report belongs to. Optional for older rows / fallbacks. */
+  route: CatalogRoute.nullable().optional(),
 });
 export type ClassificationResult = z.infer<typeof ClassificationResult>;
+
 
 export const CLASSIFY_CONFIDENCE_THRESHOLD = 0.6;
 
@@ -302,6 +325,10 @@ export const ComplaintDraft = z.object({
   duplicateReviewed: z.boolean(),
   /** `dataAsOf` of the Open Data snapshot used for the last duplicate check (null = unavailable / not checked). */
   duplicatesDataAsOf: z.string().nullable().optional(),
+  /** #5: this complaint is a supporter of another resident's report (`complaint->same_issue_as->complaint`); never filed. */
+  sameIssueAs: z.string().nullable().optional(),
+  /** #5: how many residents joined this report via "Add me to the existing report" (count of incoming same_issue_as edges). */
+  supporters: z.number().optional(),
   /** Bumped on every material change to the draft; approval binds to a version. */
   draftVersion: z.number(),
   /** The draftVersion the user approved, or null. */
@@ -463,35 +490,6 @@ export function questionFromEvent(e: WorkerEvent): WorkerQuestion | null {
   return q.success ? q.data : null;
 }
 
-/**
- * Form schema captured by every worker adapter's inspect() (#9; consumed by #11 to learn CatalogEntry.requiredFields).
- * Carried by a worker event `{"message":"form_schema","data":{"schema":…}}`. PII-free: labels, types, required flags,
- * option labels — never a value. `complete` = every step of a multi-step wizard was seen (emitted again from validate).
- */
-export const FormSchemaField = z.object({
-  label: z.string(),
-  /** input type ("text", "email", …), "select", "textarea", "choice" (button group), "listbox" (picker). */
-  type: z.string(),
-  required: z.boolean(),
-  options: z.array(z.string()).optional(),
-});
-export type FormSchemaField = z.infer<typeof FormSchemaField>;
-export const FormSchema = z.object({
-  adapter: z.string(),
-  category: z.string(),
-  url: z.string().nullable(),
-  complete: z.boolean(),
-  steps: z.array(z.object({ name: z.string(), fields: z.array(FormSchemaField) })),
-});
-export type FormSchema = z.infer<typeof FormSchema>;
-
-/** The schema carried by a worker `form_schema` event, or null for any other event. */
-export function formSchemaFromEvent(e: WorkerEvent): FormSchema | null {
-  if (e.message !== "form_schema") return null;
-  const s = FormSchema.safeParse(e.data?.schema);
-  return s.success ? s.data : null;
-}
-
 export const EvidenceFile = z.object({
   /** Path relative to /work/out inside the sandbox, e.g. "03-before-submit.png". */
   name: z.string(),
@@ -499,6 +497,32 @@ export const EvidenceFile = z.object({
   step: WorkerStep,
   summary: z.string(),
 });
+
+/**
+ * Observed structure of one form control (procedural memory input, issue #11). STRUCTURE ONLY: never a value the
+ * resident typed or chose. `options` are the form's own labels (choice buttons / select / radio).
+ */
+export const FormFieldType = z.enum(["text", "textarea", "select", "radio", "checkbox", "button-choice", "date", "time", "file", "unknown"]);
+export type FormFieldType = z.infer<typeof FormFieldType>;
+export const FormField = z.object({
+  label: z.string(),
+  type: FormFieldType,
+  required: z.boolean(),
+  options: z.array(z.string()).optional(),
+  /** Attribute maxlength, or the visible "0/4000" counter; null when unknown. */
+  maxLength: z.number().nullable().optional(),
+  /** Title of the wizard step / page section this field was seen on. */
+  step: z.string(),
+  /** Playwright selector that found it (role/label/placeholder based), e.g. `role=textbox[name="Email (optional)"]`. */
+  selectorHint: z.string().optional(),
+});
+export type FormField = z.infer<typeof FormField>;
+/** Merged, ordered per-step schema observed during one run. Emitted per step as `EVT {"step":"inspect","message":"form_schema"}`. */
+export const FormSchema = z.object({
+  steps: z.array(z.object({ title: z.string(), fields: z.array(FormField) })),
+  capturedAt: z.string(),
+});
+export type FormSchema = z.infer<typeof FormSchema>;
 
 /** Written to /work/out/result.json by the worker. The bot re-validates it. */
 export const WorkerResult = z.object({
@@ -519,6 +543,8 @@ export const WorkerResult = z.object({
   message: z.string().nullable().optional(),
   startedAt: z.string(),
   finishedAt: z.string(),
+  /** Form structure observed during this run (additive; null/absent when nothing was captured). */
+  formSchema: FormSchema.nullable().optional(),
 });
 export type WorkerResult = z.infer<typeof WorkerResult>;
 
@@ -634,12 +660,14 @@ export const CallbackAction = z.enum([
   "dup_review",
   "dup_continue",
   "status",
+  "dup_join", // #5: "Add me to the existing report" (same issue already raised by another resident)
   "view_official",
   "confirm_location",
   "retry_location",
   "set_direction", // subway: data `set_direction:<id>:<version>:d=0|1` (MTA form direction option index)
   "set_time", // subway: data `set_time:<id>:<version>:now|later`
   "answer_q", // live worker question: data `answer_q:<id>:<version>:<questionId>:<optionIndex>`
+  "route_pick", // router (#8) "Which of these is it?": data `route_pick:<id>:<version>:<i>` (index into route choices; ids can exceed Telegram's 64-byte limit)
 ]);
 export type CallbackAction = z.infer<typeof CallbackAction>;
 
@@ -727,6 +755,145 @@ export type RelatedComplaints = {
   others: { reports: number; residents: number; latestAt: string | null; oldestAt: string | null; ids: string[] };
 };
 
+/** #5 duplicate awareness across residents: the same-issue edges around one complaint (complaint ids only, never chat ids). */
+export type IssueLinks = {
+  /** This complaint joined that original (`->same_issue_as->`), or null. */
+  sameIssueAs: string | null;
+  /** Supporters that joined this complaint (`<-same_issue_as<-`), oldest first. */
+  joined: string[];
+  /** The resident said this is different from these (`->not_same_as->`); never prompted about them again. */
+  notSameAs: string[];
+  /** `joined.length` (also cached on the original as `ComplaintDraft.supporters`). */
+  supporters: number;
+};
+
+// ---------------------------------------------------------------------------
+// Agent memory (issue #4): one memory stream of episodic / semantic / procedural
+// items, recalled by relevance × recency × importance (services/agent-memory.ts).
+// `text` is always neutral (classifier description, form prompts, official
+// labels); never contact fields or a resident's free-typed answer.
+// ---------------------------------------------------------------------------
+export const MemoryKind = z.enum([
+  "episodic", // what happened: drafts ready for approval, filing outcomes, live questions + answers
+  "semantic", // facts about the world: categories, agencies, required fields
+  "procedural", // how to do things: form recipes, ask-before-approval rules, reflection lessons (#24)
+]);
+export type MemoryKind = z.infer<typeof MemoryKind>;
+
+/** Graph targets of `memory->about->…` (SurrealDB relation; the memory store keeps them as plain refs). */
+export type MemoryAboutTable = "complaint" | "complaint_category" | "filing_attempt";
+export type MemoryAboutRef = { table: MemoryAboutTable; id: string };
+
+/** What a caller hands to `AgentMemory.remember()`. */
+export type MemoryItem = {
+  /** Deterministic id ⇒ idempotent upsert (e.g. `mem_seed_<category>`); omitted ⇒ generated. */
+  id?: string;
+  kind: MemoryKind;
+  /** Neutral, PII-free text: what gets embedded and shown in explanations. */
+  text: string;
+  /** Category id (string so catalog categories from #7 fit without a contract change). */
+  category?: string | null;
+  /** Owning resident (Telegram chat id); null for world facts. Never shown to other residents. */
+  chatId?: string | null;
+  /** Subway line, for `scope.line` filtering. */
+  line?: string | null;
+  /** Point, for `scope.geo` filtering. */
+  geo?: { lat: number; lon: number } | null;
+  /** 0..1, set at write time (a confirmed filing > a cancelled draft). Default 0.5. */
+  importance?: number;
+  /** Structured payload (ids, counts, option labels). JSON-safe, PII-free. */
+  data?: Record<string, unknown>;
+  /** `complaint:<id>` | `attempt:<id>` | `trace:<id>` | `seed`. */
+  source: string;
+  /** Edges `memory->about->(complaint|complaint_category|filing_attempt)`. */
+  about?: MemoryAboutRef[];
+  /** ISO time; default now. */
+  createdAt?: string;
+};
+
+/** A persisted memory row (Store layer). */
+export type MemoryRecord = Required<Omit<MemoryItem, "id" | "createdAt">> & {
+  id: string;
+  createdAt: string;
+  /** Embedding vector (null when no embedder was available at write time). */
+  embedding: number[] | null;
+  /** Model that produced `embedding` (vectors are only compared within one model). */
+  embedModel: string | null;
+};
+
+/** Low-level search (Store layer): structural filters + cosine similarity; ranking happens in AgentMemory. */
+export type MemorySearch = {
+  embedding?: number[] | null;
+  embedModel?: string | null;
+  kind?: MemoryKind;
+  category?: string | null;
+  /** Set ⇒ only this resident's items + world facts (chatId null). Never other residents'. */
+  chatId?: string | null;
+  line?: string | null;
+  geo?: { lat: number; lon: number; radiusMeters: number } | null;
+  /** Only items created within the last `sinceMs`. */
+  sinceMs?: number;
+  /** Only items with an `about` edge to this ref. */
+  about?: MemoryAboutRef | null;
+  /** Clock for `sinceMs` (default Date.now()). */
+  nowMs?: number;
+  limit: number;
+};
+/** Search hit: the row (without the vector) + cosine similarity when comparable (same model + dims), else null. */
+export type MemoryHit = Omit<MemoryRecord, "embedding"> & { similarity: number | null };
+
+export type MemoryScoreBreakdown = {
+  /** 0..1: cosine similarity (clamped) or keyword overlap, 0 when there is no query text. */
+  relevance: number;
+  relevanceKind: "cosine" | "keyword" | "none";
+  /** 0..1: 0.5^(age / halfLife), halfLife = 7 days. */
+  recency: number;
+  importance: number;
+  ageMs: number;
+  /** The weights used: score = w.relevance·relevance + w.recency·recency + w.importance·importance. */
+  weights: { relevance: number; recency: number; importance: number };
+};
+export type ScoredMemory = Omit<MemoryRecord, "embedding"> & { score: number; breakdown: MemoryScoreBreakdown };
+
+export type MemoryRecallQuery = {
+  text?: string;
+  kind?: MemoryKind;
+  scope?: { chatId?: string | null; category?: string | null; line?: string | null; geo?: { lat: number; lon: number; radiusMeters?: number } | null };
+  sinceMs?: number;
+  /** Only items about this complaint / attempt / category. */
+  about?: MemoryAboutRef;
+  limit?: number;
+  /**
+   * #22: max wait for the query embedding. Past it, recall proceeds without a query vector (keyword relevance);
+   * the embedding finishes in the background and is cached, so the next recall of the same text is semantic.
+   */
+  embedBudgetMs?: number;
+};
+
+export interface AgentMemory {
+  /** Persist one item (embedded when an embedder is configured). Returns its id. */
+  remember(item: MemoryItem): Promise<string>;
+  /** Scored recall: score = 0.5·relevance + 0.3·recency + 0.2·importance, highest first, with the breakdown. */
+  recall(q: MemoryRecallQuery): Promise<ScoredMemory[]>;
+  /**
+   * Reflexion-style lesson after an attempt: shared, category-scoped procedural item (chatId null), source
+   * `attempt:<id>`, about→filing_attempt. Dropped with a warning if the attempt/category can't be resolved or the
+   * lesson carries PII or quotes a resident field (#24).
+   */
+  reflect(attemptId: string, lesson: string, data?: Record<string, unknown>): Promise<void>;
+  /** Resolves when every in-flight remember() has settled (tests / scripts). */
+  flush(): Promise<void>;
+  /** Fire-and-forget: embed `text` now so a later recall() for the same text is served from cache. Never throws. */
+  warm?(text: string): void;
+}
+
+/** Text → vectors. `model` labels the vectors so different models are never compared. */
+export interface Embedder {
+  readonly model: string;
+  readonly dim: number;
+  embed(texts: string[]): Promise<{ model: string; vectors: number[][] }>;
+}
+
 export interface Store {
   backend: string;
   init(): Promise<void>;
@@ -762,8 +929,35 @@ export interface Store {
   /** NYC311 category catalog (#7): upsert complaint_category rows by id; returns the count written. */
   upsertCatalog?(entries: CatalogEntry[]): Promise<number>;
   listCatalog?(): Promise<CatalogEntry[]>;
+  /**
+   * #11: write the form structure learned from filing runs onto `complaint_category:<id>` (requiredFields = union of
+   * the form's required labels, merged formSchema, lastVerifiedAt). Later catalog upserts / boot seeds keep a learned
+   * requiredFields list.
+   */
+  updateCategorySchema?(id: string, learned: { requiredFields: string[]; formSchema: FormSchema; lastVerifiedAt: string }): Promise<void>;
+  /** #5: RELATE supporter->same_issue_as->original and refresh `supporters` on the original. Returns the new count. */
+  linkSameIssue?(supporterId: string, originalId: string): Promise<number>;
+  /** #5: RELATE complaint->not_same_as->other (the resident said it's a different issue). */
+  linkNotSameIssue?(complaintId: string, otherId: string): Promise<void>;
+  /** #5: same_issue_as / not_same_as edges around one complaint. */
+  getIssueLinks?(complaintId: string): Promise<IssueLinks>;
   /** For the dashboard: nodes + edges of the complaint graph. */
   graph(args?: { complaintId?: string }): Promise<{ nodes: { id: string; kind: string; label: string }[]; edges: { from: string; to: string; rel: string }[] }>;
+  // agent memory (#4) — low-level; use AgentMemory (services/agent-memory.ts). Optional so test doubles stay small.
+  /** Upsert by id + RELATE memory->about->… */
+  insertMemory?(row: MemoryRecord): Promise<void>;
+  /** Structural filters + cosine similarity (same embedModel + dims), most similar first, else newest first. */
+  searchMemory?(q: MemorySearch): Promise<MemoryHit[]>;
+  /** Newest first (no vectors). */
+  listMemory?(args?: { kind?: MemoryKind; category?: string; chatId?: string; source?: string; about?: MemoryAboutRef; limit?: number }): Promise<Omit<MemoryRecord, "embedding">[]>;
+  /** #22: rows not embedded by `model` (fallback vectors / none), oldest first — candidates for re-embedding. */
+  listMemoryNeedingEmbedding?(args: { model: string; limit: number }): Promise<{ id: string; text: string; embedModel: string | null }[]>;
+  /** #22: replace one row's vector (re-embedding); everything else on the row is unchanged. */
+  setMemoryEmbedding?(id: string, embedding: number[], embedModel: string): Promise<void>;
+  /** Post-mortem repair proposals (#13). Optional so existing stores/test doubles keep compiling. */
+  saveRepairProposal?(p: RepairProposal): Promise<RepairProposal>;
+  getRepairProposal?(id: string): Promise<RepairProposal | null>;
+  listRepairProposals?(args?: { status?: RepairProposal["status"]; limit?: number }): Promise<RepairProposal[]>;
 }
 
 export interface SandboxHandle {
@@ -800,7 +994,8 @@ export interface BrowserProvider {
 
 export type SpanMessage = { role: string; content?: string };
 export interface SpanHelpers {
-  set(k: string, v: string | number | boolean): void;
+  /** string[] for list attributes (e.g. `form.required_fields`, #11). */
+  set(k: string, v: string | number | boolean | string[]): void;
   input(value: unknown): void;
   output(value: unknown): void;
   llm(opts: {
@@ -855,3 +1050,43 @@ export function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: 
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
+
+// ---------------------------------------------------------------------------
+// Post-mortem self-repair (#13). Additive. A failed/ambiguous attempt is
+// diagnosed by the LLM into a RepairProposal; proposals are applied only after
+// human approval, except `requiredField` additions with confidence >= 0.9.
+
+export const RepairCause = z.enum(["missing_required_field", "selector_changed", "new_step", "confirmation_pattern", "captcha", "unknown"]);
+export type RepairCause = z.infer<typeof RepairCause>;
+
+export const RepairChange = z.object({
+  kind: z.enum(["requiredField", "recipeStep", "confirmRegex", "questionText"]),
+  /** Previous value (null when the change is an addition). */
+  before: z.string().nullable(),
+  after: z.string(),
+  /** Evidence ids (Evidence.id) backing this change. */
+  evidence: z.array(z.string()),
+});
+export type RepairChange = z.infer<typeof RepairChange>;
+
+/** Strict LLM output for the post-mortem diagnosis. */
+export const RepairDiagnosis = z.object({
+  cause: RepairCause,
+  proposedChanges: z.array(RepairChange),
+  confidence: z.number().min(0).max(1),
+});
+export type RepairDiagnosis = z.infer<typeof RepairDiagnosis>;
+
+export const RepairProposal = RepairDiagnosis.extend({
+  id: z.string(),
+  attemptId: z.string(),
+  complaintId: z.string(),
+  category: CategoryId,
+  status: z.enum(["pending", "approved", "rejected"]),
+  createdAt: z.string(),
+  decidedAt: z.string().nullable(),
+});
+export type RepairProposal = z.infer<typeof RepairProposal>;
+
+/** Auto-apply threshold for `requiredField` additions (never for anything affecting submit). */
+export const REPAIR_AUTO_APPLY_CONFIDENCE = 0.9;

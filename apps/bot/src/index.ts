@@ -33,7 +33,7 @@ async function main() {
   const orchestrator = createOrchestrator({ ...providers, transport });
 
   let webhook: WebhookHandler | null = null;
-  const server = await startApiServer({ store: providers.store, tracer: providers.tracer, orchestrator, getWebhook: () => webhook });
+  const server = await startApiServer({ store: providers.store, tracer: providers.tracer, memory: providers.memory, orchestrator, getWebhook: () => webhook });
 
   let telegramLine = "off (TELEGRAM_BOT_TOKEN not set)";
   if (bot) {
@@ -55,6 +55,7 @@ async function main() {
     `  telegram   ${telegramLine}`,
     `  api        http://localhost:${env.PORT_API}/api/health`,
     `  store      ${p.store ?? providers.store.backend}`,
+    `  memory     ${p.memory ?? "?"}`,
     `  tracer     ${p.tracer ?? "?"}  (project ${env.PHOENIX_PROJECT})`,
     `  classifier ${p.classifier ?? "?"}`,
     `  location   ${p.location ?? "?"}`,

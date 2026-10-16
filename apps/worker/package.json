@@ -8,7 +8,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
-    "test": "vitest run"
+    "test": "pnpm run build && node --test \"test/*.test.mjs\" && vitest run"
   },
   "dependencies": {
     "playwright-core": "1.64.1"

@@ -58,15 +58,17 @@ describe.skipIf(!HAS_CHROME)("hand-off adapter against static HTML (local Chrome
       ]);
       // PII-free log: the typed text never appears in an event.
       expect(JSON.stringify(r.events)).not.toContain("no plates");
-      const schema = r.events.find((e) => e.message === "form_schema")?.data?.schema as { adapter: string; complete: boolean; url: string; steps: { name: string; fields: unknown[] }[] };
-      expect(schema).toMatchObject({ adapter: "handoff", category: "abandoned-vehicle", complete: true, url: `${base}/handoff-form.html` });
-      expect(schema.steps[0]!.fields).toEqual([
-        { label: "Describe the problem (required)", type: "textarea", required: true },
-        { label: "Building type", type: "select", required: false, options: ["Choose…", "Apartment", "House"] },
-        { label: "Floor number", type: "text", required: false },
-        { label: "Email", type: "email", required: false },
-        { label: "Password", type: "text", required: false },
+      const evt = r.events.find((e) => e.message === "form_schema")?.data as { stepTitle: string; fields: unknown[] };
+      expect(evt.stepTitle).toBe("form");
+      expect(r.formSchema!.steps.map((s) => s.title)).toEqual(["form"]);
+      expect(r.formSchema!.steps[0]!.fields).toEqual([
+        { label: "Describe the problem (required)", type: "textarea", required: true, step: "form" },
+        { label: "Building type", type: "select", required: false, options: ["Choose…", "Apartment", "House"], step: "form" },
+        { label: "Floor number", type: "text", required: false, step: "form" },
+        { label: "Email", type: "text", required: false, step: "form" },
+        { label: "Password", type: "text", required: false, step: "form" },
       ]);
+      expect(evt.fields).toEqual(r.formSchema!.steps[0]!.fields);
     } finally {
       await r.session.release();
     }

@@ -74,8 +74,8 @@ class FakePage implements RecipeDriver {
       .filter((f) => f.required && !f.value)
       .map((f) => f.label);
   }
-  async captureFields() {
-    return Object.values(this.fields).map((f) => ({ label: f.label, type: "text", required: f.required }));
+  async captureFields(step: string) {
+    return Object.values(this.fields).map((f) => ({ label: f.label, type: "text" as const, required: f.required, step }));
   }
   async clickSubmit(name: string) {
     this.calls.push(`submit ${name}`);
@@ -94,7 +94,7 @@ function fakeCtx(payload: FilingPayload, answers: Record<string, WorkerAnswer> =
     page: {} as Page,
     payload,
     guard: { offAllowlist: false, offAllowlistUrl: null, mainFrameFailures: [] },
-    state: { submitClicked: false, finalUrl: null },
+    state: { submitClicked: false, finalUrl: null, formSchema: null },
     log: (_step, _level, message, data) => logs.push({ message, ...(data ? { data } : {}) }),
     shot: async () => null,
     saveHtml: async () => null,
@@ -190,21 +190,19 @@ describe("recipe interpreter (fake page)", () => {
     expect(ctx.state.submitClicked).toBe(false);
   });
 
-  it("emits form_schema from inspect (partial) and validate (complete), PII-free", async () => {
+  it("emits #11 form_schema step events (inspect partial, validate final) merged into state.formSchema, PII-free", async () => {
     const fp = page();
     const { ctx, logs } = fakeCtx(payload({ form: { contactEmail: "secret@person.org" } }));
     await run(createRecipeAdapter(recipe(BASIC), () => fp), ctx);
-    const schemas = logs.filter((l) => l.message === "form_schema").map((l) => l.data!.schema as { complete: boolean; adapter: string; steps: { fields: { label: string }[] }[] });
-    expect(schemas.map((s) => [s.adapter, s.complete])).toEqual([
-      ["recipe:test-form", false],
-      ["recipe:test-form", true],
+    const events = logs.filter((l) => l.message === "form_schema").map((l) => l.data as { stepTitle: string; fields: { label: string }[] });
+    expect(events.map((e) => e.stepTitle)).toEqual(["final", "final"]);
+    expect(ctx.state.formSchema!.steps.map((s) => s.title)).toEqual(["final"]);
+    expect(ctx.state.formSchema!.steps[0]!.fields).toEqual([
+      { label: "kind", type: "button-choice", required: true, options: ["Noise"], step: "final" },
+      { label: "Describe it", type: "text", required: true, step: "final" },
+      { label: "Email (optional)", type: "text", required: false, step: "final" },
     ]);
-    expect(schemas[1]!.steps.at(-1)!.fields).toEqual([
-      { label: "kind", type: "choice", required: true, options: ["Noise"] },
-      { label: "Describe it", type: "text", required: true },
-      { label: "Email (optional)", type: "text", required: false },
-    ]);
-    const all = JSON.stringify(schemas);
+    const all = JSON.stringify([events, ctx.state.formSchema]);
     expect(all).not.toContain("secret@person.org");
     expect(all).not.toContain("Loud music");
   });

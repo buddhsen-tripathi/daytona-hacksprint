@@ -1,12 +1,14 @@
 import type { Page } from "playwright-core";
 import type { GuardState } from "../browser.js";
-import type { EvidenceFile, FilingPayload, WorkerAnswer, WorkerEvent, WorkerQuestion, WorkerStep } from "../protocol.js";
+import type { EvidenceFile, FilingPayload, FormSchema, WorkerAnswer, WorkerEvent, WorkerQuestion, WorkerStep } from "../protocol.js";
 
 export interface WorkerState {
   /** Set to true IMMEDIATELY BEFORE the final submit click. Never reset. */
   submitClicked: boolean;
   /** Last known URL (sanitized) for the result. */
   finalUrl: string | null;
+  /** Form structure observed so far (merged per step by recordFormSchema). Copied into WorkerResult.formSchema. */
+  formSchema: FormSchema | null;
 }
 
 /**

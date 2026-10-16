@@ -36,7 +36,7 @@ if (!payloadPath || !outDirArg) {
 const outDir = resolve(outDirArg);
 const startedAt = nowIso();
 const rec = new Recorder(outDir);
-const state: WorkerState = { submitClicked: false, finalUrl: null };
+const state: WorkerState = { submitClicked: false, finalUrl: null, formSchema: null };
 let payload: FilingPayload | null = null;
 let attemptId = "unknown";
 let session: BrowserSession | null = null;
@@ -76,6 +76,7 @@ function writeResult(status: FilingStatus, errorCode: FilingErrorCode | null, me
     evidence: rec.evidence,
     startedAt,
     finishedAt: nowIso(),
+    formSchema: state.formSchema,
     message,
     target: "real",
     category: payload?.category ?? "subway-delay",

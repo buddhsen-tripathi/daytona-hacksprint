@@ -3,7 +3,7 @@ import type { InboundEvent } from "../../core/contracts.js";
 import { decodeCallback } from "../../core/contracts.js";
 
 /** Actions whose buttons are single-use: strip the keyboard from the tapped message to prevent double taps. */
-const SINGLE_USE = new Set(["approve", "cancel", "dup_continue", "edit"]);
+const SINGLE_USE = new Set(["approve", "cancel", "dup_continue", "dup_join", "edit"]);
 
 export function registerCallbackHandlers(bot: Bot, dispatch: (e: InboundEvent) => void) {
   bot.on("callback_query:data", async (ctx) => {

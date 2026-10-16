@@ -11,7 +11,8 @@
  *   complaint->possibly_duplicates->official_request (Open Data candidates),
  *   official_request->located_at->location, filing_attempt->attempted->complaint,
  *   filing_attempt->learned->workflow_pattern, workflow_pattern->applies_to->complaint_category,
- *   complaint->has_media->media, filing_attempt->produced->evidence.
+ *   complaint->has_media->media, filing_attempt->produced->evidence,
+ *   memory->about->(complaint|complaint_category|filing_attempt) (agent memory, #4).
  * - Edges are idempotent: `INSERT RELATION IGNORE INTO rel { id: [in, out], in, out }`.
  * - Record ids are always mapped back to plain strings on return.
  * - Any DB failure is logged and rethrown as a typed `StoreError` (the
@@ -27,6 +28,12 @@ import type {
   DuplicateCandidate,
   FilingAttempt,
   FilingTarget,
+  FormSchema,
+  MemoryAboutRef,
+  MemoryHit,
+  MemoryKind,
+  MemoryRecord,
+  MemorySearch,
   OfficialRequest,
   Resident,
   Store,
@@ -37,6 +44,7 @@ import type {
 } from "../core/contracts.js";
 import { CATEGORIES, CatalogEntry, nowIso } from "../core/contracts.js";
 import { NOT_REPORTED, NOT_REPORTED_OTHERS, RELATED_DEFAULTS } from "../services/memory.js";
+import { mergeMemoryPool } from "../services/agent-memory.js";
 import { env } from "./env.js";
 
 export class StoreError extends Error {
@@ -64,6 +72,10 @@ export type SurrealStoreOptions = {
 
 export type SurrealStore = Store & {
   backend: "surrealdb-embedded" | "surrealdb";
+  /** Whether the HNSW memory index was accepted by the engine (known after init()). */
+  readonly vectorIndex: boolean;
+  /** Whether recall uses KNN over that index (probed at init(); false ⇒ exact cosine scan). */
+  readonly knnRecall: boolean;
   namespace: string;
   database: string;
   /** Delete every 311Relay record (and re-seed categories). Tests/seed only. */
@@ -71,6 +83,7 @@ export type SurrealStore = Store & {
   close(): Promise<void>;
   upsertCatalog(entries: CatalogEntryT[]): Promise<number>;
   listCatalog(): Promise<CatalogEntryT[]>;
+  updateCategorySchema(id: string, learned: { requiredFields: string[]; formSchema: FormSchema; lastVerifiedAt: string }): Promise<void>;
   /** Raw SurrealQL for scripts (seed / dashboards). Returns one result per statement. */
   query<T extends unknown[] = unknown[]>(sql: string, vars?: Record<string, unknown>): Promise<T>;
 };
@@ -90,6 +103,7 @@ export const NODE_TABLES = [
   "transition",
   "workflow_pattern",
   "evidence",
+  "memory",
 ] as const;
 
 /** Relation tables with their IN/OUT types (SurrealDB TYPE RELATION). */
@@ -106,12 +120,37 @@ export const RELATIONS: Record<string, { in: string; out: string }> = {
   produced: { in: "filing_attempt", out: "evidence" },
   /** Remembered issues: same category + same line / within 100 m, recent (dashboard cluster). */
   similar_to: { in: "complaint", out: "complaint" },
+  /** #5: a supporter joined another resident's report ("Add me to the existing report"). */
+  same_issue_as: { in: "complaint", out: "complaint" },
+  /** #5: the resident said it's a different issue (never prompted about that report again). */
+  not_same_as: { in: "complaint", out: "complaint" },
+  /** Agent memory (#4): what a memory item is about. */
+  about: { in: "memory", out: "complaint|complaint_category|filing_attempt" },
 };
 
 /** Tables surfaced by `graph()` (media/evidence/audit rows are left out to keep it readable). */
 const GRAPH_NODE_TABLES = ["resident", "complaint", "location", "complaint_category", "official_request", "filing_attempt", "workflow_pattern"];
-const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted_in", "possibly_duplicates", "attempted", "learned", "applies_to", "similar_to"];
+const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted_in", "possibly_duplicates", "attempted", "learned", "applies_to", "similar_to", "same_issue_as", "not_same_as"];
 const KIND: Record<string, string> = { complaint_category: "category" };
+
+/**
+ * ANN index for OpenRouter embeddings (text-embedding-3-small = 1536 dims). HNSW needs one fixed dimension,
+ * while the memory stream can also hold 256-dim fallback vectors, so the index lives on a dedicated field that
+ * is only set for 1536-dim vectors (`annIndexed = true` marks those rows; indexed for the complement query).
+ *
+ * Recall (#22) with a 1536-dim query on an engine where HNSW + KNN work:
+ *   A. nearest neighbours: `embedding_1536 <|K,EF|> $q` over the whole stream (HNSW, a few ms), then the
+ *      structural filters + model guard on that candidate set;
+ *   B. the complement the index cannot see (fallback-embedded / unembedded rows, `annIndexed = false`),
+ *      newest first, so they are never crowded out of the pool (relevance = keyword overlap).
+ * Both are detected once at init(); otherwise, and for non-1536 queries, recall is the exact
+ * vector::similarity::cosine scan with the same filters (works on every engine).
+ */
+export const HNSW_DIM = 1536;
+const HNSW_SQL = `DEFINE INDEX IF NOT EXISTS memory_embedding ON memory FIELDS embedding_${HNSW_DIM} HNSW DIMENSION ${HNSW_DIM} DIST COSINE TYPE F32;`;
+/** KNN candidate pool: K nearest across all residents/kinds, filtered afterwards (filtered HNSW search is slow when filters are selective). */
+export const KNN_MIN_K = 256;
+export const KNN_MAX_K = 1000;
 
 function schemaSql(): string {
   const lines: string[] = [];
@@ -126,6 +165,11 @@ function schemaSql(): string {
     "DEFINE INDEX IF NOT EXISTS official_request_number ON official_request FIELDS officialRequestNumber;",
     "DEFINE INDEX IF NOT EXISTS transition_complaint ON transition FIELDS complaintId;",
     "DEFINE INDEX IF NOT EXISTS workflow_pattern_route ON workflow_pattern FIELDS target, category;",
+    "DEFINE INDEX IF NOT EXISTS memory_kind_category ON memory FIELDS kind, category;",
+    "DEFINE INDEX IF NOT EXISTS memory_chat ON memory FIELDS chatId;",
+    "DEFINE INDEX IF NOT EXISTS memory_source ON memory FIELDS source;",
+    "DEFINE INDEX IF NOT EXISTS memory_ann ON memory FIELDS annIndexed;",
+    "DEFINE INDEX IF NOT EXISTS memory_embed_model ON memory FIELDS embedModel;",
   );
   return lines.join("\n");
 }
@@ -185,13 +229,14 @@ async function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<
     return await Promise.race([
       p,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
+        timer = setTimeout(() => reject(Object.assign(new Error(`${what} timed out after ${ms} ms`), { name: "TimeoutError" })), ms);
       }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
   }
 }
+const isTimeout = (err: unknown) => err instanceof Error && err.name === "TimeoutError";
 
 /** Builds a multi-statement query with uniquely-named bindings. */
 class Batch {
@@ -214,18 +259,25 @@ class Batch {
   }
 }
 
+/** #11: seeds / catalog upserts set requiredFields only until a filing run has taught the category its form schema. */
+const keepLearnedRequiredFields = (idVar: string, fieldsVar: string) => `UPDATE ${idVar} SET requiredFields = ${fieldsVar} WHERE formSchema = NONE OR formSchema = NULL RETURN NONE`;
+
 // ---------------------------------------------------------------------------
 // factory
 // ---------------------------------------------------------------------------
 export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore {
   const url = (opts.url ?? env.SURREALDB_URL).trim();
-  const embedded = url === "" || url.startsWith("mem://");
+  // embedded engine: mem:// (default) or a local file via surrealkv:// / rocksdb:// (e.g. two demo runs sharing one store)
+  const embedded = url === "" || /^(mem|surrealkv|rocksdb):\/\//.test(url);
   const namespace = opts.namespace ?? env.SURREALDB_NAMESPACE;
   const database = opts.isolated ? `test_${Math.random().toString(36).slice(2, 10)}` : (opts.database ?? env.SURREALDB_DATABASE);
   const connectTimeoutMs = opts.connectTimeoutMs ?? 8000;
 
   let db: Surreal | null = null;
   let ready: Promise<void> | null = null;
+  let hnsw = false;
+  /** KNN operator over the HNSW index answered at init() (probe query). */
+  let knn = false;
 
   async function connect(): Promise<void> {
     let instance: Surreal;
@@ -233,7 +285,7 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       // @surrealdb/node is ESM-only + a native addon: load lazily so remote-only setups never touch it.
       const { createNodeEngines } = await import("@surrealdb/node");
       instance = new Surreal({ engines: createNodeEngines() });
-      await withTimeout(instance.connect("mem://"), connectTimeoutMs, "embedded connect");
+      await withTimeout(instance.connect(url || "mem://"), connectTimeoutMs, "embedded connect");
     } else {
       instance = new Surreal({ engines: createRemoteEngines() });
       await withTimeout(
@@ -251,7 +303,32 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       "define namespace",
     );
     await instance.use({ namespace, database });
-    await instance.query(schemaSql()).collect();
+    // #24: schema + vector-index setup share one connect budget, so a hung DEFINE never blocks boot past it.
+    const setupDeadline = Date.now() + connectTimeoutMs;
+    const left = () => Math.max(1, setupDeadline - Date.now());
+    const why = (err: unknown) =>
+      isTimeout(err) ? `index setup exceeded the ${connectTimeoutMs} ms connect budget (${(err as Error).message})` : (err as Error).message;
+    await withTimeout(instance.query(schemaSql()).collect(), left(), "define schema");
+    try {
+      await withTimeout(instance.query(HNSW_SQL).collect(), left(), "define hnsw");
+      hnsw = true;
+    } catch (err) {
+      hnsw = false;
+      console.warn(`[surrealdb] HNSW index unavailable (exact cosine recall still works): ${why(err)}`);
+    }
+    knn = false;
+    if (hnsw) {
+      try {
+        const probe = new Array<number>(HNSW_DIM).fill(0);
+        probe[0] = 1;
+        await withTimeout(instance.query(`SELECT id FROM memory WHERE embedding_${HNSW_DIM} <|1,8|> $q LIMIT 1`, { q: probe }).collect(), left(), "knn probe");
+        // rows written before #22 have no annIndexed flag yet
+        await withTimeout(instance.query(`UPDATE memory SET annIndexed = type::is_array(embedding_${HNSW_DIM}) WHERE annIndexed = NONE RETURN NONE`).collect(), left(), "annIndexed backfill");
+        knn = true;
+      } catch (err) {
+        console.warn(`[surrealdb] KNN recall unavailable (exact cosine scan instead): ${why(err)}`);
+      }
+    }
     db = instance;
     await seedCategories();
   }
@@ -278,20 +355,21 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
   async function seedCategories() {
     const b = new Batch();
     for (const c of Object.values(CATEGORIES)) {
+      const id = b.bind(rid("complaint_category", c.id));
       b.add(
         // MERGE, not CONTENT: catalog fields written by upsertCatalog (#7) must survive a restart.
-        `UPSERT ${b.bind(rid("complaint_category", c.id))} MERGE ${b.bind(
+        `UPSERT ${id} MERGE ${b.bind(
           plain({
             label: c.officialLabel,
             shortLabel: c.label,
             officialRoute: c.officialFormUrl,
             articleUrl: c.articleUrl,
-            requiredFields: c.requiredFields,
             openData: c.openData,
             guidance: c.guidance,
           }),
         )} RETURN NONE`,
       );
+      b.add(keepLearnedRequiredFields(id, b.bind(c.requiredFields)));
     }
     await run(b);
   }
@@ -345,6 +423,9 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       })} RETURN NONE`,
     );
     b.relate("reported", rid("resident", c.residentId), cr);
+    // #5: `supporters` is derived from same_issue_as edges (a stale copy of the original never resets it)
+    b.add(`LET $supporters = array::len((SELECT VALUE id FROM same_issue_as WHERE out = ${cRef}))`);
+    b.add(`IF $supporters > 0 { UPDATE ${cRef} SET supporters = $supporters, doc.supporters = $supporters RETURN NONE; }`);
 
     // category edge: exactly one (or none)
     const cat = c.category ? rid("complaint_category", c.category) : null;
@@ -446,9 +527,156 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     return r;
   }
 
+  // -- agent memory (#4) --------------------------------------------------------
+  /** WHERE clause shared by searchMemory/listMemory (same semantics as memoryMatches() in services/agent-memory.ts). */
+  function memoryWhere(b: Batch, f: Omit<MemorySearch, "limit" | "embedding" | "embedModel"> & { source?: string }): string {
+    const c: string[] = [];
+    if (f.kind) c.push(`kind = ${b.bind(f.kind)}`);
+    if (f.category) c.push(`category = ${b.bind(f.category)}`);
+    // resident scope: own items + world facts (chatId null), never other residents'
+    if (f.chatId != null) c.push(`(chatId = ${b.bind(f.chatId)} OR chatId = NONE OR chatId = NULL)`);
+    if (f.line) c.push(`line = ${b.bind(f.line)}`);
+    if (f.geo) {
+      c.push(
+        `type::is_number(lat) AND type::is_number(lon) AND geo::distance(type::point([lon, lat]), ${b.bind(new GeometryPoint([f.geo.lon, f.geo.lat]))}) <= ${b.bind(f.geo.radiusMeters)}`,
+      );
+    }
+    if (f.sinceMs != null) c.push(`createdMs >= ${b.bind((f.nowMs ?? Date.now()) - f.sinceMs)}`);
+    if (f.about) c.push(`id INSIDE (SELECT VALUE in FROM about WHERE out = ${b.bind(rid(f.about.table, f.about.id))})`);
+    if (f.source) c.push(`source = ${b.bind(f.source)}`);
+    return c.length ? `WHERE ${c.join(" AND ")}` : "";
+  }
+
+  const MEMORY_COLS = "id, kind, category, chatId, line, lat, lon, text, embedModel, importance, data, source, about, createdAt";
+  type MemRow = Omit<MemoryRecord, "embedding" | "geo" | "id"> & { id: unknown; lat?: number | null; lon?: number | null; similarity?: number | null };
+  const toMemory = (r: MemRow): Omit<MemoryRecord, "embedding"> => ({
+    id: plainId(r.id),
+    kind: r.kind,
+    text: r.text,
+    category: r.category ?? null,
+    chatId: r.chatId ?? null,
+    line: r.line ?? null,
+    geo: typeof r.lat === "number" && typeof r.lon === "number" ? { lat: r.lat, lon: r.lon } : null,
+    importance: typeof r.importance === "number" ? r.importance : 0,
+    data: (r.data ?? {}) as Record<string, unknown>,
+    source: r.source,
+    about: (r.about ?? []) as MemoryAboutRef[],
+    embedModel: r.embedModel ?? null,
+    createdAt: String(r.createdAt),
+  });
+
+  async function writeMemory(m: MemoryRecord): Promise<void> {
+    const b = new Batch();
+    const mr = rid("memory", m.id);
+    b.add(
+      `UPSERT ${b.bind(mr)} CONTENT ${b.bind({
+        kind: m.kind,
+        category: m.category,
+        chatId: m.chatId,
+        line: m.line,
+        lat: m.geo?.lat ?? null,
+        lon: m.geo?.lon ?? null,
+        text: m.text,
+        embedding: m.embedding,
+        ...(hnsw && m.embedding?.length === HNSW_DIM ? { [`embedding_${HNSW_DIM}`]: m.embedding } : {}),
+        annIndexed: hnsw && m.embedding?.length === HNSW_DIM,
+        embedModel: m.embedModel,
+        embedDim: m.embedding?.length ?? null,
+        importance: m.importance,
+        data: plain(m.data),
+        source: m.source,
+        about: plain(m.about),
+        createdAt: m.createdAt,
+        createdMs: Date.parse(m.createdAt),
+        label: `${m.kind} · ${m.text.slice(0, 60)}`,
+      })} RETURN NONE`,
+    );
+    for (const a of m.about) b.relate("about", mr, rid(a.table, a.id));
+    await run(b);
+  }
+
+  /** cosine only between vectors of the same model and length (vector::similarity::cosine errors on mismatched dims) */
+  const exactCosine = (b: Batch, model: string, vec: number[]) =>
+    `(IF embedModel = ${b.bind(model)} AND type::is_array(embedding) AND array::len(embedding) = ${b.bind(vec.length)} THEN vector::similarity::cosine(embedding, ${b.bind(vec)}) ELSE NONE END)`;
+
+  const toHit = (r: MemRow): MemoryHit => ({ ...toMemory(r), similarity: typeof r.similarity === "number" ? r.similarity : null });
+
+  /** A + B (see HNSW_DIM): nearest neighbours via the index, plus the rows the index cannot see. */
+  async function searchMemoryKnn(q: MemorySearch, vec: number[]): Promise<MemoryHit[]> {
+    const b = new Batch();
+    const where = memoryWhere(b, q);
+    const and = where ? `${where} AND` : "WHERE";
+    const k = Math.min(KNN_MAX_K, Math.max(KNN_MIN_K, q.limit * 4));
+    const knnOp = `embedding_${HNSW_DIM} <|${k},${k}|> ${b.bind(vec)}`; // K/EF are integers we computed (the operator takes literals)
+    b.add(
+      `SELECT * FROM (SELECT ${MEMORY_COLS}, createdMs, vector::similarity::cosine(embedding_${HNSW_DIM}, ${b.bind(vec)}) AS similarity FROM memory WHERE ${knnOp}) ` +
+        `${and} embedModel = ${b.bind(q.embedModel)} ORDER BY similarity DESC LIMIT ${b.bind(q.limit)}`,
+    );
+    b.add(`SELECT ${MEMORY_COLS}, createdMs, NONE AS similarity FROM memory ${and} annIndexed = false ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    // C. resident-scoped recall: their own newest rows with exact cosine, so other residents' near-duplicates
+    //    can never push a resident's own items out of the global top-K (the chatId index keeps this small)
+    if (q.chatId != null) {
+      const own = memoryWhere(b, { ...q, chatId: null });
+      b.add(`SELECT ${MEMORY_COLS}, createdMs, ${exactCosine(b, q.embedModel!, vec)} AS similarity FROM memory ${own ? `${own} AND` : "WHERE"} chatId = ${b.bind(q.chatId)} ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    }
+    const [near, rest, own] = (await run(b)) as [MemRow[], MemRow[], MemRow[] | undefined];
+    // most similar first, with ⌈limit/4⌉ slots kept for rows without a comparable vector (mergeMemoryPool)
+    return mergeMemoryPool([...(near ?? []), ...(own ?? [])].map(toHit), (rest ?? []).map(toHit), q.limit);
+  }
+
+  async function searchMemoryImpl(q: MemorySearch): Promise<MemoryHit[]> {
+    const vecQ = q.embedding?.length && q.embedModel ? q.embedding : null;
+    if (knn && vecQ?.length === HNSW_DIM) {
+      try {
+        return await searchMemoryKnn(q, vecQ);
+      } catch (err) {
+        knn = false;
+        console.warn(`[surrealdb] KNN recall failed, using the exact scan from now on: ${(err as Error).message}`);
+      }
+    }
+    const b = new Batch();
+    const where = memoryWhere(b, q);
+    const vec = q.embedding?.length && q.embedModel ? q.embedding : null;
+    // cosine only between vectors of the same model and length (vector::similarity::cosine errors on mismatched dims)
+    if (!vec) {
+      b.add(`SELECT ${MEMORY_COLS}, createdMs, NONE AS similarity FROM memory ${where} ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+      const [rows] = (await run(b)) as [MemRow[]];
+      return (rows ?? []).map(toHit);
+    }
+    // exact scan: comparable rows by cosine + the newest rows without a comparable vector (never crowded out)
+    const and = where ? `${where} AND` : "WHERE";
+    b.add(`SELECT ${MEMORY_COLS}, createdMs, ${exactCosine(b, q.embedModel!, vec)} AS similarity FROM memory ${where} ORDER BY similarity DESC, createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    b.add(`SELECT ${MEMORY_COLS}, createdMs, NONE AS similarity FROM memory ${and} (embedModel != ${b.bind(q.embedModel)} OR array::len(embedding ?? []) != ${b.bind(vec.length)}) ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    const [rows, other] = (await run(b)) as [MemRow[], MemRow[]];
+    return mergeMemoryPool((rows ?? []).map(toHit), (other ?? []).map(toHit), q.limit);
+  }
+
+  async function listNeedingEmbedding({ model, limit }: { model: string; limit: number }) {
+    const b = new Batch();
+    b.add(`SELECT id, text, embedModel, createdMs FROM memory WHERE embedModel != ${b.bind(model)} ORDER BY createdMs ASC LIMIT ${b.bind(limit)}`);
+    const [rows] = (await run(b)) as [{ id: unknown; text: string; embedModel?: string | null }[]];
+    return (rows ?? []).map((r) => ({ id: plainId(r.id), text: String(r.text ?? ""), embedModel: r.embedModel ?? null }));
+  }
+
+  async function setEmbedding(id: string, embedding: number[], embedModel: string): Promise<void> {
+    const b = new Batch();
+    const ann = hnsw && embedding.length === HNSW_DIM;
+    b.add(
+      `UPDATE ${b.bind(rid("memory", id))} SET embedding = ${b.bind(embedding)}, embedModel = ${b.bind(embedModel)}, embedDim = ${b.bind(embedding.length)}, ` +
+        `annIndexed = ${b.bind(ann)}, embedding_${HNSW_DIM} = ${ann ? b.bind(embedding) : "NONE"} RETURN NONE`,
+    );
+    await run(b);
+  }
+
   // ---------------------------------------------------------------------------
   const store: SurrealStore = {
     backend: embedded ? "surrealdb-embedded" : "surrealdb",
+    get vectorIndex() {
+      return hnsw;
+    },
+    get knnRecall() {
+      return knn;
+    },
     namespace,
     database,
 
@@ -458,7 +686,9 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
 
     reset: guard("reset", async () => {
       const tables = [...NODE_TABLES, ...Object.keys(RELATIONS)];
-      await q(tables.map((t) => `DELETE ${t};`).join("\n"));
+      // #28: the NYC311 catalog (complaint_category rows with catalog = true) is reference data, not run state;
+      // re-crawling it takes ~15 min, so --reset keeps it.
+      await q(tables.map((t) => (t === "complaint_category" ? `DELETE ${t} WHERE catalog != true;` : `DELETE ${t};`)).join("\n"));
       await seedCategories();
     }),
 
@@ -738,20 +968,72 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       await run(b);
     }),
 
+    // -- same issue across residents (#5) -----------------------------------------
+    linkSameIssue: guard("linkSameIssue", async (supporterId: string, originalId: string) => {
+      const b = new Batch();
+      const o = rid("complaint", originalId);
+      if (supporterId !== originalId) b.relate("same_issue_as", rid("complaint", supporterId), o);
+      const oRef = b.bind(o);
+      b.add(`LET $n = array::len((SELECT VALUE id FROM same_issue_as WHERE out = ${oRef}))`);
+      b.add(`IF $n > 0 { UPDATE ${oRef} SET supporters = $n, doc.supporters = $n RETURN NONE; }`);
+      b.add("RETURN $n");
+      const res = await run(b);
+      const n = res[res.length - 1];
+      return typeof n === "number" ? n : 0;
+    }),
+    linkNotSameIssue: guard("linkNotSameIssue", async (complaintId: string, otherId: string) => {
+      if (complaintId === otherId) return;
+      const b = new Batch();
+      b.relate("not_same_as", rid("complaint", complaintId), rid("complaint", otherId));
+      await run(b);
+    }),
+    getIssueLinks: guard("getIssueLinks", async (complaintId: string) => {
+      const [out, joined, notSame] = await q<[unknown[], { in: unknown; createdAt: unknown }[], unknown[]]>(
+        `SELECT VALUE out FROM same_issue_as WHERE in = $c;
+         SELECT in, createdAt FROM same_issue_as WHERE out = $c ORDER BY createdAt ASC;
+         SELECT VALUE out FROM not_same_as WHERE in = $c;`,
+        { c: rid("complaint", complaintId) },
+      );
+      const ids = (joined ?? []).map((r) => plainId(r.in));
+      return { sameIssueAs: out?.[0] ? plainId(out[0]) : null, joined: ids, notSameAs: (notSame ?? []).map(plainId), supporters: ids.length };
+    }),
+
+    // -- agent memory (#4) -------------------------------------------------------
+    insertMemory: guard("insertMemory", writeMemory),
+    searchMemory: guard("searchMemory", searchMemoryImpl),
+    listMemoryNeedingEmbedding: guard("listMemoryNeedingEmbedding", listNeedingEmbedding),
+    setMemoryEmbedding: guard("setMemoryEmbedding", setEmbedding),
+    listMemory: guard("listMemory", async (args?: { kind?: MemoryKind; category?: string; chatId?: string; source?: string; about?: MemoryAboutRef; limit?: number }) => {
+      const b = new Batch();
+      const where = memoryWhere(b, { kind: args?.kind, category: args?.category, chatId: args?.chatId, source: args?.source, about: args?.about });
+      b.add(`SELECT ${MEMORY_COLS}, createdMs FROM memory ${where} ORDER BY createdMs DESC LIMIT ${b.bind(args?.limit ?? 100)}`);
+      const [rows] = (await run(b)) as [MemRow[]];
+      return (rows ?? []).map(toMemory);
+    }),
+
     // -- graph -----------------------------------------------------------------
     // -- NYC311 catalog (#7) -------------------------------------------------------
     upsertCatalog: guard("upsertCatalog", async (entries: CatalogEntryT[]) => {
       for (let i = 0; i < entries.length; i += 100) {
         const b = new Batch();
         for (const e of entries.slice(i, i + 100)) {
-          const { id, ...fields } = e;
+          const { id, requiredFields, formSchema: _learned, ...fields } = e;
           // Rows seeded from CATEGORIES keep their official label; catalog-only rows are labelled by title.
           const label = id in CATEGORIES ? {} : { label: e.title, shortLabel: e.title, articleUrl: e.articleUrl };
-          b.add(`UPSERT ${b.bind(rid("complaint_category", id))} MERGE ${b.bind(plain({ ...fields, ...label, catalog: true }))} RETURN NONE`);
+          const rec = b.bind(rid("complaint_category", id));
+          b.add(`UPSERT ${rec} MERGE ${b.bind(plain({ ...fields, ...label, catalog: true }))} RETURN NONE`);
+          b.add(keepLearnedRequiredFields(rec, b.bind(requiredFields)));
         }
         await run(b);
       }
       return entries.length;
+    }),
+
+    // #11: learned form structure (services/form-schema-memory.ts); creates the row when the category has none yet
+    updateCategorySchema: guard("updateCategorySchema", async (id: string, learned: { requiredFields: string[]; formSchema: FormSchema; lastVerifiedAt: string }) => {
+      const b = new Batch();
+      b.add(`UPSERT ${b.bind(rid("complaint_category", id))} MERGE ${b.bind(plain({ requiredFields: learned.requiredFields, formSchema: learned.formSchema, lastVerifiedAt: learned.lastVerifiedAt }))} RETURN NONE`);
+      await run(b);
     }),
 
     listCatalog: guard("listCatalog", async () => {

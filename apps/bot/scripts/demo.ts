@@ -12,6 +12,9 @@
  *   cancel: a subway draft, cancelled at the approval card. Nothing is filed.
  *   emergency: danger ⇒ 911 referral. out-of-scope: "pothole on my street" ⇒ generic out-of-scope reply + NYC311 link.
  *   ambiguous: a vague message ⇒ one clarifying question, then a subway delay.
+ *   Same issue across residents (#5): run `subway --no-filing` twice with different `--chat` ids against a shared
+ *           store (e.g. STORE_BACKEND=surrealdb SURREALDB_URL=surrealkv://.runs/dup-demo.db). The second rider gets
+ *           "Looks like this was already raised"; `--answer dup_join` adds them to it, otherwise they file a new one.
  * Uses STORE_BACKEND=memory unless you set STORE_BACKEND yourself.
  */
 process.env.STORE_BACKEND ??= "memory";
@@ -21,6 +24,7 @@ const { resolveProviders, providerReport } = await import("../src/integrations/i
 const { createCaptureTransport } = await import("../src/api/capture-transport.js");
 const { stripHtml } = await import("../src/telegram/messages.js");
 const { previewPayload } = await import("../src/services/filing.js");
+const { recallForComplaint } = await import("../src/services/agent-memory.js");
 type InboundEvent = import("../src/core/contracts.js").InboundEvent;
 type CapturedMessage = import("../src/api/capture-transport.js").CapturedMessage;
 
@@ -139,6 +143,13 @@ async function answerTransit(msgs: CapturedMessage[]) {
 
 /** From the latest bot messages, continue past duplicate review and (optionally) approve. */
 async function reviewAndApprove(msgs: CapturedMessage[]) {
+  // #5: "this was already raised" — `--answer dup_join` adds this rider to the existing report (nothing is filed).
+  const join = findButton(msgs, "dup_join");
+  if (join && opt("answer", "") === "dup_join") {
+    await tap(join);
+    console.log(`\n${C.yellow}--answer dup_join: added to the existing report; nothing filed.${C.reset}`);
+    return;
+  }
   const dup = findButton(msgs, "dup_continue");
   if (dup) msgs = await tap(dup);
   const approve = findButton(msgs, "approve");
@@ -224,6 +235,17 @@ if (last) {
   if (attempts[0]) console.log(`${C.bold}Filing attempt:${C.reset} ${attempts[0].id} outcome=${attempts[0].outcome} error=${attempts[0].errorCode ?? "-"} evidence=${attempts[0].evidence.length}`);
 }
 await (providers.filing as { drain?: () => Promise<void> }).drain?.().catch(() => {});
+await providers.memory.flush();
+if (last) {
+  // What the agent remembers for this complaint and why (same as GET /api/memory?complaintId=…).
+  const fresh = (await providers.store.getComplaint(last.id)) ?? last;
+  const { query, items } = await recallForComplaint(providers.memory, fresh, 5);
+  console.log(`\n${C.bold}Agent memory${C.reset} (${providers.memory.embedder?.model ?? "keyword only"}) — recall for “${query}”:`);
+  for (const m of items) {
+    const b = m.breakdown;
+    console.log(`  ${m.score.toFixed(3)}  ${m.kind.padEnd(10)} rel ${b.relevance.toFixed(2)} (${b.relevanceKind}) · rec ${b.recency.toFixed(2)} · imp ${b.importance.toFixed(2)}  ${m.text.slice(0, 110)}`);
+  }
+}
 if (lastOutcome) console.log(`\n${C.bold}FilingOutcome:${C.reset}\n${JSON.stringify(lastOutcome, null, 2)}`);
 await providers.tracer.flush().catch(() => {});
 process.exit(0);

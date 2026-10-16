@@ -81,11 +81,11 @@ describe.skipIf(!HAS_CHROME)("recipe ≡ hand-written MTA adapter on the dry run
       { kind: "stop", target: "Submit your feedback" },
     ]);
     expect([hand.submitClicked, rec.submitClicked, handSubmitted, recSubmitted]).toEqual([false, false, false, false]);
-    // form_schema: inspect (partial) + validate (complete) from both; never a typed value.
+    // form_schema (#11 shape): per-step events merged into state.formSchema by both; never a typed value.
     for (const r of [hand, rec]) {
-      const schemas = r.events.filter((e) => e.message === "form_schema").map((e) => e.data!.schema as { complete: boolean; steps: { name: string; fields: { label: string; type: string }[] }[] });
-      expect(schemas.map((s) => s.complete)).toEqual([false, true]);
-      const full = JSON.stringify(schemas[1]);
+      expect(r.events.some((e) => e.message === "form_schema" && typeof e.data?.stepTitle === "string" && Array.isArray(e.data?.fields))).toBe(true);
+      expect(r.formSchema!.steps.length).toBeGreaterThan(1);
+      const full = JSON.stringify(r.formSchema);
       expect(full).toContain("A Train-Downtown & Queens");
       expect(full).toContain("Tell us more (Required)");
       expect(full).toContain("Email (optional)");
