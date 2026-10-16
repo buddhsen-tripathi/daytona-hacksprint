@@ -52,7 +52,7 @@ const SYNONYMS: Record<string, string[]> = {
   loud: ["noise"], music: ["noise"], party: ["noise"], barking: ["noise", "dog"], noisy: ["noise"], blasting: ["noise"],
   car: ["vehicle"], cars: ["vehicle"], truck: ["vehicle"], parked: ["parking", "illegal"], parking: ["parking", "illegal"], double: ["parking"], hydrant: ["parking"], driveway: ["driveway", "blocked"],
   heat: ["heat", "hot", "water", "apartment"], heating: ["heat"], radiator: ["heat"], cold: ["heat"], hot: ["heat"], landlord: ["apartment", "maintenance"], leak: ["leak", "water"], mold: ["mold", "apartment"],
-  pothole: ["pothole", "street", "condition"], potholes: ["pothole", "street", "condition"], road: ["street"], sidewalk: ["sidewalk"], cracked: ["damaged"], broken: ["damaged", "defective"],
+  pothole: ["pothole", "street", "condition"], potholes: ["pothole", "street", "condition"], road: ["street"], sidewalk: ["sidewalk", "condition"], cracked: ["damaged", "broken", "trip", "hazard"], lifted: ["broken", "trip", "hazard"], tripped: ["trip", "hazard"], uneven: ["trip", "hazard"], broken: ["damaged", "defective", "broken"],
   streetlight: ["street", "light"], lamp: ["light"], signal: ["traffic", "signal"], stoplight: ["traffic", "signal"],
   trash: ["garbage", "litter"], garbage: ["garbage"], litter: ["litter", "dirty"], dumping: ["dumping", "illegal"], recycling: ["recycling"], pickup: ["collection"],
   graffiti: ["graffiti"], tag: ["graffiti"], tree: ["tree"], branch: ["tree", "limb"], fallen: ["down", "damaged"],
@@ -61,7 +61,7 @@ const SYNONYMS: Record<string, string[]> = {
   homeless: ["homeless", "outreach"], panhandling: ["panhandling"], smoke: ["smoking"], smoking: ["smoking"], vape: ["smoking"],
   dog: ["dog", "animal"], cat: ["cat", "animal"], pigeons: ["pigeon"], dead: ["dead"], animal: ["animal"],
   taxi: ["taxi"], uber: ["car", "service"], lyft: ["car", "service"], cab: ["taxi"],
-  water: ["water"], sewer: ["sewer"], flooding: ["flooding", "catch", "basin"], hydrants: ["hydrant"],
+  water: ["water"], sewer: ["sewer"], flooding: ["flooding", "catch", "basin"], hydrants: ["hydrant"], drain: ["catch", "basin", "sewer"], storm: ["catch", "basin"], gutter: ["catch", "basin"],
   construction: ["construction"], scaffolding: ["scaffold"], elevator: ["elevator"], boiler: ["boiler"],
   restaurant: ["restaurant", "food"], store: ["store", "business"], overcharged: ["overcharge", "consumer"], refund: ["consumer", "complaint"],
 };
