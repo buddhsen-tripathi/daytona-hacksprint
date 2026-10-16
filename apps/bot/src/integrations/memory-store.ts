@@ -10,6 +10,7 @@ import type {
   DuplicateCandidate,
   FilingAttempt,
   FilingTarget,
+  MemoryRecord,
   OfficialRequest,
   Resident,
   Store,
@@ -17,6 +18,7 @@ import type {
 } from "../core/contracts.js";
 import { nowIso, shortId } from "../core/contracts.js";
 import { filterRelated } from "../services/memory.js";
+import { memoryMatches, searchMemoryRows } from "../services/agent-memory.js";
 
 const TERMINAL: ComplaintState[] = ["CANCELLED", "EMERGENCY_REFERRAL", "OUT_OF_SCOPE", "TRACKING", "SUBMITTED"];
 
@@ -42,6 +44,7 @@ export function createMemoryStore(): MemoryStore {
   const patterns: WorkflowPattern[] = [];
   const transitions: TransitionRecord[] = [];
   const similar = new Map<string, Set<string>>();
+  const memories = new Map<string, MemoryRecord>();
 
   const store: MemoryStore = {
     backend: "memory",
@@ -176,6 +179,22 @@ export function createMemoryStore(): MemoryStore {
     },
     async getWorkflowPatterns(args: { target: FilingTarget; category: CategoryId }) {
       return clone(patterns.filter((p) => p.target === args.target && p.category === args.category));
+    },
+
+    // -- agent memory (#4): same semantics as the SurrealQL in surrealdb.ts (shared helpers in services/agent-memory.ts)
+    async insertMemory(row) {
+      memories.set(row.id, clone(row));
+    },
+    async searchMemory(q) {
+      return clone(searchMemoryRows(memories.values(), q));
+    },
+    async listMemory(args) {
+      const list = [...memories.values()]
+        .filter((m) => memoryMatches(m, { kind: args?.kind, category: args?.category, chatId: args?.chatId, about: args?.about }))
+        .filter((m) => !args?.source || m.source === args.source)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, args?.limit ?? 100);
+      return clone(list.map(({ embedding: _e, ...rest }) => rest));
     },
 
     async graph(args) {
