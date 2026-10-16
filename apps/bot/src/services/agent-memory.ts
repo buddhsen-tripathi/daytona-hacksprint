@@ -56,6 +56,9 @@ const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n))
 const PII_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   [/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]"],
   [/(?:\+?1[-.\s]?)?\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g, "[phone]"],
+  // #24: no separators: NANP-shaped 10 digits, optionally 1 / +1 prefixed, not part of a longer digit run
+  // (8-digit case numbers and other ids stay readable).
+  [/(?<![\d+])(?:\+?1)?[2-9]\d{2}[2-9]\d{6}(?!\d)/g, "[phone]"],
 ];
 
 /** True if `scrubPii` would redact something (an email or phone number). */

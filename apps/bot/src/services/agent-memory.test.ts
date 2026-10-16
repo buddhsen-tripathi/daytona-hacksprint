@@ -4,7 +4,7 @@ import { EMPTY_LOCATION, EMPTY_TRANSIT, nowIso } from "../core/contracts.js";
 import { createHashEmbedder } from "../integrations/embedder.js";
 import { createMemoryStore } from "../integrations/memory-store.js";
 import { createSurrealStore, type SurrealStore } from "../integrations/surrealdb.js";
-import { KEYWORD_RELEVANCE_SCALE, MEMORY_WEIGHTS, createAgentMemory, keywordOverlap, recencyDecay, scrubPii, tokenize } from "./agent-memory.js";
+import { KEYWORD_RELEVANCE_SCALE, MEMORY_WEIGHTS, createAgentMemory, hasPii, keywordOverlap, recencyDecay, scrubPii, tokenize } from "./agent-memory.js";
 
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
 const daysAgo = (d: number) => new Date(NOW - d * 24 * 3600_000).toISOString();
@@ -271,5 +271,19 @@ describe("agent memory: pure helpers", () => {
   });
   it("scrubPii removes emails and phone numbers", () => {
     expect(scrubPii("mail a.b@c.io, call (718) 555-0199")).toBe("mail [email], call [phone]");
+    expect(scrubPii("Jane.Doe+311@Example.co.uk")).toBe("[email]");
+  });
+  it("scrubPii removes phone numbers without separators (10/11 digits, +1) (#24)", () => {
+    expect(scrubPii("call 2125550100")).toBe("call [phone]");
+    expect(scrubPii("call 12125550100 now")).toBe("call [phone] now");
+    expect(scrubPii("call +12125550100.")).toBe("call [phone].");
+    expect(scrubPii("+1 212 555 0100 or 212.555.0100")).toBe("[phone] or [phone]");
+    expect(hasPii("text me at 2125550100")).toBe(true);
+  });
+  it("scrubPii keeps case numbers and other digit runs that aren't phone numbers", () => {
+    for (const s of ["SR 31112345678 filed", "case 12345678", "request 311-12345678", "ref 20261016", "car 8123 at 14 St", "id 123456789012", "zip 10001"]) {
+      expect(scrubPii(s)).toBe(s);
+      expect(hasPii(s)).toBe(false);
+    }
   });
 });
