@@ -3,10 +3,20 @@
  * The worker runs alone inside the sandbox (only playwright-core installed), so it must not import the bot.
  * KEEP IDENTICAL to: FilingTarget, CategoryId, FilingPayload, FilingStatus, FilingErrorCode,
  * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult, TransitDetails, SUBWAY_LINES, WorkerQuestion, WorkerAnswer.
+ * Deliberately wider than the bot: `category` is any catalog slug (the registry decides; unknown ⇒ FAILED/NO_ADAPTER).
  */
 /** Every filing targets the official form (the replica portal is gone). */
 export type FilingTarget = "real";
 export type CategoryId = "subway-delay";
+/**
+ * The worker accepts any catalog slug as `category` (CatalogEntry.id, #7/#9); the adapter registry decides whether it
+ * can file it. The bot's FilingPayload.category is still CategoryId (a subset).
+ */
+export type CatalogCategoryId = CategoryId | (string & {});
+/** "none" | "handoff" | "adapter:<id>" (same as the bot's CatalogAutomation). */
+export type CatalogAutomation = string;
+export const CATEGORY_SLUG_RE = /^[a-z0-9-]+$/;
+export const AUTOMATION_RE = /^(none|handoff|adapter:[a-z0-9-]+)$/;
 
 /** Canonical subway lines (same order/spelling as the bot's SUBWAY_LINES). The MTA wizard labels them "<line> Line". */
 export const SUBWAY_LINES = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D", "F", "M", "N", "Q", "R", "W", "G", "L", "J", "Z", "S-42 Street Shuttle", "S-Franklin Av Shuttle", "S-Rockaway Park Shuttle", "Staten Island Railway"] as const;
@@ -31,7 +41,9 @@ export interface FilingPayload {
   complaintId: string;
   approvedVersion: number;
   target: FilingTarget;
-  category: CategoryId;
+  category: CatalogCategoryId;
+  /** Optional: how to file it (CatalogEntry.automation). Absent ⇒ the registry default for `category`. */
+  automation?: CatalogAutomation;
   formUrl: string;
   allowedHosts: string[];
   extraHeaders: Record<string, string>;
@@ -96,7 +108,8 @@ export type FilingErrorCode =
   | "TIMEOUT"
   | "BROWSER_ERROR"
   | "WORKER_CRASH"
-  | "SANDBOX_ERROR";
+  | "SANDBOX_ERROR"
+  | "NO_ADAPTER";
 
 export type WorkerStep = "navigate" | "inspect" | "fill" | "validate" | "submit" | "confirm";
 
@@ -134,7 +147,7 @@ export interface WorkerResult {
  * What the worker actually writes. Extra keys are ignored by the bot's zod parse (z.object strips unknown keys).
  * `message` = one human-readable sentence explaining the outcome (safe to show to the resident).
  */
-export type WorkerResultFile = WorkerResult & { message: string; target: FilingTarget; category: CategoryId };
+export type WorkerResultFile = WorkerResult & { message: string; target: FilingTarget; category: CatalogCategoryId };
 
 /** Thrown by adapters/main to stop the run with a definite non-SUBMITTED outcome. */
 export class Outcome extends Error {
@@ -150,8 +163,6 @@ export class Outcome extends Error {
 }
 
 export const nowIso = () => new Date().toISOString();
-
-const CATEGORIES: CategoryId[] = ["subway-delay"];
 
 /** Hand-written shape check (no zod in the sandbox). Returns a list of problems; empty = valid. */
 export function validatePayload(p: unknown): string[] {
@@ -171,7 +182,9 @@ export function validatePayload(p: unknown): string[] {
   str(p, "complaintId");
   if (typeof p.approvedVersion !== "number") problems.push("approvedVersion must be a number");
   if (p.target !== "real") problems.push("target must be real");
-  if (!CATEGORIES.includes(p.category as CategoryId)) problems.push(`category must be one of ${CATEGORIES.join("|")}`);
+  // Any catalog slug is accepted here; whether it can be filed is the adapter registry's call (FAILED/NO_ADAPTER).
+  if (typeof p.category !== "string" || !CATEGORY_SLUG_RE.test(p.category)) problems.push("category must be a catalog slug [a-z0-9-]+");
+  if (p.automation !== undefined && (typeof p.automation !== "string" || !AUTOMATION_RE.test(p.automation))) problems.push("automation must be none|handoff|adapter:<id>");
   str(p, "formUrl");
   try {
     const u = new URL(String(p.formUrl));

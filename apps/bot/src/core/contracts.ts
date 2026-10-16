@@ -345,6 +345,11 @@ export const FilingPayload = z.object({
   approvedVersion: z.number(),
   target: FilingTarget,
   category: CategoryId,
+  /**
+   * Optional (#9): how the worker should file this category, as in CatalogEntry.automation. Absent ⇒ the worker's
+   * registry default for `category` (subway-delay → adapter:mta-subway-delay). "handoff" ⇒ open formUrl, prefill, never submit.
+   */
+  automation: CatalogAutomation.optional(),
   /** Absolute URL the worker is allowed to open first (allowlist root). */
   formUrl: z.string().url(),
   /** Hostnames the worker may navigate within. Anything else ⇒ HUMAN_ACTION_REQUIRED. */
@@ -419,6 +424,7 @@ export const FilingErrorCode = z.enum([
   "BROWSER_ERROR",
   "WORKER_CRASH",
   "SANDBOX_ERROR",
+  "NO_ADAPTER", // #9: the worker has no adapter for this category/automation; nothing was opened
 ]);
 export type FilingErrorCode = z.infer<typeof FilingErrorCode>;
 
