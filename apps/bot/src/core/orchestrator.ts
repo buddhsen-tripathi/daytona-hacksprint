@@ -65,6 +65,7 @@ import {
   findSameIssue,
   sameIssueChoiceItem,
   sameIssueLabel,
+  sameIssueQueryText,
   sameIssuePrompt,
   sameIssueStatus,
   type AskHint,
@@ -571,6 +572,9 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const hadCategory = draft.category;
     const applied = complaints.applyClassification(draft, result);
     draft = applied.draft;
+    // #5/#22: start embedding the same-issue query now (fire-and-forget) so the duplicate gate that runs
+    // just before the card finds the vector in cache instead of waiting on OpenRouter.
+    if (draft.category && memory?.warm) memory.warm(sameIssueQueryText(draft));
     // Deterministic fallback for short answers to the line/direction question ("the A", "downtown").
     if (input.text && requiredFieldsFor(draft.category).includes("transit") && missingTransit(draft.transit).length && applied.decision.kind === "CONTINUE") {
       const hints = transitHintsFromText(input.text);
