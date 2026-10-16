@@ -112,6 +112,10 @@ After every filing attempt, the bot sends you the Anchor session recording on Te
 
 Every step is a span in Phoenix under the chat's session, and the evaluation suite (`scripts/evals.ts`) annotates each scenario's trace with the six evaluation dimensions from the design doc.
 
+## Agent memory
+
+The bot keeps one memory stream in SurrealDB (`services/agent-memory.ts`): episodic items (a draft ready for approval, each filing outcome, every live question and how it was answered), semantic facts (the category registry) and procedural rules (fields the official form asked for, learned from earlier filings). Each item is embedded with OpenRouter (`openai/text-embedding-3-small`; a local hashed embedder takes over offline) and recalled by `0.5·relevance + 0.3·recency (7-day half-life) + 0.2·importance`, with the breakdown attached so you can see why something came back (`GET /api/memory?complaintId=…`, and the end of `pnpm demo`). Memory text is the neutral description only, never contact details or what a resident typed, and recall on a resident's behalf only sees their own items plus shared facts.
+
 ## Safety rules the code enforces
 
 - Only a user tap on "Approve and file" moves a draft to APPROVED, and the approval is bound to the draft version.
