@@ -3,7 +3,9 @@
  *
  *   pnpm --filter @311relay/bot demo -- --scenario happy [--no-filing]
  *
- * Scenarios: happy | missing-location | duplicate | cancel | captcha | flaky | reject | emergency | out-of-scope | ambiguous
+ * Scenarios: happy | missing-location | duplicate | cancel | captcha | flaky | reject | emergency | out-of-scope | ambiguous | subway
+ *   subway: a genuine A-train delay → MTA Customer Feedback (real-only). ALLOW_REAL_SUBMIT unset ⇒ dry run
+ *           (the worker fills the form and stops before Submit). Prints the exact FilingPayload preview.
  * Uses STORE_BACKEND=memory unless you set STORE_BACKEND yourself.
  */
 process.env.STORE_BACKEND ??= "memory";
@@ -15,6 +17,7 @@ const { resolveProviders, providerReport } = await import("../src/integrations/i
 const { filingTarget } = await import("../src/integrations/env.js");
 const { createCaptureTransport, resolveFixture, FIXTURE_IMAGES } = await import("../src/api/capture-transport.js");
 const { stripHtml } = await import("../src/telegram/messages.js");
+const { previewPayload } = await import("../src/services/filing.js");
 type InboundEvent = import("../src/core/contracts.js").InboundEvent;
 type CapturedMessage = import("../src/api/capture-transport.js").CapturedMessage;
 
@@ -26,7 +29,7 @@ const opt = (name: string, fallback: string) => {
   const eq = argv.find((a) => a.startsWith(`--${name}=`));
   return eq ? eq.split("=")[1]! : fallback;
 };
-const SCENARIOS = ["happy", "missing-location", "duplicate", "cancel", "captcha", "flaky", "reject", "emergency", "out-of-scope", "ambiguous"] as const;
+const SCENARIOS = ["happy", "missing-location", "duplicate", "cancel", "captcha", "flaky", "reject", "emergency", "out-of-scope", "ambiguous", "subway"] as const;
 type Scenario = (typeof SCENARIOS)[number];
 const scenario = opt("scenario", "happy") as Scenario;
 if (!SCENARIOS.includes(scenario)) {
@@ -48,7 +51,8 @@ const transport = createCaptureTransport({
       return;
     }
     console.log(`\n${C.cyan}${C.bold}bot ▸${C.reset} ${stripHtml(m.text).replace(/\n/g, "\n       ")}`);
-    if (m.photoPath) console.log(`${C.dim}       [photo attached]${C.reset}`);
+    if (m.photoPath) console.log(`${C.dim}       [photo attached: ${m.photoPath}]${C.reset}`);
+    if (m.videoPath) console.log(`${C.dim}       [video attached: ${m.videoPath}]${C.reset}`);
     if (m.requestLocation) console.log(`${C.dim}       [keyboard: 📍 Share location]${C.reset}`);
     for (const row of m.buttons ?? []) console.log(`${C.dim}       ${row.map((b) => `[${b.text}${b.url ? ` → ${b.url}` : ""}]`).join(" ")}${C.reset}`);
   },
@@ -165,6 +169,25 @@ switch (scenario) {
   case "out-of-scope":
     await say("My neighbor's dog keeps barking all night");
     break;
+  case "subway": {
+    let msgs = await say("The A train sat at 14 St for 25 minutes this morning around 8:30, downtown, no announcements");
+    for (let i = 0; i < 3 && !findButton(msgs, "approve"); i++) {
+      const last = stripHtml(msgs[msgs.length - 1]?.text ?? "");
+      if (/which line/i.test(last)) msgs = await say("The A train");
+      else if (/which direction/i.test(last)) msgs = await say("Downtown");
+      else break;
+    }
+    const asked = transport.messages.some((m) => m.requestLocation || /share the location|nearest intersection/i.test(m.text));
+    console.log(`\n${C.bold}Location asked:${C.reset} ${asked ? "YES (bug)" : "no"}`);
+    const d = (await providers.store.listComplaints({ chatId, limit: 1 }))[0];
+    if (d) {
+      const resident = await providers.store.getOrCreateResident(chatId, "demo_user");
+      const approvedVersion = d.status === "READY_FOR_APPROVAL" ? d.draftVersion : d.approvedVersion;
+      console.log(`\n${C.bold}FilingPayload preview (per-attempt fields attemptId/cdpUrl/liveViewUrl/extraHeaders are added at filing time):${C.reset}\n${JSON.stringify(previewPayload({ ...d, approvedVersion }, resident), null, 2)}`);
+    }
+    await reviewAndApprove(msgs);
+    break;
+  }
   case "ambiguous": {
     await say("something's wrong outside my building");
     await say("I think the road is damaged, maybe a pothole");

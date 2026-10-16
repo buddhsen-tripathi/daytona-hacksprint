@@ -10,6 +10,7 @@ import type {
   ComplaintDraft,
   ComplaintLocation,
   DuplicateService,
+  Evidence,
   FilingOutcome,
   FilingTarget,
   LocationService,
@@ -22,7 +23,15 @@ import { env } from "./env.js";
 
 // ---- service shapes owned by other agents (structural, so any compatible impl fits) ----
 export interface FilingService {
-  executeFiling(complaint: ComplaintDraft, opts: { resident: Resident; onProgress: (text: string) => void }): Promise<FilingOutcome>;
+  executeFiling(
+    complaint: ComplaintDraft,
+    opts: {
+      resident: Resident;
+      onProgress: (text: string) => void;
+      /** Called in the background once the browser session recording is downloaded (Anchor only). */
+      onRecording?: (localPath: string, evidence: Evidence) => Promise<void>;
+    },
+  ): Promise<FilingOutcome>;
 }
 export type StatusLookupResult = {
   found: boolean;

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ComplaintDraft, DuplicateCandidate, FilingAttempt } from "../core/contracts.js";
-import { EMPTY_LOCATION, nowIso } from "../core/contracts.js";
+import { CATEGORIES, EMPTY_LOCATION, nowIso } from "../core/contracts.js";
 import { StoreError, createSurrealStore, type SurrealStore } from "./surrealdb.js";
 
 function draft(over: Partial<ComplaintDraft> = {}): ComplaintDraft {
@@ -188,6 +188,6 @@ describe("SurrealStore (embedded mem://)", () => {
     await store.reset();
     expect(await store.listComplaints()).toEqual([]);
     const [cats] = await store.query<[unknown[]]>("SELECT * FROM complaint_category");
-    expect(cats.length).toBe(2);
+    expect(cats.length).toBe(Object.keys(CATEGORIES).length);
   });
 });

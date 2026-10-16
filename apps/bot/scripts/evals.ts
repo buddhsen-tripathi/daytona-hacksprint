@@ -66,7 +66,9 @@ const INLINE: Scenario[] = [
 function loadScenarios(): Scenario[] {
   const p = resolve(REPO_ROOT, "fixtures/example-complaints.json");
   const list = existsSync(p) ? (JSON.parse(readFileSync(p, "utf8")) as Scenario[]) : INLINE;
-  return ONLY ? list.filter((s) => ONLY.includes(s.id)) : list;
+  // skipEvals: cases whose flow these location-based scorers don't model (e.g. subway-delay → MTA, real-only filing).
+  const runnable = list.filter((s) => !(s as { skipEvals?: boolean }).skipEvals);
+  return ONLY ? runnable.filter((s) => ONLY.includes(s.id)) : runnable;
 }
 
 // ---------------------------------------------------------------------------

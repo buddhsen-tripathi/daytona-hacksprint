@@ -23,7 +23,14 @@ type Case = {
   inputText: string | null;
   imageFixture: string | null;
   location: { latitude: number; longitude: number; address: string } | null;
-  expected: { triage: string; category: string | null; asksForLocation?: boolean; emergency?: boolean; expectDuplicates?: boolean };
+  expected: {
+    triage: string;
+    category: string | null;
+    asksForLocation?: boolean;
+    emergency?: boolean;
+    expectDuplicates?: boolean;
+    transit?: { line?: string; directionIncludes?: string; stationIncludes?: string; delayMinutes?: number };
+  };
 };
 
 const args = process.argv.slice(2);
@@ -57,6 +64,16 @@ await Promise.all(
         pass = result.triage === exp.triage && (exp.category == null || result.category === exp.category) && (exp.triage !== "SUPPORTED" || result.confidence >= CLASSIFY_CONFIDENCE_THRESHOLD);
       }
       let note = result.clarifyingQuestion ? `Q: ${result.clarifyingQuestion}` : result.description;
+      if (exp.transit) {
+        const t = result.transit;
+        const bad: string[] = [];
+        if (exp.transit.line && t?.line !== exp.transit.line) bad.push(`line=${t?.line ?? "null"}`);
+        if (exp.transit.directionIncludes && !(t?.direction ?? "").toLowerCase().includes(exp.transit.directionIncludes)) bad.push(`direction=${t?.direction ?? "null"}`);
+        if (exp.transit.stationIncludes && !(t?.station ?? "").toLowerCase().includes(exp.transit.stationIncludes)) bad.push(`station=${t?.station ?? "null"}`);
+        if (exp.transit.delayMinutes != null && t?.delayMinutes !== exp.transit.delayMinutes) bad.push(`delayMinutes=${t?.delayMinutes ?? "null"}`);
+        if (bad.length) pass = false;
+        note = `transit ${JSON.stringify(t)}${bad.length ? ` MISMATCH ${bad.join(",")}` : ""} | ${note}`;
+      }
       if (checkDups && exp.expectDuplicates && c.location && result.category) {
         const d = await dups.findPotentialDuplicates({ category: result.category, latitude: c.location.latitude, longitude: c.location.longitude });
         note += ` | dups(${d.source}): ${d.candidates.map((x) => `${x.uniqueKey}@${x.distanceMeters}m=${x.matchScore}`).join(", ") || "none"}`;

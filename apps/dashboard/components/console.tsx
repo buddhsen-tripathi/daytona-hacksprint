@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import { Activity, Box, Bot, Database, Globe, Radar, Sparkles, Target } from "lucide-react";
 import type { ReactNode } from "react";
 import { asList, usePoll, withMock } from "@/lib/api";
-import { fmtAgo, fmtMs, fmtTime, normalizeHealth, providerState } from "@/lib/format";
+import { fmtAgo, fmtMs, fmtTime, normalizeHealth, providerState, evidenceSrc } from "@/lib/format";
 import type { ComplaintDraft, FilingAttempt } from "@/lib/types";
 import { CATEGORY_LABEL } from "@/lib/categories";
 import { ApiDownBanner, Card, Empty, ExtLink, LiveTick, Mono, Section, SkeletonRows, StatePill } from "./ui";
@@ -228,7 +228,7 @@ export function Console({ mock }: { mock: boolean }) {
                       </dl>
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
                         <ExtLink href={a.outcome == null ? a.liveViewUrl : null}>live view</ExtLink>
-                        <ExtLink href={a.recordingUrl}>recording</ExtLink>
+                        <ExtLink href={a.recordingUrl ? evidenceSrc(a.recordingUrl) : null}>recording</ExtLink>
                         <ExtLink href={a.traceUrl}>trace</ExtLink>
                       </div>
                     </Card>

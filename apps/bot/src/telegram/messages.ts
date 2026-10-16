@@ -68,7 +68,10 @@ export const M = {
   progress: (t: string) => `⚙️ ${esc(t)}`,
   cancelled: () => "Okay, I cancelled that draft. Nothing was filed.\n\nSend a photo or description anytime to start a new report.",
   nothingToCancel: () => "There's no active draft to cancel.",
-  editPrompt: () => "Sure. What should I change? Tell me the correct details (description or location), or send a new photo.",
+  editPrompt: (transit = false) =>
+    transit
+      ? "Sure. What should I change? Tell me the correct line, direction, station, time or description."
+      : "Sure. What should I change? Tell me the correct details (description or location), or send a new photo.",
   dupReview: () => "You can look up the existing request on NYC311. If it's the same problem, there's no need to file again. Tap <b>Continue with new report</b> if it's different.",
   modeSet: (mode: string) => `Demo portal mode set to <b>${esc(mode)}</b>. Your next filing will use it.`,
   modeUsage: () => "Usage: <code>/mode normal|captcha|flaky|reject</code>",
@@ -78,6 +81,30 @@ export const M = {
   invalidImage: () => "I couldn't read that image. Could you describe the problem in a few words?",
   busy: () => "I'm already working on this report. Hang tight. ⏳",
   noActive: () => "There's no active draft right now. Send a photo or description to start one.",
+
+  recording: (ref: string) => `🎥 Recording of the filing session for <b>${esc(ref)}</b> — this is what the browser did on your behalf.`,
+
+  // ---- subway-delay (MTA Customer Feedback) ----
+  askTransit: (missing: ("line" | "direction")[]) =>
+    missing.includes("line") ? "Which line was it? (for example A, 7 or L)" : "Which direction were you heading — uptown or downtown, or which terminal?",
+  noDuplicateCheckMta: () => "Subway complaints go straight to the MTA, so there's no NYC311 duplicate check.",
+  mtaAlert: (header: string) => `🚇 <b>MTA currently reports:</b> ${esc(header)}`,
+  noMtaAlert: (line: string) => `No active MTA delay alert for the ${esc(line)} right now (you can still file).`,
+  mtaAlertsDown: () => "<i>I couldn't reach the live MTA alerts feed right now (you can still file).</i>",
+  emailSaved: (email: string) => `Thanks, I'll pass <b>${esc(email)}</b> to official forms that ask for an email (the MTA replies there).`,
+  emailUsage: () => "Please send a valid email, like <code>/email jane@example.com</code>. It's optional and only used on official forms.",
+  mtaSubmitted: (sr: string) => `✅ The MTA accepted your complaint. Reference: <b>${esc(sr)}</b>. They usually reply by email if you provided one.`,
+  mtaDryRun: (liveViewUrl: string | null) =>
+    [
+      "🧪 Dry run: I filled the MTA form completely and stopped before Submit (ALLOW_REAL_SUBMIT is off). Screenshot attached.",
+      "",
+      "Nothing was sent to the MTA.",
+      liveViewUrl ? `\nIf you want to send it yourself, the same browser is open for a few minutes: ${esc(liveViewUrl)}` : null,
+    ]
+      .filter((l) => l !== null)
+      .join("\n"),
+  mtaStatus: (sr: string, filed: string | null) =>
+    `<b>MTA case ${esc(sr)}</b>${filed ? `, filed ${esc(filed)}` : ""}.\nThe MTA replies by email; there is no public status lookup for MTA complaints.`,
 
   submitted: (o: FilingOutcome) =>
     [
@@ -111,7 +138,9 @@ export const M = {
     const lines = ["<b>Your reports</b>", ""];
     for (const d of drafts.slice(0, 10)) {
       const cat = getCategory(d.category)?.label ?? "Uncategorized";
-      const where = d.location.address ?? (d.location.latitude != null ? `${d.location.latitude.toFixed(4)}, ${d.location.longitude?.toFixed(4)}` : "no location");
+      const where = d.transit?.line
+        ? `${/^[0-9A-Z]$/.test(d.transit.line) ? `${d.transit.line} train` : d.transit.line}${d.transit.direction ? `, ${d.transit.direction}` : ""}`
+        : (d.location.address ?? (d.location.latitude != null ? `${d.location.latitude.toFixed(4)}, ${d.location.longitude?.toFixed(4)}` : "no location"));
       const sr = d.officialRequestNumber ? ` · SR <code>${esc(d.officialRequestNumber)}</code>` : "";
       lines.push(`• ${esc(cat)} · ${esc(where)} · <i>${esc(humanStatus(d.status))}</i>${sr}`);
     }

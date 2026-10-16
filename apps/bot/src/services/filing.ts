@@ -37,9 +37,23 @@ import type {
 } from "../core/contracts.js";
 import { CATEGORIES, nowIso, shortId } from "../core/contracts.js";
 import { transition } from "../core/state-machine.js";
-import { RUNS_DIR, filingTarget } from "../integrations/env.js";
+import { RUNS_DIR, env, filingTarget } from "../integrations/env.js";
+import { isRealOnly } from "../core/knowledge.js";
 import { registerEvidenceFile } from "./evidence-registry.js";
 import { verifyReceipt, type ReceiptVerification } from "./receipts.js";
+import { downloadAnchorRecording } from "../integrations/anchor.js";
+
+/** Recording polling (Anchor finalizes recordings 10–90 s after the session ends). */
+const RECORDING_POLL_MS = 10_000;
+const RECORDING_DEADLINE_MS = 3 * 60_000;
+const RECORDING_MAX_BYTES = 200 * 1024 * 1024;
+
+export type FilingOpts = {
+  resident: Resident;
+  onProgress: (text: string) => void;
+  /** Background callback once the session recording is downloaded to .runs/<attemptId>/recording.mp4 (Anchor only). */
+  onRecording?: (localPath: string, evidence: Evidence) => Promise<void>;
+};
 
 type WorkerStep = WorkerEvent["step"];
 
@@ -65,9 +79,15 @@ export type FilingServiceDeps = {
 };
 
 export type FilingService = {
-  executeFiling(complaint: ComplaintDraft, opts: { resident: Resident; onProgress: (text: string) => void }): Promise<FilingOutcome>;
+  executeFiling(complaint: ComplaintDraft, opts: FilingOpts): Promise<FilingOutcome>;
   /** Resolves when deferred cleanups + background recording lookups are done (scripts/tests). */
   drain(): Promise<void>;
+};
+
+/** Official hosts per category for the real target (navigation allowlist). */
+const REAL_ALLOWED_HOSTS: Partial<Record<CategoryId, string[]>> = {
+  "street-pothole": ["a841-dotvweb01.nyc.gov"],
+  "subway-delay": ["contact.mta.info", "mta.info", "new.mta.info"],
 };
 
 const DEFAULT_LIMITS: FilingPayload["limits"] = { totalTimeoutMs: 150_000, stepTimeoutMs: 20_000, maxNavigationRetries: 1 };
@@ -108,10 +128,19 @@ export const FILING_MESSAGES = {
     "The filing attempt finished without a reliable confirmation.\n\nI'm not submitting again automatically because that could create a duplicate. Please check the official portal before retrying." +
     (workerMessage ? `\n\n${workerMessage}` : ""),
   failed: (code: FilingErrorCode | null, workerMessage?: string | null) => (workerMessage ? `${workerMessage}${/nothing was submitted/i.test(workerMessage) ? "" : " Nothing was submitted."}` : `${reasonFor(code)} Nothing was submitted.`),
+  /** MTA Customer Feedback (subway-delay). */
+  mtaSubmitted: (sr: string) => `The MTA accepted your complaint. Reference: ${sr}. They usually reply by email if you provided one.`,
+  mtaDryRun: (liveViewUrl: string | null) =>
+    "Dry run: I filled the MTA form completely and stopped before Submit (ALLOW_REAL_SUBMIT is off). Screenshot attached." +
+    (liveViewUrl ? `\n\nIf you want to send it yourself, the same browser is open for a few minutes: ${liveViewUrl}` : ""),
   notApproved: () => "This report isn't approved in its current version, so I didn't file anything. Please review and approve the latest draft.",
 };
 
-function messageFor(status: FilingStatus, sr: string | null, code: FilingErrorCode | null, liveViewUrl: string | null, workerMessage: string | null): string {
+function messageFor(status: FilingStatus, sr: string | null, code: FilingErrorCode | null, liveViewUrl: string | null, workerMessage: string | null, category?: CategoryId): string {
+  if (category && isRealOnly(category)) {
+    if (status === "SUBMITTED") return FILING_MESSAGES.mtaSubmitted(sr!);
+    if (status === "HUMAN_ACTION_REQUIRED" && !code) return FILING_MESSAGES.mtaDryRun(liveViewUrl);
+  }
   switch (status) {
     case "SUBMITTED":
       return FILING_MESSAGES.submitted(sr!);
@@ -141,7 +170,12 @@ const redactJson = (v: unknown) => JSON.parse(redactPreview(JSON.stringify(v ?? 
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".html": "text/html", ".log": "text/plain", ".txt": "text/plain", ".json": "application/json" };
 
 function todayNyc(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return nycDate(new Date().toISOString());
+}
+
+function nycDate(iso: string): string {
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(Number.isFinite(d.getTime()) ? d : new Date());
 }
 
 function patternFor(target: FilingTarget, status: FilingStatus, code: FilingErrorCode | null, result: WorkerResult | null): { kind: string; description: string; hint: Record<string, unknown> } {
@@ -163,6 +197,57 @@ function patternFor(target: FilingTarget, status: FilingStatus, code: FilingErro
   }
 }
 
+/** Effective filing target: real-only categories (subway-delay → MTA) ignore FILING_TARGET. */
+export function targetFor(category: CategoryId, configured: FilingTarget): FilingTarget {
+  return isRealOnly(category) ? "real" : configured;
+}
+
+export function allowedHostsFor(category: CategoryId, formUrl: string, target: FilingTarget): string[] {
+  return [...new Set([new URL(formUrl).hostname, ...(target === "real" ? (REAL_ALLOWED_HOSTS[category] ?? []) : [])])];
+}
+
+export function realSubmitAuthorizedFor(complaint: Pick<ComplaintDraft, "approvedVersion" | "draftVersion">, target: FilingTarget): boolean {
+  return target === "real" && env.ALLOW_REAL_SUBMIT === "1" && complaint.approvedVersion != null && complaint.approvedVersion === complaint.draftVersion;
+}
+
+/** The `form` block of the FilingPayload. Contact fields are only ever user-provided on the real target. */
+export function buildForm(complaint: ComplaintDraft, resident: Resident, target: FilingTarget): FilingPayload["form"] {
+  const category = complaint.category;
+  return {
+    // the worker picks the restoration type from the description (trench / cut / patch / repair)
+    description: category === "street-repair-defect" && !/trench|cut|patch|repair/i.test(complaint.description) ? `${complaint.description} (repaired patch)` : complaint.description,
+    address: complaint.location.address,
+    borough: complaint.location.borough,
+    latitude: complaint.location.latitude,
+    longitude: complaint.location.longitude,
+    // Real target: only ever user-provided. Demo replica: documented placeholder is acceptable.
+    contactName: resident.contactName ?? (target === "demo" ? "Relay Resident" : null),
+    contactEmail: resident.contactEmail ?? null,
+    contactPhone: null,
+    dateObserved: complaint.transit?.incidentTime ? nycDate(complaint.transit.incidentTime) : todayNyc(),
+    ...(complaint.transit ? { transit: complaint.transit } : {}),
+  };
+}
+
+/** What the worker would receive for this complaint, minus the per-attempt browser/sandbox fields (scripts, previews). */
+export function previewPayload(complaint: ComplaintDraft, resident: Resident, configured: FilingTarget = filingTarget()) {
+  if (!complaint.category) return null;
+  const category = complaint.category;
+  const target = targetFor(category, configured);
+  const cat = CATEGORIES[category];
+  const formUrl = target === "demo" ? `<sandbox portal>/report/${cat.demoRoute}` : cat.officialFormUrl;
+  return {
+    approvedVersion: complaint.approvedVersion,
+    target,
+    category,
+    formUrl,
+    allowedHosts: target === "demo" ? ["<sandbox portal host>"] : allowedHostsFor(category, formUrl, target),
+    form: buildForm(complaint, resident, target),
+    realSubmitAuthorized: realSubmitAuthorizedFor(complaint, target),
+    limits: DEFAULT_LIMITS,
+  };
+}
+
 export function createFilingService(deps: FilingServiceDeps): FilingService {
   const { store, tracer } = deps;
   const sandboxProvider = deps.sandboxProvider ?? deps.sandbox ?? null;
@@ -174,9 +259,10 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
     background.add(q);
   };
 
-  async function executeFiling(complaint: ComplaintDraft, opts: { resident: Resident; onProgress: (text: string) => void }): Promise<FilingOutcome> {
+  async function executeFiling(complaint: ComplaintDraft, opts: FilingOpts): Promise<FilingOutcome> {
     const t0 = Date.now();
-    const target = deps.target ?? filingTarget();
+    // Real-only categories (no replica portal, e.g. subway-delay → MTA) always file against the official site.
+    const target: FilingTarget = complaint.category ? targetFor(complaint.category, deps.target ?? filingTarget()) : (deps.target ?? filingTarget());
     const progress = (text: string) => {
       try {
         opts.onProgress(text);
@@ -265,29 +351,44 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
       await Promise.all([h?.destroy().catch(() => {}), s?.close().catch(() => {})]);
       return s;
     };
-    const collectRecording = async (s: BrowserSessionInfo | null, inlineTries: number, backgroundTries: number) => {
+    /**
+     * Background (never blocks the outcome): poll the Anchor recording every 10 s for up to 3 min,
+     * download it to .runs/<attemptId>/recording.mp4, register it as "recording" evidence (playable at
+     * /api/evidence/:id) and hand it to opts.onRecording (the orchestrator sends it to the resident).
+     * Local browser: no recording, skipped silently.
+     */
+    const collectRecording = async (s: BrowserSessionInfo | null, _inlineTries = 0, _backgroundTries = 0) => {
       if (!s || s.provider === "local") return;
-      const addRecording = async (url: string) => {
-        const ev: Evidence = { id: shortId("ev"), attemptId: attempt.id, complaintId: complaint.id, type: "recording", step: null, summary: "Anchor session recording", storageReference: url, mime: "video/mp4", createdAt: nowIso() };
-        attempt.recordingUrl = url;
-        attempt.evidence.push(ev);
-        if (persisted) {
-          const latest = (await store.getAttempt(attempt.id)) ?? attempt;
-          await store.saveAttempt({ ...latest, recordingUrl: url, evidence: [...latest.evidence.filter((e) => e.type !== "recording"), ev] });
-        }
-      };
-      for (let i = 0; i < inlineTries; i++) {
-        const url = await s.getRecordingUrl().catch(() => null);
-        if (url) return addRecording(url);
-      }
-      if (backgroundTries <= 0) return;
       track(
         (async () => {
-          for (let i = 0; i < backgroundTries; i++) {
-            await new Promise((r) => setTimeout(r, 10_000));
-            const url = await s.getRecordingUrl().catch(() => null);
-            if (url) return addRecording(url);
+          const deadline = Date.now() + RECORDING_DEADLINE_MS;
+          let url: string | null = null;
+          while (!url && Date.now() < deadline) {
+            url = await s.getRecordingUrl().catch(() => null);
+            if (!url) await new Promise((r) => setTimeout(r, RECORDING_POLL_MS));
           }
+          if (!url) {
+            console.warn(`[filing] no recording for ${attempt.id} after ${RECORDING_DEADLINE_MS / 1000} s`);
+            return;
+          }
+          const localPath = join(RUNS_DIR, attempt.id, "recording.mp4");
+          let bytes = 0;
+          try {
+            bytes = (await downloadAnchorRecording(url, localPath, { maxBytes: RECORDING_MAX_BYTES })).bytes;
+          } catch (err) {
+            console.warn(`[filing] recording download failed for ${attempt.id}:`, (err as Error).message);
+            return;
+          }
+          const ev: Evidence = { id: shortId("ev"), attemptId: attempt.id, complaintId: complaint.id, type: "recording", step: null, summary: `Anchor session recording (${(bytes / 1_048_576).toFixed(1)} MB)`, storageReference: "", mime: "video/mp4", createdAt: nowIso() };
+          const ref = register(ev, localPath);
+          ev.storageReference = typeof ref === "string" && ref ? ref : `/api/evidence/${encodeURIComponent(ev.id)}`;
+          attempt.recordingUrl = ev.storageReference;
+          attempt.evidence.push(ev);
+          if (persisted) {
+            const latest = (await store.getAttempt(attempt.id)) ?? attempt;
+            await store.saveAttempt({ ...latest, recordingUrl: ev.storageReference, evidence: [...latest.evidence.filter((e) => e.type !== "recording"), ev] }).catch(() => {});
+          }
+          if (opts.onRecording) await opts.onRecording(localPath, ev).catch((err) => console.warn("[filing] onRecording failed:", (err as Error).message));
         })(),
       );
     };
@@ -337,7 +438,7 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
       // (e) payload ---------------------------------------------------------------
       if (target === "demo" && !box.portalUrl) throw Object.assign(new Error("demo portal URL missing"), { code: "SANDBOX_ERROR" as FilingErrorCode });
       const formUrl = target === "demo" ? `${box.portalUrl}/report/${cat.demoRoute}` : cat.officialFormUrl;
-      const allowedHosts = [...new Set([new URL(formUrl).hostname, ...(target === "real" ? ["a841-dotvweb01.nyc.gov"] : [])])];
+      const allowedHosts = allowedHostsFor(category, formUrl, target);
       const payload: FilingPayload = {
         attemptId: attempt.id,
         complaintId: complaint.id,
@@ -350,19 +451,9 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         cdpUrl: sess.cdpUrl,
         liveViewUrl: sess.liveViewUrl,
         portalMode,
-        form: {
-          // the worker picks the restoration type from the description (trench / cut / patch / repair)
-          description: category === "street-repair-defect" && !/trench|cut|patch|repair/i.test(complaint.description) ? `${complaint.description} (repaired patch)` : complaint.description,
-          address: complaint.location.address,
-          borough: complaint.location.borough,
-          latitude: complaint.location.latitude,
-          longitude: complaint.location.longitude,
-          // Real target: only ever user-provided. Demo replica: documented placeholder is acceptable.
-          contactName: opts.resident.contactName ?? (target === "demo" ? "Relay Resident" : null),
-          contactEmail: opts.resident.contactEmail ?? null,
-          contactPhone: null,
-          dateObserved: todayNyc(),
-        },
+        form: buildForm(complaint, opts.resident, target),
+        // The final real Submit needs ALL of: real target, operator switch ALLOW_REAL_SUBMIT=1, approval of this exact version.
+        realSubmitAuthorized: realSubmitAuthorizedFor(complaint, target),
         limits: { ...DEFAULT_LIMITS, ...deps.limits },
       };
 
@@ -458,7 +549,7 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
       verification = await tracer.span("receipt.verify", { "attempt.id": attempt.id, "filing.target": target }, async (set, oi) => {
         oi.tool({ name: "receipt.verify", description: "Deterministic receipt verification (pattern + confirmation text + confirm evidence)" });
         let v: ReceiptVerification;
-        if (run.result) v = verifyReceipt(run.result, target);
+        if (run.result) v = verifyReceipt(run.result, target, category);
         else {
           const submitSeen = attempt.workerEvents.some((e) => e.step === "submit" || e.step === "confirm");
           const code: FilingErrorCode = run.exitCode === -1 ? "TIMEOUT" : "WORKER_CRASH";
@@ -472,7 +563,9 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
         oi.output({ ...v, workerStatus: run.result?.status ?? null });
         return v;
       });
-      holdForHandoff = verification.status === "HUMAN_ACTION_REQUIRED" && Boolean(attempt.liveViewUrl);
+      // A real-only dry run (HUMAN_ACTION_REQUIRED, no error code) is complete: close the browser so the recording can be sent.
+      const dryRun = verification.status === "HUMAN_ACTION_REQUIRED" && !verification.errorCode && isRealOnly(category);
+      holdForHandoff = verification.status === "HUMAN_ACTION_REQUIRED" && Boolean(attempt.liveViewUrl) && !dryRun;
     } catch (err) {
       const code = ((err as { code?: FilingErrorCode }).code ?? "SANDBOX_ERROR") as FilingErrorCode;
       const submitSeen = attempt.workerEvents.some((e) => e.step === "submit" || e.step === "confirm");
@@ -535,7 +628,7 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
       await store.saveAttempt(attempt);
       persisted = true;
       try {
-        current = await transition(store, { ...current, officialRequestNumber: sr }, status, { reason: v.errorCode ?? "verified-confirmation", actor: "system" });
+        current = await transition(store, { ...current, officialRequestNumber: sr }, status, { reason: v.errorCode ?? (status === "SUBMITTED" ? "verified-confirmation" : status === "HUMAN_ACTION_REQUIRED" ? "dry-run: stopped before final submit" : status.toLowerCase()), actor: "system" });
       } catch (err) {
         set("transition.error", (err as Error).message);
       }
@@ -563,7 +656,7 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
       complaintId: complaint.id,
       attemptId: attempt.id,
       status,
-      message: messageFor(status, sr, v.errorCode, held ? attempt.liveViewUrl : null, result && result.status === status ? (result.message ?? null) : null),
+      message: messageFor(status, sr, v.errorCode, held ? attempt.liveViewUrl : null, result && result.status === status ? (result.message ?? null) : null, category),
     };
     if (sr) outcome.officialRequestNumber = sr;
     if (sr && result?.officialReceiptUrl) outcome.officialReceiptUrl = redactPreview(result.officialReceiptUrl);

@@ -10,7 +10,7 @@
  * retried automatically), else FAILED/NO_CONFIRMATION. This function never
  * upgrades anything to SUBMITTED.
  */
-import type { FilingErrorCode, FilingStatus, FilingTarget, WorkerResult } from "../core/contracts.js";
+import type { CategoryId, FilingErrorCode, FilingStatus, FilingTarget, WorkerResult } from "../core/contracts.js";
 
 /**
  * SR number patterns per target.
@@ -25,6 +25,19 @@ export const SR_PATTERNS: Record<FilingTarget, RegExp> = {
   real: /^\d{6,12}$|^311-\d+$/,
 };
 
+/**
+ * Category-specific reference patterns that override the target pattern.
+ * subway-delay: MTA Customer Feedback (Salesforce) case/reference numbers; exact format not yet
+ * observed on a real submission, so accept any `[A-Z0-9-]{5,}` and rely on confirmation text + evidence.
+ */
+export const CATEGORY_SR_PATTERNS: Partial<Record<CategoryId, RegExp>> = {
+  "subway-delay": /^[A-Z0-9-]{5,}$/i,
+};
+
+export function srPatternFor(target: FilingTarget, category?: CategoryId | null): RegExp {
+  return (category && CATEGORY_SR_PATTERNS[category]) || SR_PATTERNS[target];
+}
+
 export type ReceiptVerification = {
   status: FilingStatus;
   /** Only set when status === SUBMITTED (verified). */
@@ -38,7 +51,8 @@ export type ReceiptVerification = {
 /** Error codes after which a clicked submit is a definitive "nothing was filed". */
 const DEFINITIVE_REJECTIONS: ReadonlySet<FilingErrorCode> = new Set<FilingErrorCode>(["FORM_REJECTED"]);
 
-export function verifyReceipt(result: WorkerResult, target: FilingTarget): ReceiptVerification {
+export function verifyReceipt(result: WorkerResult, target: FilingTarget, category?: CategoryId | null): ReceiptVerification {
+  const pattern = srPatternFor(target, category);
   if (result.status !== "SUBMITTED") {
     // Never upgrade. One safety downgrade: a FAILED after the submit click that is not a
     // definitive form rejection might still have created a record ⇒ treat as unknown.
@@ -63,7 +77,7 @@ export function verifyReceipt(result: WorkerResult, target: FilingTarget): Recei
   const problems: string[] = [];
   const sr = result.officialRequestNumber?.trim() ?? "";
   if (!sr) problems.push("no officialRequestNumber");
-  else if (!SR_PATTERNS[target].test(sr)) problems.push(`officialRequestNumber "${sr}" does not match ${target} pattern ${SR_PATTERNS[target]}`);
+  else if (!pattern.test(sr)) problems.push(`officialRequestNumber "${sr}" does not match ${category ?? target} pattern ${pattern}`);
   if (!result.confirmationText || !result.confirmationText.trim()) problems.push("confirmationText empty");
   if (!result.evidence.some((e) => e.step === "confirm")) problems.push("no confirm-step evidence");
 
@@ -73,7 +87,7 @@ export function verifyReceipt(result: WorkerResult, target: FilingTarget): Recei
       officialRequestNumber: sr,
       errorCode: null,
       verified: true,
-      notes: `verified: SR ${sr} matches ${target} pattern, confirmation text present, ${result.evidence.filter((e) => e.step === "confirm").length} confirm evidence file(s)`,
+      notes: `verified: SR ${sr} matches ${category && CATEGORY_SR_PATTERNS[category] ? category : target} pattern, confirmation text present, ${result.evidence.filter((e) => e.step === "confirm").length} confirm evidence file(s)`,
     };
   }
 

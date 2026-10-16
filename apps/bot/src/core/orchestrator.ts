@@ -28,9 +28,21 @@ import type {
   Transport,
 } from "./contracts.js";
 import { PortalMode as PortalModeSchema, decodeCallback, nowIso, shortId } from "./contracts.js";
-import { NYC311_CHECK_STATUS_URL, NYC311_REPORT_URL, getCategory } from "./knowledge.js";
+import {
+  NYC311_CHECK_STATUS_URL,
+  NYC311_REPORT_URL,
+  effectiveTarget,
+  getCategory,
+  isOpenDataBacked,
+  isRealOnly,
+  missingTransit,
+  requiredFieldsFor,
+  requiresContactName,
+  transitHintsFromText,
+} from "./knowledge.js";
 import { canTransition, transition } from "./state-machine.js";
-import { OPEN_STATES, createComplaintService } from "../services/complaints.js";
+import { OPEN_STATES, createComplaintService, lineLabel } from "../services/complaints.js";
+import { getActiveAlertsForLine, isDelayAlert, type MtaAlertsResult } from "../integrations/mta-alerts.js";
 import { M, esc } from "../telegram/messages.js";
 import { approvalButtons, duplicateButtons, isButtonSafeUrl, linkButton, trackingButtons } from "../telegram/keyboards.js";
 import type { FilingService, StatusService } from "../integrations/fallbacks.js";
@@ -54,6 +66,8 @@ export type OrchestratorDeps = {
   mediaDir?: string;
   /** Max approvals per chat per hour (design doc §18.5). */
   maxFilingsPerHour?: number;
+  /** Live MTA alerts for a subway line (default: public GTFS-RT feed). */
+  mtaAlerts?: (line: string) => Promise<MtaAlertsResult>;
 };
 
 export type HandleOptions = {
@@ -64,6 +78,12 @@ export type HandleOptions = {
 };
 
 type Ctx = { chatId: string; t: Transport; resident: Resident; opts: HandleOptions };
+
+const TRANSIT_HINT = /\b(subway|train|trains|uptown|downtown|platform|station|mta|shuttle|[1-7]\s+line|express|local)\b/i;
+
+export function looksLikeTransit(text: string): boolean {
+  return TRANSIT_HINT.test(text);
+}
 
 const ADDRESS_HINT =
   /(\b\d+[a-z]?\s+[\w.'-]+(\s[\w.'-]+)?\s+(st|street|ave|avenue|av|blvd|boulevard|rd|road|pl|place|dr|drive|ln|lane|pkwy|parkway|ter|terrace|ct|court|way|hwy|broadway)\b)|(\s(&|and|at)\s.*\b(st|street|ave|avenue|blvd|rd|pl|broadway)\b)|\b(corner of|intersection|cross street)\b|\b(manhattan|brooklyn|bronx|queens|staten island)\b|\b(st|street|ave|avenue|blvd|broadway)\b.*\b(&|and|at)\b|\b\d{5}\b/i;
@@ -114,12 +134,37 @@ export function createOrchestrator(deps: OrchestratorDeps) {
 
   function finishUrl(d: ComplaintDraft, o: FilingOutcome): string {
     if (isButtonSafeUrl(o.officialReceiptUrl)) return o.officialReceiptUrl!;
-    if (target === "real") return getCategory(d.category)?.officialFormUrl ?? NYC311_REPORT_URL;
+    if (effectiveTarget(d.category, target) === "real") return getCategory(d.category)?.officialFormUrl ?? NYC311_REPORT_URL;
     return NYC311_REPORT_URL;
   }
 
-  function needsName(resident: Resident) {
-    return target === "real" && !resident.contactName;
+  function needsName(resident: Resident, category: string | null) {
+    return requiresContactName(category, target) && !resident.contactName;
+  }
+
+  const fetchAlerts = deps.mtaAlerts ?? ((line: string) => getActiveAlertsForLine(line));
+
+  /** Live MTA alert corroboration for subway categories (the analogue of the Open Data duplicate check). */
+  async function mtaAlertLine(draft: ComplaintDraft): Promise<string | null> {
+    const line = draft.transit?.line;
+    if (!line || isOpenDataBacked(draft.category)) return null;
+    try {
+      const r = await tracer.span("mta.live_alerts", { "transit.line": line, "complaint.id": draft.id }, async (set, oi) => {
+        oi.input({ line });
+        const res = await fetchAlerts(line);
+        set("alerts.count", res.alerts.length);
+        set("alerts.source", res.source);
+        set("alerts.delay_match", res.alerts.some(isDelayAlert));
+        oi.retriever(res.alerts.slice(0, 5).map((a) => ({ id: a.id || a.header.slice(0, 40), content: `${a.type}: ${a.header}`, score: isDelayAlert(a) ? 1 : 0.5, metadata: { type: a.type, routes: a.routes, active: a.active } })));
+        return res;
+      });
+      if (r.source === "unavailable") return M.mtaAlertsDown();
+      const hit = r.alerts.find(isDelayAlert);
+      return hit ? M.mtaAlert(hit.header) : M.noMtaAlert(lineLabel(line));
+    } catch (err) {
+      console.warn("[orchestrator] mta alerts failed:", (err as Error).message);
+      return null;
+    }
   }
 
   // ------------------------------------------------------------ the pipeline
@@ -135,15 +180,26 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       await send(ctx, { text: [...prefix, draft.missingFields.includes("category") ? M.clarify(q) : M.needDescription()].join("\n\n") });
       return draft;
     }
+    if (draft.missingFields.includes("transit")) {
+      const missing = missingTransit(draft.transit);
+      draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", `missing: transit ${missing.join("+")}`);
+      await send(ctx, { text: [...prefix, M.askTransit(missing)].join("\n\n") });
+      return draft;
+    }
     if (draft.missingFields.includes("location")) {
       draft = await complaints.moveTo(draft, "NEEDS_INFORMATION", "missing: location");
       await send(ctx, { text: [...prefix, M.askLocation()].join("\n\n"), requestLocation: true });
       return draft;
     }
 
-    // Complete → duplicate check (once per location/category).
+    // Complete → duplicate check (once per location/category). Not for categories without Open Data (subway → MTA).
     const notes: string[] = [...prefix];
-    if (!draft.duplicateReviewed && draft.category && draft.location.latitude != null && draft.location.longitude != null) {
+    if (!isOpenDataBacked(draft.category)) {
+      if (!draft.duplicateReviewed) {
+        notes.push(M.noDuplicateCheckMta());
+        draft = { ...draft, duplicateReviewed: true, duplicates: [], duplicatesDataAsOf: null };
+      }
+    } else if (!draft.duplicateReviewed && draft.category && draft.location.latitude != null && draft.location.longitude != null) {
       const lat = draft.location.latitude;
       const lon = draft.location.longitude;
       const category = draft.category;
@@ -180,13 +236,21 @@ export function createOrchestrator(deps: OrchestratorDeps) {
 
   async function presentDraft(ctx: Ctx, draft: ComplaintDraft, notes: string[] = [], actor: "system" | "user" = "system"): Promise<ComplaintDraft> {
     if (draft.status !== "READY_FOR_APPROVAL") draft = await complaints.moveTo(draft, "READY_FOR_APPROVAL", "draft complete", actor);
+    const realOnly = isRealOnly(draft.category);
+    const alertLine = realOnly ? await mtaAlertLine(draft) : null;
     const summary = await tracer.span("draft.generate", { "complaint.id": draft.id, "draft.version": draft.draftVersion }, async (_set, oi) => {
-      const s = complaints.buildSummary(draft, { contactName: target === "real" ? ctx.resident.contactName : null, target });
-      oi.output({ category: draft.category, version: draft.draftVersion, photos: draft.media.length });
+      const real = effectiveTarget(draft.category, target) === "real";
+      const s = complaints.buildSummary(draft, {
+        contactName: real ? ctx.resident.contactName : null,
+        contactEmail: realOnly ? ctx.resident.contactEmail : null,
+        target: effectiveTarget(draft.category, target),
+        alertLine,
+      });
+      oi.output({ category: draft.category, version: draft.draftVersion, photos: draft.media.length, transit: draft.transit ?? null });
       return s;
     });
     const parts = [...notes, summary];
-    const blocked = needsName(ctx.resident);
+    const blocked = needsName(ctx.resident, draft.category);
     if (blocked) parts.push(M.needName());
     await send(ctx, { text: parts.join("\n\n"), buttons: approvalButtons(draft, { canApprove: !blocked }) });
     return draft;
@@ -227,6 +291,13 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     const hadCategory = draft.category;
     const applied = complaints.applyClassification(draft, result);
     draft = applied.draft;
+    // Deterministic fallback for short answers to the line/direction question ("the A", "downtown").
+    if (input.text && requiredFieldsFor(draft.category).includes("transit") && missingTransit(draft.transit).length && applied.decision.kind === "CONTINUE") {
+      const hints = transitHintsFromText(input.text);
+      const missing = missingTransit(draft.transit);
+      const patch = { ...(missing.includes("line") && hints.line ? { line: hints.line } : {}), ...(missing.includes("direction") && hints.direction ? { direction: hints.direction } : {}) };
+      if (Object.keys(patch).length) draft = complaints.setTransit(draft, patch);
+    }
     switch (applied.decision.kind) {
       case "EMERGENCY": {
         draft = await transition(store, draft, "EMERGENCY_REFERRAL", { reason: `safety: ${result.safetyFlags.join(", ") || "danger"}`, actor: "llm" });
@@ -321,7 +392,9 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     if (!trimmed) return;
     let draft = await openOrNewDraft(ctx);
     const lacksLocation = !draft.location.userConfirmed || draft.location.withinNyc === false || draft.statusReason === "user requested edit";
-    if (lacksLocation && looksLikeAddress(trimmed)) {
+    // Subway reports mention stations ("at 14 St") that look like addresses: they are transit details, not a 311 location.
+    const wantsLocation = draft.category ? requiredFieldsFor(draft.category).includes("location") : !looksLikeTransit(trimmed);
+    if (wantsLocation && lacksLocation && looksLikeAddress(trimmed)) {
       const loc = await tracer.span("location.validate", { "location.source": "text" }, async (set) => {
         const l = await location.fromText(trimmed).catch(() => null);
         set("location.resolved", !!l);
@@ -417,6 +490,18 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         await send(ctx, { text: M.modeSet(parsed.data) });
         return;
       }
+      case "email": {
+        const email = args.trim();
+        if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,}$/i.test(email)) {
+          await send(ctx, { text: M.emailUsage() });
+          return;
+        }
+        ctx.resident = await store.updateResident(ctx.resident.id, { contactEmail: email });
+        await send(ctx, { text: M.emailSaved(email) });
+        const d = await activeDraft(ctx.chatId);
+        if (d?.status === "READY_FOR_APPROVAL") await presentDraft(ctx, d);
+        return;
+      }
       case "name": {
         const name = args.trim().replace(/\s+/g, " ");
         if (name.split(" ").length < 2 || name.length > 80) {
@@ -435,6 +520,17 @@ export function createOrchestrator(deps: OrchestratorDeps) {
   }
 
   async function replyStatus(ctx: Ctx, sr: string) {
+    // MTA complaints: no public status feed; answer from the stored record.
+    {
+      const reqs = await tracer.span("surrealdb.read_context", { "query.kind": "official_request" }, async () => store.listOfficialRequests(ctx.chatId).catch(() => [] as OfficialRequest[]));
+      const r = reqs.find((x) => x.officialRequestNumber.toUpperCase() === sr.toUpperCase());
+      const c = r ? await store.getComplaint(r.complaintId) : null;
+      if (r && c && !isOpenDataBacked(c.category)) {
+        const filed = new Date(c.approvedAt ?? r.lastCheckedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" });
+        await send(ctx, { text: M.mtaStatus(r.officialRequestNumber, filed) });
+        return;
+      }
+    }
     if (/^DEMO-/i.test(sr)) {
       // The demo portal lived in a sandbox that is destroyed after filing: answer from the recorded OfficialRequest.
       const reqs = await tracer.span("surrealdb.read_context", { "query.kind": "official_request" }, async () => store.listOfficialRequests(ctx.chatId));
@@ -492,7 +588,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
           return;
         }
         await complaints.editRequest(draft);
-        await send(ctx, { text: M.editPrompt() });
+        await send(ctx, { text: M.editPrompt(requiredFieldsFor(draft.category).includes("transit")) });
         return;
       }
       case "cancel": {
@@ -591,7 +687,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       await presentDraft(ctx, draft);
       return;
     }
-    if (needsName(ctx.resident)) {
+    if (needsName(ctx.resident, draft.category)) {
       await send(ctx, { text: M.needName() });
       return;
     }
@@ -647,9 +743,22 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     };
 
     let outcome: FilingOutcome;
+    // The recording arrives in the background (10–90 s after the browser closes); always after the outcome message.
+    let outcomeSent!: () => void;
+    const outcomeShown = new Promise<void>((r) => (outcomeSent = r));
+    const onRecording = async (localPath: string) => {
+      await outcomeShown;
+      const fresh = (await store.getComplaint(approved.id).catch(() => null)) ?? approved;
+      const ref = fresh.officialRequestNumber ?? fresh.activeAttemptId ?? approved.id;
+      await tracer.withSession({ sessionId: ctx.chatId, metadata: { complaintId: approved.id } }, () =>
+        tracer.span("telegram.send_recording", { "complaint.id": approved.id }, async () => {
+          await ctx.t.send({ chatId: ctx.chatId, text: M.recording(ref), videoPath: localPath, parseMode: "HTML" });
+        }),
+      );
+    };
     try {
       const resident = (await store.getOrCreateResident(ctx.chatId, ctx.resident.telegramUsername)) ?? ctx.resident;
-      outcome = await filing.executeFiling(approved, { resident, onProgress });
+      outcome = await filing.executeFiling(approved, { resident, onProgress, onRecording });
     } catch (err) {
       console.error("[orchestrator] executeFiling threw:", err);
       outcome = { complaintId: approved.id, attemptId: approved.activeAttemptId ?? "unknown", status: "FAILED", errorCode: "WORKER_CRASH", message: "the filing worker crashed" };
@@ -659,7 +768,7 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       tracer.span("telegram.filing_outcome", { "complaint.id": approved.id, "filing.status": outcome.status, "filing.error_code": outcome.errorCode ?? "" }, async () => {
         await renderOutcome(ctx, approved, outcome);
       }),
-    );
+    ).finally(() => outcomeSent());
   }
 
   /** Bring the persisted complaint to the outcome state, tolerating a FilingService that already transitioned it. */
@@ -703,6 +812,11 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         tracer.evaluate("filing_outcome", { label: "submitted", score: 1 });
         // Demo receipts live in a destroyed sandbox (and carry a signed URL): show the confirmation screenshot instead.
         const isDemo = /^DEMO-/.test(o.officialRequestNumber);
+        if (!isOpenDataBacked(d.category)) {
+          // MTA: no public status page; "View official request" shows the captured confirmation screenshot.
+          await send(ctx, { text: M.mtaSubmitted(o.officialRequestNumber), buttons: trackingButtons(d, o.officialReceiptUrl ?? null) });
+          return;
+        }
         await send(ctx, { text: o.message ? esc(o.message) : M.submitted(o), buttons: trackingButtons(d, isDemo ? null : (o.officialReceiptUrl ?? NYC311_CHECK_STATUS_URL)) });
         return;
       }
@@ -711,6 +825,17 @@ export function createOrchestrator(deps: OrchestratorDeps) {
         const url = finishUrl(d, o);
         const live = /https:\/\/\S+/.exec(o.message ?? "")?.[0]?.replace(/[).,]+$/, "") ?? null;
         const liveOk = isButtonSafeUrl(live);
+        if (isRealOnly(d.category)) {
+          const dryRun = !o.errorCode;
+          const shot = await confirmationScreenshot(d);
+          const text = dryRun ? M.mtaDryRun(liveOk ? live : null) : o.message ? `${esc(o.message)}\n\n${esc(url)}` : M.humanAction(o, url);
+          await send(ctx, {
+            text,
+            ...(shot ? { photoPath: shot } : {}),
+            buttons: [...linkButton("Open MTA Customer Feedback", url), ...(liveOk ? linkButton("🖥️ Open the same browser", live!) : []), [{ text: "❌ Cancel", data: `cancel:${d.id}:${d.draftVersion}` }]],
+          });
+          return;
+        }
         await send(ctx, {
           text: o.message ? `${esc(o.message)}\n\n${esc(url)}` : M.humanAction(o, url),
           buttons: [...linkButton("Finish on NYC311", url), ...(liveOk ? linkButton("🖥️ Take over the browser", live!) : []), [{ text: "❌ Cancel", data: `cancel:${d.id}:${d.draftVersion}` }]],
@@ -719,7 +844,11 @@ export function createOrchestrator(deps: OrchestratorDeps) {
       }
       case "SUBMISSION_UNKNOWN": {
         tracer.evaluate("filing_outcome", { label: "submission_unknown", score: 0, explanation: o.errorCode });
-        await send(ctx, { text: o.message ? esc(o.message) : M.unknown(o), buttons: linkButton("Check NYC311", NYC311_CHECK_STATUS_URL) });
+        const mta = !isOpenDataBacked(d.category);
+        await send(ctx, {
+          text: o.message ? esc(o.message) : M.unknown(o),
+          buttons: mta ? linkButton("Open MTA Customer Feedback", getCategory(d.category)?.officialFormUrl ?? NYC311_REPORT_URL) : linkButton("Check NYC311", NYC311_CHECK_STATUS_URL),
+        });
         return;
       }
       case "FAILED": {

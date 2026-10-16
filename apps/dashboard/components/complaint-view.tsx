@@ -5,7 +5,7 @@ import { ArrowLeft, Check, ShieldAlert, ShieldCheck, ShieldQuestion, X } from "l
 import type { ReactNode } from "react";
 import { usePoll, withMock } from "@/lib/api";
 import { CATEGORY_LABEL, CATEGORY_OFFICIAL } from "@/lib/categories";
-import { SAFETY_COPY, fmtDateTime, fmtMs, fmtTime, humanState, pct } from "@/lib/format";
+import { SAFETY_COPY, fmtDateTime, fmtMs, fmtTime, humanState, pct, evidenceSrc } from "@/lib/format";
 import type { Actor, ComplaintDetail, ComplaintDraft, DuplicateCandidate, Evidence, FilingAttempt, Transition, WorkerEvent } from "@/lib/types";
 import { ApiDownBanner, Card, Empty, ExtLink, Label, LiveTick, Mono, Section, SkeletonRows, StatePill } from "./ui";
 import { MapPinView } from "./map-pin";
@@ -386,7 +386,7 @@ function AttemptCard({ a, evidence }: { a: FilingAttempt; evidence: Evidence[] }
       <Timing t={a.timing} />
       <div className="flex flex-wrap gap-1.5">
         <ExtLink href={a.outcome == null ? a.liveViewUrl : null}>Anchor live view</ExtLink>
-        <ExtLink href={a.recordingUrl}>recording</ExtLink>
+        <ExtLink href={a.recordingUrl ? evidenceSrc(a.recordingUrl) : null}>recording</ExtLink>
         <ExtLink href={a.traceUrl}>Arize / Phoenix trace</ExtLink>
       </div>
       <div>

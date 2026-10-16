@@ -2,9 +2,9 @@
  * ComplaintService: drafts, classification application, approval and
  * persistence. All status changes go through core/state-machine.ts.
  */
-import type { ClassificationResult, ComplaintDraft, ComplaintLocation, ComplaintState, Store } from "../core/contracts.js";
+import type { ClassificationResult, ComplaintDraft, ComplaintLocation, ComplaintState, Store, TransitDetails } from "../core/contracts.js";
 import { CLASSIFY_CONFIDENCE_THRESHOLD, EMPTY_LOCATION, nowIso, shortId } from "../core/contracts.js";
-import { getCategory, isSupportedCategory, materialChanges, missingFields } from "../core/knowledge.js";
+import { canonicalSubwayLine, getCategory, isRealOnly, isSupportedCategory, materialChanges, mergeTransit, missingFields, requiredFieldsFor } from "../core/knowledge.js";
 import { type Actor, VersionMismatchError, bumpDraft, canTransition, transition } from "../core/state-machine.js";
 import { esc } from "../telegram/messages.js";
 
@@ -51,6 +51,7 @@ export function createComplaintService(store: Store) {
         location: { ...EMPTY_LOCATION },
         media: [],
         classification: null,
+        transit: null,
         missingFields: ["category", "location", "description"],
         needsEmergencyReferral: false,
         confidence: 0,
@@ -88,6 +89,9 @@ export function createComplaintService(store: Store) {
       }
       const lowConfidence = triage === "SUPPORTED" && result.confidence < CLASSIFY_CONFIDENCE_THRESHOLD;
       const description = result.description?.trim() ? result.description.trim() : draft.description;
+      const nextCategory = triage === "SUPPORTED" && !lowConfidence ? category : draft.category;
+      // Transit details: only for categories that need them; merged across messages, a null never erases a known value.
+      const transit = requiredFieldsFor(nextCategory).includes("transit") ? mergeTransit(draft.transit, sanitizeTransit(result.transit)) : (draft.transit ?? null);
       const after: ComplaintDraft = {
         ...draft,
         triage,
@@ -95,8 +99,9 @@ export function createComplaintService(store: Store) {
         confidence: result.confidence,
         needsEmergencyReferral: triage === "EMERGENCY",
         // Keep a previously known category when the new answer is unclear (conversation memory).
-        category: triage === "SUPPORTED" && !lowConfidence ? category : draft.category,
+        category: nextCategory,
         description: triage === "SUPPORTED" || triage === "UNCLEAR" ? description : draft.description,
+        transit,
         updatedAt: nowIso(),
       };
       const next = svc.computeMissing(reconcile(draft, after));
@@ -112,6 +117,12 @@ export function createComplaintService(store: Store) {
     setLocation(draft: ComplaintDraft, loc: ComplaintLocation): ComplaintDraft {
       const after = { ...draft, location: loc, updatedAt: nowIso() };
       return svc.computeMissing(reconcile(draft, after));
+    },
+
+    /** Merge user-provided transit details (deterministic answers to the line/direction questions). */
+    setTransit(draft: ComplaintDraft, patch: Partial<TransitDetails>): ComplaintDraft {
+      const merged = mergeTransit(draft.transit, { line: null, direction: null, station: null, borough: null, incidentTime: null, delayMinutes: null, ...patch });
+      return svc.computeMissing(reconcile(draft, { ...draft, transit: merged, updatedAt: nowIso() }));
     },
 
     setDescription(draft: ComplaintDraft, description: string): ComplaintDraft {
@@ -131,8 +142,9 @@ export function createComplaintService(store: Store) {
       return transition(store, draft, to, { reason, actor });
     },
 
-    buildSummary(draft: ComplaintDraft, opts: { contactName?: string | null; target?: "demo" | "real" } = {}): string {
+    buildSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; target?: "demo" | "real"; alertLine?: string | null } = {}): string {
       const cat = getCategory(draft.category);
+      if (requiredFieldsFor(draft.category).includes("transit")) return buildTransitSummary(draft, opts);
       const loc = draft.location;
       const where =
         loc.address ??
@@ -196,3 +208,59 @@ export function createComplaintService(store: Store) {
 }
 
 export type ComplaintService = ReturnType<typeof createComplaintService>;
+
+/** Canonicalize LLM-extracted transit details; anything unrecognised becomes null (never invented). */
+export function sanitizeTransit(t: TransitDetails | null | undefined): TransitDetails | null {
+  if (!t) return null;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 120) : null);
+  const iso = str(t.incidentTime);
+  const minutes = typeof t.delayMinutes === "number" && Number.isFinite(t.delayMinutes) && t.delayMinutes > 0 && t.delayMinutes < 600 ? Math.round(t.delayMinutes) : null;
+  return {
+    line: canonicalSubwayLine(t.line),
+    direction: str(t.direction),
+    station: str(t.station),
+    borough: str(t.borough),
+    incidentTime: iso && Number.isFinite(new Date(iso).getTime()) ? iso : null,
+    delayMinutes: minutes,
+  };
+}
+
+/** "8:30 AM, Oct 16" in New York time. */
+export function fmtIncidentTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+  const day = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
+  return `${time}, ${day}`;
+}
+
+export function lineLabel(line: string | null | undefined): string {
+  if (!line) return "the subway";
+  return /^[0-9A-Z]$/.test(line) ? `${line} train` : line;
+}
+
+function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; alertLine?: string | null }): string {
+  const cat = getCategory(draft.category);
+  const t = draft.transit;
+  const lineDir = [t?.line ? lineLabel(t.line) : "Line not given", t?.direction ? t.direction : "direction not given"].join(", ");
+  const station = t?.station ? `${esc(t.station)}${t.borough ? `, ${esc(t.borough)}` : ""}` : "Not given";
+  const when = [fmtIncidentTime(t?.incidentTime) ?? "Time not given", t?.delayMinutes ? `about ${t.delayMinutes} min delay` : null].filter(Boolean).join(" · ");
+  const lines = [
+    "Here's your MTA complaint. Please check it before I file:",
+    "",
+    `<b>Problem:</b> ${esc(cat?.label ?? "Subway delay")}`,
+    `<b>Line &amp; direction:</b> ${esc(lineDir)}`,
+    `<b>Station:</b> ${station}`,
+    `<b>When:</b> ${esc(when)}`,
+    `<b>Description:</b> ${esc(draft.description || "-")}`,
+    `<b>Where it's filed:</b> ${esc(cat?.officialLabel ?? "MTA Customer Feedback")}`,
+  ];
+  if (opts.contactName) lines.push(`<b>Contact name:</b> ${esc(opts.contactName)}`);
+  if (opts.contactEmail) lines.push(`<b>Contact email:</b> ${esc(opts.contactEmail)}`);
+  if (!opts.contactName && !opts.contactEmail) lines.push("<i>No contact details will be sent (optional: /name, /email if you want the MTA to reply).</i>");
+  if (opts.alertLine) lines.push("", opts.alertLine);
+  if (isRealOnly(draft.category)) lines.push("", "⚠️ <b>This files a real complaint with the MTA. Only approve if this actually happened to you.</b>");
+  lines.push("", `<i>Draft v${draft.draftVersion}. Nothing is filed until you tap Approve.</i>`);
+  return lines.join("\n");
+}

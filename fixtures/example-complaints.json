@@ -101,5 +101,26 @@
     "imageFixture": "fixtures/images/streetlight-1.jpg",
     "location": null,
     "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
+  },
+  {
+    "id": "subway-delay-a-train",
+    "scenario": "Extra: subway delay (MTA, real-only)",
+    "expectedBehavior": "SUPPORTED/subway-delay with transit extracted (line A, downtown, 14 St, ~25 min); no location question; no NYC311 duplicate check",
+    "clear": true,
+    "skipEvals": true,
+    "inputText": "A train delayed 25 min at 14 St downtown this morning",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "SUPPORTED", "category": "subway-delay", "asksForLocation": false, "emergency": false, "transit": { "line": "A", "directionIncludes": "down", "stationIncludes": "14", "delayMinutes": 25 } }
+  },
+  {
+    "id": "out-of-scope-lirr",
+    "scenario": "Extra: LIRR delay (not a subway)",
+    "expectedBehavior": "Manual guidance; LIRR is not the subway",
+    "clear": true,
+    "inputText": "LIRR delayed",
+    "imageFixture": null,
+    "location": null,
+    "expected": { "triage": "OUT_OF_SCOPE", "category": null, "emergency": false }
   }
 ]

@@ -65,6 +65,8 @@ export const env = {
   get PHOENIX_PROJECT() { return str("PHOENIX_PROJECT", "311relay"); },
   get NYC_OPEN_DATA_APP_TOKEN() { return str("NYC_OPEN_DATA_APP_TOKEN"); },
   get FILING_TARGET() { return str("FILING_TARGET", "demo"); },
+  /** "1" lets real-site adapters click the FINAL Submit (after the resident's approval). Unset ⇒ dry run: fill everything, stop before Submit. */
+  get ALLOW_REAL_SUBMIT() { return str("ALLOW_REAL_SUBMIT"); },
   get DEMO_PORTAL_URL() { return str("DEMO_PORTAL_URL", "http://localhost:3311"); },
   get PORT_API() { return int("PORT_API", 3312); },
 };
