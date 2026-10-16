@@ -84,7 +84,12 @@ export function restorationTypeFrom(description: string): "Street cut" | "Trench
 }
 
 export function needField(message: string, data?: Record<string, unknown>): never {
-  throw new Outcome("HUMAN_ACTION_REQUIRED", "UNEXPECTED_REQUIRED_FIELD", message, data);
+  throw needFieldOutcome(message, data);
+}
+
+/** The HUMAN_ACTION_REQUIRED/UNEXPECTED_REQUIRED_FIELD outcome without throwing (ctx.ask fallback). */
+export function needFieldOutcome(message: string, data?: Record<string, unknown>): Outcome {
+  return new Outcome("HUMAN_ACTION_REQUIRED", "UNEXPECTED_REQUIRED_FIELD", message, data);
 }
 
 /** goto with bounded retries (navigation only — never used after submit). */
@@ -143,7 +148,6 @@ export function payloadSummary(p: FilingPayload) {
   return {
     target: p.target,
     category: p.category,
-    portalMode: p.portalMode,
     hasContactName: !!p.form.contactName,
     hasEmail: !!p.form.contactEmail,
     hasPhone: !!p.form.contactPhone,

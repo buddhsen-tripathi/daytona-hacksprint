@@ -1,7 +1,7 @@
 /**
  * Degraded-mode implementations used by integrations/index.ts when a
  * provider module is missing or fails to initialize. They keep the bot,
- * the API and scripts/demo.ts runnable without keys. Never used when the
+ * the API and the scripted runner runnable without keys. Never used when the
  * real module loads.
  */
 import type {
@@ -17,6 +17,8 @@ import type {
   Resident,
   SpanHelpers,
   Tracer,
+  WorkerAnswer,
+  WorkerQuestion,
 } from "../core/contracts.js";
 import { NYC_BOUNDS } from "../core/contracts.js";
 import { env } from "./env.js";
@@ -30,6 +32,8 @@ export interface FilingService {
       onProgress: (text: string) => void;
       /** Called in the background once the browser session recording is downloaded (Anchor only). */
       onRecording?: (localPath: string, evidence: Evidence) => Promise<void>;
+      /** Live follow-up question from the worker; resolve with the resident's answer, or null (no answer ⇒ hand-off). */
+      onQuestion?: (q: WorkerQuestion & { attemptId: string; timeoutMs: number }) => Promise<WorkerAnswer | null>;
     },
   ): Promise<FilingOutcome>;
 }
@@ -152,16 +156,6 @@ export function createUnavailableFilingService(): FilingService {
 export function createBasicStatusService(duplicates: DuplicateService): StatusService {
   return {
     async lookup(sr) {
-      if (/^DEMO-/i.test(sr)) {
-        try {
-          const res = await fetch(`${env.DEMO_PORTAL_URL.replace(/\/$/, "")}/api/status/${encodeURIComponent(sr)}`, { signal: AbortSignal.timeout(5000) });
-          if (!res.ok) return { found: false, status: null, source: "demo-portal" };
-          const j = (await res.json()) as { status?: string; category?: string; createdAt?: string };
-          return { found: true, status: j.status ?? null, detail: j.category ? `${j.category}, filed ${j.createdAt ?? ""}` : null, source: "NYC311 Demo Portal" };
-        } catch {
-          return { found: false, status: null, source: "demo-portal" };
-        }
-      }
       const c = await duplicates.lookupStatus(sr).catch(() => null);
       if (!c) return { found: false, status: null, source: "open-data" };
       return { found: true, status: c.status, detail: c.resolutionDescription, source: "NYC Open Data (311 Service Requests)" };

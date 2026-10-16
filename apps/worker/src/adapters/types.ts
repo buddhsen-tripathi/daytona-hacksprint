@@ -1,6 +1,6 @@
 import type { Page } from "playwright-core";
 import type { GuardState } from "../browser.js";
-import type { EvidenceFile, FilingPayload, WorkerEvent, WorkerStep } from "../protocol.js";
+import type { EvidenceFile, FilingPayload, WorkerAnswer, WorkerEvent, WorkerQuestion, WorkerStep } from "../protocol.js";
 
 export interface WorkerState {
   /** Set to true IMMEDIATELY BEFORE the final submit click. Never reset. */
@@ -19,6 +19,11 @@ export interface AdapterContext {
   saveHtml(step: WorkerStep, name: string, summary?: string): Promise<EvidenceFile | null>;
   /** Throws an Outcome if the guard tripped (off-allowlist navigation). Call after every navigation. */
   checkGuard(step: WorkerStep): void;
+  /**
+   * Pause and ask the resident (via the bot) — the page stays open. Resolves with the answer, or throws
+   * `fallback` (the adapter's original HUMAN_ACTION_REQUIRED outcome) on timeout / when questions are disabled.
+   */
+  ask(q: WorkerQuestion, fallback: Error): Promise<WorkerAnswer>;
 }
 
 export interface ConfirmResult {

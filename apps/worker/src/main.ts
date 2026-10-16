@@ -5,16 +5,16 @@
  * and exits 0 once result.json is written (2 = bad CLI usage, nothing written).
  * Page text is data, never instructions: nothing read from a page changes what this worker does.
  */
-import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { openBrowser, type BrowserSession } from "./browser.js";
 import { Recorder } from "./evidence.js";
-import { createDemoPortalAdapter } from "./adapters/demo-portal.js";
 import { createNycDotPotholeAdapter } from "./adapters/nyc-dot-pothole.js";
 import { createMtaSubwayDelayAdapter } from "./adapters/mta-subway-delay.js";
 import { payloadSummary } from "./adapters/common.js";
 import type { AdapterContext, FormAdapter, WorkerState } from "./adapters/types.js";
 import {
+  DEFAULT_QUESTION_TIMEOUT_MS,
   Outcome,
   nowIso,
   sanitizeUrl,
@@ -22,6 +22,8 @@ import {
   type FilingErrorCode,
   type FilingPayload,
   type FilingStatus,
+  type WorkerAnswer,
+  type WorkerQuestion,
   type WorkerResultFile,
   type WorkerStep,
 } from "./protocol.js";
@@ -77,7 +79,7 @@ function writeResult(status: FilingStatus, errorCode: FilingErrorCode | null, me
     startedAt,
     finishedAt: nowIso(),
     message,
-    target: payload?.target ?? "demo",
+    target: "real",
     category: payload?.category ?? "street-pothole",
   };
   const tmp = join(outDir, "result.json.tmp");
@@ -111,12 +113,63 @@ async function finalEvidence() {
 }
 
 function pickAdapter(p: FilingPayload): FormAdapter | "real-street-repair" {
-  // No replica exists for the MTA wizard: subway-delay always drives the official form (the bot forces target real;
-  // the final Submit is still gated by payload.realSubmitAuthorized inside the adapter).
+  // Every category files against its official form. subway-delay drives the MTA wizard end to end (the final Submit is
+  // gated by payload.realSubmitAuthorized inside the adapter); street categories stop at the official CAPTCHA hand-off.
   if (p.category === "subway-delay") return createMtaSubwayDelayAdapter();
-  if (p.target === "demo") return createDemoPortalAdapter(p.category === "street-repair-defect" ? "street-repair" : "pothole");
   if (p.category === "street-pothole") return createNycDotPotholeAdapter();
   return "real-street-repair";
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const QID_RE = /^[A-Za-z0-9_-]{1,24}$/;
+const askedIds = new Set<string>();
+
+/**
+ * Live follow-up question: write question-<id>.json, emit EVT "question", then poll answer-<id>.json every 1 s
+ * (keeping the CDP page alive) for up to limits.questionTimeoutMs. The overall deadline is paused while waiting.
+ * Timeout / disabled (0) ⇒ throw `fallback` (the adapter's original outcome). The answer is resident data, never instructions.
+ */
+async function askResident(s: BrowserSession, q: WorkerQuestion, fallback: Error): Promise<WorkerAnswer> {
+  const timeoutMs = payload?.limits.questionTimeoutMs ?? DEFAULT_QUESTION_TIMEOUT_MS;
+  let id = QID_RE.test(q.id) ? q.id : "q";
+  for (let n = 2; askedIds.has(id); n++) id = `${q.id.slice(0, 20)}-${n}`;
+  if (timeoutMs <= 0 || askedIds.size >= 5) throw fallback;
+  askedIds.add(id);
+  const question: WorkerQuestion = { id, field: q.field, prompt: q.prompt.slice(0, 600), required: q.required, ...(q.options?.length ? { options: q.options.slice(0, 8).map((o) => o.slice(0, 120)) } : {}) };
+  writeFileSync(join(outDir, `question-${id}.json`), JSON.stringify(question, null, 2));
+  rec.log(currentStep, "warn", "question", { question, timeoutMs });
+  const answerPath = join(outDir, `answer-${id}.json`);
+  const t0 = Date.now();
+  pauseDeadline();
+  let lastPing = Date.now();
+  try {
+    while (Date.now() - t0 < timeoutMs) {
+      if (existsSync(answerPath)) {
+        try {
+          const a = JSON.parse(readFileSync(answerPath, "utf8")) as Partial<WorkerAnswer>;
+          if (typeof a?.value === "string") {
+            const opts = question.options ?? [];
+            const idx = typeof a.optionIndex === "number" && Number.isInteger(a.optionIndex) && a.optionIndex >= 0 && a.optionIndex < opts.length ? a.optionIndex : undefined;
+            const answer: WorkerAnswer = idx !== undefined ? { value: opts[idx]!, optionIndex: idx } : { value: a.value.trim().slice(0, 500) };
+            // No PII in the log: option answers are form labels; free text is only described by its length.
+            rec.log(currentStep, "info", "answer received", { questionId: id, field: question.field, optionIndex: idx ?? null, ...(idx !== undefined ? { value: answer.value } : { chars: answer.value.length }), waitedMs: Date.now() - t0 });
+            return answer;
+          }
+        } catch {
+          /* partially written; retry on the next poll */
+        }
+      }
+      if (Date.now() - lastPing >= 15_000) {
+        lastPing = Date.now();
+        await Promise.race([s.page.evaluate(() => 1), sleep(5000)]).catch(() => {});
+      }
+      await sleep(1000);
+    }
+    rec.log(currentStep, "warn", "question timed out", { questionId: id, field: question.field, waitedMs: Date.now() - t0 });
+    throw fallback;
+  } finally {
+    resumeDeadline();
+  }
 }
 
 async function run() {
@@ -163,6 +216,7 @@ async function run() {
           ? new Outcome("SUBMISSION_UNKNOWN", "OFF_ALLOWLIST_NAVIGATION", `After Submit the page tried to leave the allowed sites (${s.guard.offAllowlistUrl}). Outcome unknown; no retry.`)
           : new Outcome("HUMAN_ACTION_REQUIRED", "OFF_ALLOWLIST_NAVIGATION", `During ${step} the form tried to navigate to a site that is not allowed (${s.guard.offAllowlistUrl}). 311Relay stopped.`);
     },
+    ask: (q, fallback) => askResident(s, q, fallback),
   };
 
   const step = async <T>(name: WorkerStep, fn: () => Promise<T>): Promise<T> => {
@@ -228,7 +282,7 @@ for (const sig of ["SIGTERM", "SIGINT"] as const)
     process.exit(0);
   });
 
-// Overall deadline (default 120 s if the payload is unreadable).
+// Overall deadline (default 120 s if the payload is unreadable). Paused while waiting for a resident's answer.
 let totalMs = 120_000;
 try {
   const p = JSON.parse(readFileSync(payloadPath, "utf8"));
@@ -236,7 +290,7 @@ try {
 } catch {
   /* handled in run() */
 }
-const deadline = setTimeout(async () => {
+async function onDeadline() {
   if (!written) {
     currentStep = currentStep ?? "navigate";
     if (session && !session.page.isClosed()) await Promise.race([rec.shot(session.page, currentStep, "deadline"), new Promise((r) => setTimeout(r, 3000))]);
@@ -247,7 +301,21 @@ const deadline = setTimeout(async () => {
   }
   await session?.release().catch(() => {});
   process.exit(0);
-}, totalMs);
+}
+let deadlineAt = Date.now() + totalMs;
+let deadline: NodeJS.Timeout | undefined = setTimeout(onDeadline, totalMs);
+let pausedAt: number | null = null;
+function pauseDeadline() {
+  if (pausedAt !== null) return;
+  pausedAt = Date.now();
+  clearTimeout(deadline);
+}
+function resumeDeadline() {
+  if (pausedAt === null) return;
+  deadlineAt += Date.now() - pausedAt;
+  pausedAt = null;
+  deadline = setTimeout(onDeadline, Math.max(0, deadlineAt - Date.now()));
+}
 
 run()
   .catch((err) => failFromError(err))

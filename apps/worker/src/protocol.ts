@@ -1,11 +1,11 @@
 /**
  * Worker-side copy of the protocol types from apps/bot/src/core/contracts.ts.
  * The worker runs alone inside the sandbox (only playwright-core installed), so it must not import the bot.
- * KEEP IDENTICAL to: FilingTarget, PortalMode, CategoryId, FilingPayload, FilingStatus, FilingErrorCode,
- * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult, TransitDetails, SUBWAY_LINES.
+ * KEEP IDENTICAL to: FilingTarget, CategoryId, FilingPayload, FilingStatus, FilingErrorCode,
+ * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult, TransitDetails, SUBWAY_LINES, WorkerQuestion, WorkerAnswer.
  */
-export type FilingTarget = "demo" | "real";
-export type PortalMode = "normal" | "captcha" | "flaky" | "reject";
+/** Every filing targets the official form (the replica portal is gone). */
+export type FilingTarget = "real";
 export type CategoryId = "street-pothole" | "street-repair-defect" | "subway-delay";
 
 /** Canonical subway lines (same order/spelling as the bot's SUBWAY_LINES). The MTA wizard labels them "<line> Line". */
@@ -37,7 +37,6 @@ export interface FilingPayload {
   extraHeaders: Record<string, string>;
   cdpUrl: string | null;
   liveViewUrl: string | null;
-  portalMode: PortalMode;
   form: {
     description: string;
     address: string | null;
@@ -52,11 +51,35 @@ export interface FilingPayload {
     transit?: TransitDetails | null;
   };
   /**
-   * True ONLY when the resident explicitly approved AND FILING_TARGET=real AND env ALLOW_REAL_SUBMIT=1.
+   * True ONLY when the resident explicitly approved AND env ALLOW_REAL_SUBMIT=1.
    * Real-site adapters must never click the final Submit unless this is true.
    */
   realSubmitAuthorized?: boolean;
-  limits: { totalTimeoutMs: number; stepTimeoutMs: number; maxNavigationRetries: number };
+  /**
+   * questionTimeoutMs: how long ctx.ask() waits for <outDir>/answer-<id>.json (default 180000).
+   * 0 ⇒ never ask; the adapter's original HUMAN_ACTION_REQUIRED outcome is thrown immediately.
+   */
+  limits: { totalTimeoutMs: number; stepTimeoutMs: number; maxNavigationRetries: number; questionTimeoutMs?: number };
+}
+
+export const DEFAULT_QUESTION_TIMEOUT_MS = 180_000;
+
+/** Live follow-up question (worker → bot → resident). Written to <outDir>/question-<id>.json + an EVT "question". */
+export type QuestionField = "direction" | "station" | "contact_name" | "contact_email" | "free_text";
+export interface WorkerQuestion {
+  /** [A-Za-z0-9_-]{1,24}; unique per attempt. */
+  id: string;
+  field: QuestionField;
+  /** Resident-facing question. Never contains PII. */
+  prompt: string;
+  /** Tappable choices (exact labels). Free text is accepted when absent or when field is station/free_text. */
+  options?: string[];
+  required: boolean;
+}
+/** <outDir>/answer-<id>.json, written by the bot. optionIndex refers to WorkerQuestion.options. */
+export interface WorkerAnswer {
+  value: string;
+  optionIndex?: number;
 }
 
 export type FilingStatus = "SUBMITTED" | "HUMAN_ACTION_REQUIRED" | "SUBMISSION_UNKNOWN" | "FAILED";
@@ -113,8 +136,6 @@ export interface WorkerResult {
  */
 export type WorkerResultFile = WorkerResult & { message: string; target: FilingTarget; category: CategoryId };
 
-export const DEMO_SR_RE = /^DEMO-\d{8}-[A-Z0-9]{6}$/;
-
 /** Thrown by adapters/main to stop the run with a definite non-SUBMITTED outcome. */
 export class Outcome extends Error {
   constructor(
@@ -130,7 +151,6 @@ export class Outcome extends Error {
 
 export const nowIso = () => new Date().toISOString();
 
-const PORTAL_MODES: PortalMode[] = ["normal", "captcha", "flaky", "reject"];
 const CATEGORIES: CategoryId[] = ["street-pothole", "street-repair-defect", "subway-delay"];
 
 /** Hand-written shape check (no zod in the sandbox). Returns a list of problems; empty = valid. */
@@ -150,7 +170,7 @@ export function validatePayload(p: unknown): string[] {
   str(p, "attemptId");
   str(p, "complaintId");
   if (typeof p.approvedVersion !== "number") problems.push("approvedVersion must be a number");
-  if (p.target !== "demo" && p.target !== "real") problems.push("target must be demo|real");
+  if (p.target !== "real") problems.push("target must be real");
   if (!CATEGORIES.includes(p.category as CategoryId)) problems.push(`category must be one of ${CATEGORIES.join("|")}`);
   str(p, "formUrl");
   try {
@@ -164,7 +184,7 @@ export function validatePayload(p: unknown): string[] {
   if (!isObj(p.extraHeaders) || !Object.values(p.extraHeaders).every((v) => typeof v === "string")) problems.push("extraHeaders must be Record<string,string>");
   strOrNull(p, "cdpUrl");
   strOrNull(p, "liveViewUrl");
-  if (!PORTAL_MODES.includes(p.portalMode as PortalMode)) problems.push(`portalMode must be one of ${PORTAL_MODES.join("|")}`);
+  // Unknown keys are ignored (tolerant: older bots may still send extra fields).
   if (!isObj(p.form)) problems.push("form must be an object");
   else {
     const f = p.form;
@@ -185,6 +205,8 @@ export function validatePayload(p: unknown): string[] {
   else
     for (const k of ["totalTimeoutMs", "stepTimeoutMs", "maxNavigationRetries"])
       if (typeof p.limits[k] !== "number" || !Number.isFinite(p.limits[k]) || (p.limits[k] as number) < 0) problems.push(`limits.${k} must be a non-negative number`);
+  if (isObj(p.limits) && p.limits.questionTimeoutMs !== undefined && (typeof p.limits.questionTimeoutMs !== "number" || !Number.isFinite(p.limits.questionTimeoutMs) || p.limits.questionTimeoutMs < 0))
+    problems.push("limits.questionTimeoutMs must be a non-negative number");
   // A formUrl outside the allowlist is a payload bug: refuse before opening anything.
   if (problems.length === 0) {
     const host = new URL(String(p.formUrl)).hostname;
