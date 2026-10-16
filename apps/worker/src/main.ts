@@ -11,6 +11,7 @@ import { openBrowser, type BrowserSession } from "./browser.js";
 import { Recorder } from "./evidence.js";
 import { createDemoPortalAdapter } from "./adapters/demo-portal.js";
 import { createNycDotPotholeAdapter } from "./adapters/nyc-dot-pothole.js";
+import { createMtaSubwayDelayAdapter } from "./adapters/mta-subway-delay.js";
 import { payloadSummary } from "./adapters/common.js";
 import type { AdapterContext, FormAdapter, WorkerState } from "./adapters/types.js";
 import {
@@ -110,6 +111,9 @@ async function finalEvidence() {
 }
 
 function pickAdapter(p: FilingPayload): FormAdapter | "real-street-repair" {
+  // No replica exists for the MTA wizard: subway-delay always drives the official form (the bot forces target real;
+  // the final Submit is still gated by payload.realSubmitAuthorized inside the adapter).
+  if (p.category === "subway-delay") return createMtaSubwayDelayAdapter();
   if (p.target === "demo") return createDemoPortalAdapter(p.category === "street-repair-defect" ? "street-repair" : "pothole");
   if (p.category === "street-pothole") return createNycDotPotholeAdapter();
   return "real-street-repair";
@@ -186,6 +190,8 @@ async function run() {
     resultData = { officialRequestNumber: c.officialRequestNumber, officialReceiptUrl: c.receiptUrl, confirmationText: c.confirmationText };
     await finalEvidence();
     if (c.officialRequestNumber && c.confirmationText) writeResult("SUBMITTED", null, `Submitted. Official request number ${c.officialRequestNumber} was read from the confirmation page.`, { sr: c.officialRequestNumber });
+    else if (c.confirmationText)
+      writeResult("SUBMISSION_UNKNOWN", "NO_CONFIRMATION", "Submit was clicked and the site showed a confirmation message, but no reference number was found on the page. Evidence was saved; no automatic retry.");
     else writeResult("SUBMISSION_UNKNOWN", "NO_CONFIRMATION", "Submit was clicked but no confirmation number was found. No automatic retry.");
   } catch (err) {
     await finalEvidence();
