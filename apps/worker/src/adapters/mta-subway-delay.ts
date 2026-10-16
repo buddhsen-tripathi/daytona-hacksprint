@@ -18,7 +18,7 @@
 import type { Locator, Page } from "playwright-core";
 import { Outcome, SUBWAY_LINES, sanitizeUrl, type FormField, type TransitDetails } from "../protocol.js";
 import { detectCaptcha, detectLogin } from "../safety.js";
-import { gotoWithRetries, matchByTokens, nameCandidates, needField, needFieldOutcome, normalizeBorough, recordFormSchema, updateFormStep } from "./common.js";
+import { fillByLabel, gotoWithRetries, matchByTokens, matchExtraField, nameCandidates, needField, needFieldOutcome, normalizeBorough, recordFormSchema, updateFormStep } from "./common.js";
 import { labelOf } from "./fields.js";
 import type { AdapterContext, ConfirmResult, FormAdapter } from "./types.js";
 
@@ -165,6 +165,42 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
   } = { line: null, direction: null, station: null, dateTime: null, breadcrumb: null, descriptionLen: 0, descriptionOk: false, contact: [], skipped: [], answered: [] };
 
   const stepMs = (ctx: AdapterContext) => Math.max(5000, ctx.payload.limits.stepTimeoutMs || 20000);
+  /** payload.form.extraFields keys that were typed into the form (#12); the rest are logged, never guessed. */
+  const usedExtra = new Set<string>();
+
+  /** Visible, empty text inputs on this step and their labels (structure only). */
+  async function emptyTextInputs(page: Page): Promise<string[]> {
+    return page.evaluate(() =>
+      Array.from(document.querySelectorAll("input,textarea"))
+        .filter((e) => (e as HTMLElement).offsetParent !== null && !["file", "checkbox", "radio", "hidden", "button", "submit"].includes((e as HTMLInputElement).type))
+        .filter((e) => !(e as HTMLInputElement).value)
+        .map((e) => ((e as HTMLInputElement).labels?.[0]?.innerText ?? e.getAttribute("aria-label") ?? "").replace(/\s+/g, " ").trim())
+        .filter(Boolean),
+    );
+  }
+
+  /** Fill this step's text inputs whose label matches a resident answer in extraFields (exact, then normalised). */
+  async function fillExtraFields(ctx: AdapterContext): Promise<{ label: string; value: string }[]> {
+    const extra = ctx.payload.form.extraFields;
+    if (!extra || !Object.keys(extra).length) return [];
+    const done: { label: string; value: string }[] = [];
+    for (const label of await emptyTextInputs(ctx.page)) {
+      const hit = matchExtraField(extra, label);
+      if (!hit || usedExtra.has(hit.key)) continue;
+      if (await fillByLabel(ctx.page, label, hit.value)) {
+        usedExtra.add(hit.key);
+        done.push({ label, value: hit.value });
+        ctx.action({ kind: "fill", target: label, chars: hit.value.length });
+        ctx.log("fill", "info", `filled "${clean(label, 60)}" from the resident's answer (learned required field)`);
+      }
+    }
+    return done;
+  }
+
+  function logUnusedExtra(ctx: AdapterContext) {
+    const unused = Object.keys(ctx.payload.form.extraFields ?? {}).filter((k) => !usedExtra.has(k));
+    if (unused.length) ctx.log("fill", "warn", "extraFields with no matching input on the MTA form (not filled, never guessed)", { labels: unused.map((l) => clean(l, 80)) });
+  }
 
   /**
    * Record this step's form structure (labels/types/required/options, never values) once its Continue / Submit
@@ -468,6 +504,9 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
       filled.contact.push({ label, value });
       ctx.action({ kind: "fill", target: label, chars: value.length });
     }
+    // #12: inputs matching a learned required field the resident already answered (exact / normalised label).
+    filled.contact.push(...(await fillExtraFields(ctx)));
+    logUnusedExtra(ctx);
     // Any other visible required free-text input we do not know about ⇒ ask, never guess.
     const unknownRequired = await page.evaluate(() =>
       Array.from(document.querySelectorAll("input,textarea"))
@@ -541,8 +580,12 @@ export function createMtaSubwayDelayAdapter(): FormAdapter {
         else if (kind === "station") await doStation(ctx, t);
         else if (kind === "additional") {
           await snap(ctx, STEP_TITLES.additional);
-          filled.skipped.push("car number (optional, not known)");
-          await ctx.shot("fill", "additional-info", "Optional car number left empty");
+          const extra = await fillExtraFields(ctx);
+          if (extra.length) await ctx.shot("fill", "additional-info", `Filled from your answers: ${extra.map((e) => e.label).join(", ")}`);
+          else {
+            filled.skipped.push("car number (optional, not known)");
+            await ctx.shot("fill", "additional-info", "Optional car number left empty");
+          }
           await advance(ctx, "fill", "additional information");
         } else if (kind === "details") await doDetails(ctx, t);
         else if (kind === "contact") {

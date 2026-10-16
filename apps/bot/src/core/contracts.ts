@@ -667,6 +667,7 @@ export const CallbackAction = z.enum([
   "set_direction", // subway: data `set_direction:<id>:<version>:d=0|1` (MTA form direction option index)
   "set_time", // subway: data `set_time:<id>:<version>:now|later`
   "answer_q", // live worker question: data `answer_q:<id>:<version>:<questionId>:<optionIndex>`
+  "set_field", // #12 learned form field: data `set_field:<id>:<version>:<fieldIndex>:<optionIndex|t|s>` (t = today, s = skip an optional field)
   "route_pick", // router (#8) "Which of these is it?": data `route_pick:<id>:<version>:<i>` (index into route choices; ids can exceed Telegram's 64-byte limit)
 ]);
 export type CallbackAction = z.infer<typeof CallbackAction>;

@@ -146,7 +146,7 @@ export function createComplaintService(store: Store) {
       return transition(store, draft, to, { reason, actor });
     },
 
-    buildSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; target?: "real"; alertLine?: string | null; contextLines?: string[] } = {}): string {
+    buildSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; target?: "real"; alertLine?: string | null; contextLines?: string[]; formNeeds?: string[] } = {}): string {
       const cat = getCategory(draft.category);
       if (requiredFieldsFor(draft.category).includes("transit")) return buildTransitSummary(draft, opts);
       const loc = draft.location;
@@ -167,6 +167,8 @@ export function createComplaintService(store: Store) {
         `<b>Category:</b> ${esc(cat?.officialLabel ?? "-")}`,
         `<b>Evidence:</b> ${evidence}`,
       ];
+      // #12: answers to the official form's learned required fields
+      if (opts.formNeeds?.length) lines.push(...opts.formNeeds);
       if (opts.contactName) lines.push(`<b>Contact name:</b> ${esc(opts.contactName)}`);
       if (draft.duplicates.length && draft.duplicateReviewed) lines.push(`<i>You chose to continue despite ${draft.duplicates.length} similar nearby report(s).</i>`);
       if (opts.contextLines?.length) lines.push("", ...opts.contextLines);
@@ -288,7 +290,7 @@ export function lineLabel(line: string | null | undefined): string {
   return /^[0-9A-Z]$/.test(line) ? `${line} train` : line;
 }
 
-function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; alertLine?: string | null; contextLines?: string[] }): string {
+function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string | null; contactEmail?: string | null; alertLine?: string | null; contextLines?: string[]; formNeeds?: string[] }): string {
   const cat = getCategory(draft.category);
   const t = draft.transit;
   const lineDir = [t?.line ? lineLabel(t.line) : "Line not given", t?.direction ? t.direction : "direction not given"].join(", ");
@@ -304,6 +306,8 @@ function buildTransitSummary(draft: ComplaintDraft, opts: { contactName?: string
     `<b>Sent to the MTA exactly as written:</b>\n<i>${esc(draft.description || "-")}</i>`,
     `<b>Where it's filed:</b> ${esc(cat?.officialLabel ?? "MTA Customer Feedback")}`,
   ];
+  // #12: answers to the official form's learned required fields
+  if (opts.formNeeds?.length) lines.push(...opts.formNeeds);
   if (opts.contactName) lines.push(`<b>Contact name:</b> ${esc(opts.contactName)}`);
   if (opts.contactEmail) lines.push(`<b>Contact email:</b> ${esc(opts.contactEmail)}`);
   if (!opts.contactName && !opts.contactEmail) lines.push("<i>No contact details will be sent (optional: /name, /email if you want the MTA to reply).</i>");

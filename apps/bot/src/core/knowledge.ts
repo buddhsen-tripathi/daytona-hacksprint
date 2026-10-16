@@ -271,8 +271,7 @@ export function directionTokens(s: string): string[] {
  * Unique best token overlap wins; zero overlap or a tie ⇒ null (ask the resident).
  * "Manhattan" only matches when an option mentions Manhattan (7, L, J); on the A it is ambiguous.
  */
-export function resolveDirection(line: string | null | undefined, said: string | null | undefined): string | null {
-  const options = mtaDirectionOptions(line);
+export function resolveDirection(line: string | null | undefined, said: string | null | undefined, options: readonly string[] | null = mtaDirectionOptions(line)): string | null {
   if (!options || !said?.trim()) return null;
   const exact = options.find((o) => o.toLowerCase() === said.trim().toLowerCase());
   if (exact) return exact;

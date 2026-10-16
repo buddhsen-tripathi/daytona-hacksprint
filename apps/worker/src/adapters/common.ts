@@ -1,6 +1,7 @@
 import type { Page } from "playwright-core";
 import { Outcome, nowIso, type FilingPayload, type FormField, type FormFieldType, type FormSchema } from "../protocol.js";
 import type { AdapterContext } from "./types.js";
+import { normLabel } from "./fields.js";
 
 export const BOROUGHS = ["Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"] as const;
 export type Borough = (typeof BOROUGHS)[number];
@@ -475,4 +476,30 @@ export function emitFormStep(ctx: AdapterContext, step: FormStepSchema): FormSte
   ctx.state.formSchema = mergeFormStep(ctx.state.formSchema, step);
   ctx.log("inspect", "info", "form_schema", { stepTitle: step.title, fields: step.fields });
   return step;
+}
+
+// ---------------------------------------------------------------------------
+// extraFields (issue #12): resident answers to learned required fields, keyed by the official label
+// ---------------------------------------------------------------------------
+
+/** Label → comparable form (same rule as the hand-off / recipe adapters, fields.ts `normLabel`). */
+export const normalizeLabel = normLabel;
+
+/** The resident's answer for a form label: exact label first, then normalised. No fuzzy match here (generic matching is #9). */
+export function matchExtraField(extra: Record<string, string> | undefined, label: string): { key: string; value: string } | null {
+  if (!extra || !label.trim()) return null;
+  const exact = extra[label];
+  if (exact?.trim()) return { key: label, value: exact.trim() };
+  const want = normalizeLabel(label);
+  if (!want) return null;
+  for (const [k, v] of Object.entries(extra)) if (v?.trim() && normalizeLabel(k) === want) return { key: k, value: v.trim() };
+  return null;
+}
+
+/** Fill the input with this exact accessible label. False when the page has no such input (nothing typed). */
+export async function fillByLabel(page: Page, label: string, value: string): Promise<boolean> {
+  const box = page.getByLabel(label, { exact: true }).first();
+  if (!(await box.count())) return false;
+  await box.fill(value);
+  return true;
 }
