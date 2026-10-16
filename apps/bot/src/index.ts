@@ -30,7 +30,8 @@ async function main() {
     bot = created.bot;
     transport = created.transport;
   }
-  const orchestrator = createOrchestrator({ ...providers, transport });
+  // #13: post-mortem self-repair after failed/ambiguous attempts (POSTMORTEM=0 disables)
+  const orchestrator = createOrchestrator({ ...providers, transport, postmortem: process.env.POSTMORTEM === "0" ? null : {} });
 
   let webhook: WebhookHandler | null = null;
   const server = await startApiServer({ store: providers.store, tracer: providers.tracer, memory: providers.memory, orchestrator, getWebhook: () => webhook });
