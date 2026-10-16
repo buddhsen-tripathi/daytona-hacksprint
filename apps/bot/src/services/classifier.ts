@@ -6,6 +6,8 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { CATEGORIES, CLASSIFY_CONFIDENCE_THRESHOLD, CategoryId, ClassificationResult, SUBWAY_LINES } from "../core/contracts.js";
+import type { CatalogEntry, CatalogRoute } from "../core/contracts.js";
+import { getCatalogEntry, searchCatalog } from "./catalog.js";
 import { sanitizeTransit } from "./complaints.js";
 import { nycIso } from "../core/knowledge.js";
 import type { Classifier } from "../core/contracts.js";
@@ -43,6 +45,12 @@ TRIAGE VALUES:
 - "OUT_OF_SCOPE": a real problem that is not one of the supported categories above. category is null. Name the issue plainly at the start of "description" (e.g. "Pothole: ...", "Streetlight out: ...", "LIRR delay: ..."). Examples: potholes, damaged or sunken street patches and any other street or sidewalk condition, streetlight or traffic signal out, damaged street sign, clogged catch basin or street flooding, noise, illegal parking, garbage, graffiti, trees, bus / LIRR / Metro-North / PATH / NJ Transit / ferry problems, subway problems that are not a delay, anything outside New York City. These are reported directly on NYC311 (or the service's own channel); the app gives the resident that guidance.
 - "UNCLEAR": you cannot responsibly decide. Use it when the photo is blurry, dark or too close to tell what it shows; when the words and photo conflict; or when the text is too vague to know what the problem is. Ask exactly ONE short, targeted clarifyingQuestion that would resolve it (e.g. "What's the problem you ran into — for example, was a subway train delayed?"). A photo with no text that clearly shows an unsupported problem (e.g. a pothole) is OUT_OF_SCOPE, not UNCLEAR. category may hold your best guess or null.
 
+ROUTING (two-stage router): the user message lists CATALOG CANDIDATES — NYC311 "Report Problems" articles retrieved for this report. Fill "route":
+- "catalogId": the id of the ONE candidate this report belongs to, copied exactly from the list. Only ids from the list are allowed. null when triage is EMERGENCY or UNCLEAR, or when no candidate fits.
+- For SUPPORTED, catalogId is the category id itself (e.g. "subway-delay"). For OUT_OF_SCOPE pick the best candidate so the resident gets the exact official link.
+- "confidence": calibrated like the top-level confidence, for catalogId only. "rationale": one short sentence. "alternatives": up to 3 other candidate ids that could also fit, best first ([] if none).
+- UNCLEAR: catalogId is null, but put the 2-3 candidates that could plausibly fit in "alternatives" (best first) so the resident can pick one; [] only if nothing in the list is plausible.
+
 RULES:
 - Never invent facts that are not visible in the photo or stated by the resident. Never state or guess a location, address, street name, borough, subway line, direction, station, size or date unless the resident said it. Do not read GPS or location from the image. Whether the location is known is handled elsewhere — do not ask for location in clarifyingQuestion.
 - A text-only report is fine: if the resident clearly describes a supported problem (e.g. a delayed subway train), classify it as SUPPORTED even without a photo.
@@ -79,7 +87,34 @@ async function imageParts(paths: string[]): Promise<{ parts: ContentPart[]; skip
   return { parts, skipped };
 }
 
-export function buildUserText(input: ClassifyInput, imageCount: number, skipped: number): string {
+/** Commonly photographed problems: the candidate set when a report has no words to retrieve with. */
+export const PHOTO_ONLY_CANDIDATES = [
+  "pothole-or-cave-in-on-street", "street-light-complaint", "graffiti", "dead-tree", "fallen-tree-or-branch", "illegal-parking",
+  "abandoned-vehicle", "missed-trash-recycling-or-compost-collection", "dirty-sidewalk", "broken-sidewalk", "rat-or-mouse-complaint",
+  "blocked-or-clogged-culvert", "catch-basin-complaint", "traffic-or-bicycle-signal-complaint-or-request", "street-sign-complaint", "dead-animal-on-public-property",
+];
+
+/** Stage 1: up to k catalog candidates for this report, plus the categories we can file (always offered). */
+export function catalogCandidates(input: ClassifyInput, k = 10): CatalogEntry[] {
+  const query = [input.text ?? "", ...input.conversation, input.priorDescription ?? ""].join(" ").trim();
+  const hits = query ? searchCatalog(query, k).map((h) => h.entry) : PHOTO_ONLY_CANDIDATES.map((id) => getCatalogEntry(id)).filter((e): e is CatalogEntry => !!e);
+  const out = [...hits];
+  for (const id of Object.keys(CATEGORIES)) {
+    const e = getCatalogEntry(id);
+    if (e && !out.some((x) => x.id === id)) out.push(e);
+  }
+  return out;
+}
+
+function candidateBlock(candidates: CatalogEntry[]): string[] {
+  if (!candidates.length) return ["CATALOG CANDIDATES: (none available — set route to null)"];
+  return [
+    "CATALOG CANDIDATES (id — title [agency, channel]: summary):",
+    ...candidates.map((c) => `- "${c.id}" — ${c.title} [${c.agency ?? "?"}, ${c.channel}]: ${c.summary.slice(0, 180)}`),
+  ];
+}
+
+export function buildUserText(input: ClassifyInput, imageCount: number, skipped: number, candidates: CatalogEntry[] = []): string {
   const lines: string[] = [];
   const convo = input.conversation.filter((m) => m && m.trim()).slice(-8);
   if (convo.length) {
@@ -92,6 +127,7 @@ export function buildUserText(input: ClassifyInput, imageCount: number, skipped:
   lines.push(`Photos attached: ${imageCount}${skipped ? ` (${skipped} could not be read)` : ""}`);
   lines.push(`Location already provided by the resident: ${input.locationKnown ? "yes" : "no"} (do not ask for it)`);
   lines.push(`Current date/time in New York: ${nycNow()}`, `now: ${nycIso()}`);
+  lines.push("", ...candidateBlock(candidates));
   lines.push("", "Classify this report.");
   return lines.join("\n");
 }
@@ -105,6 +141,23 @@ export function nycNow(now = new Date()): string {
   ) as Record<string, string>;
   const offset = (parts.timeZoneName ?? "GMT-05:00").replace("GMT", "UTC");
   return `${parts.weekday} ${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} (${offset})`;
+}
+
+/** The catalog is the allowlist: unknown ids dropped, alternatives deduped (max 3), no route for EMERGENCY. */
+export function validateRoute(r: ClassificationResult): CatalogRoute | null {
+  if (r.triage === "EMERGENCY") return null;
+  const route = r.route ?? null;
+  let catalogId = route?.catalogId && getCatalogEntry(route.catalogId) ? route.catalogId : null;
+  // A fileable category is its own catalog entry.
+  if (r.triage === "SUPPORTED" && r.category && getCatalogEntry(r.category)) catalogId = r.category;
+  const alternatives = [...new Set(route?.alternatives ?? [])].filter((id) => id !== catalogId && getCatalogEntry(id)).slice(0, 3);
+  if (!catalogId && !alternatives.length) return null;
+  return {
+    catalogId,
+    confidence: catalogId ? (route?.confidence ?? r.confidence) : 0,
+    rationale: route?.rationale ?? "",
+    alternatives,
+  };
 }
 
 /** Deterministic post-validation: the backend owns the allowlist (design doc §8.2). */
@@ -131,6 +184,7 @@ export function postValidate(r: ClassificationResult): ClassificationResult {
   if (out.triage === "SUPPORTED" && out.confidence >= CLASSIFY_CONFIDENCE_THRESHOLD) out.clarifyingQuestion = null;
   // Transit details only for subway categories; canonicalized, unknown values ⇒ null (never invented).
   out.transit = out.category && CATEGORIES[out.category].requiredFields.includes("transit") ? sanitizeTransit(out.transit) : null;
+  out.route = validateRoute(out);
   return out;
 }
 
@@ -141,7 +195,8 @@ export function createOpenRouterClassifier(opts: ClassifierOptions = {}): Classi
     async classify(input) {
       const model = opts.model ?? (process.env.OPENROUTER_VISION_MODEL || process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4.5");
       const { parts, skipped } = await imageParts(input.imagePaths ?? []);
-      const content: ContentPart[] = [{ type: "text", text: buildUserText(input, parts.length, skipped.length) }, ...parts];
+      const candidates = catalogCandidates(input);
+      const content: ContentPart[] = [{ type: "text", text: buildUserText(input, parts.length, skipped.length, candidates) }, ...parts];
       const messages: ChatMessage[] = [
         { role: "system", content: CLASSIFIER_SYSTEM_PROMPT },
         { role: "user", content },

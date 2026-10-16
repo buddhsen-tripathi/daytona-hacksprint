@@ -1,0 +1,342 @@
+{
+  "_note": "Routing evals for #8: resident phrasings -> NYC311 catalog ids (fixtures/nyc311-catalog.json). `accept` = other acceptable top-1 ids; `clear` = unambiguous (counts toward the >= 90% top-1 target). Run: pnpm --filter @311relay/bot evals -- --routing",
+  "cases": [
+    {
+      "id": "r01-noise-from-neighbor",
+      "text": "My upstairs neighbor plays loud music every night until 3am",
+      "expected": "noise-from-neighbor",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r02-noise-from-bar-club-or-restaurant",
+      "text": "The bar downstairs is blasting music on a Tuesday night",
+      "expected": "noise-from-bar-club-or-restaurant",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r03-noise-from-construction",
+      "text": "Construction crew started jackhammering at 5am on a Sunday",
+      "expected": "noise-from-construction",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r04-noise-from-dog-or-other-animal",
+      "text": "A dog next door has been barking for hours nonstop",
+      "expected": "noise-from-dog-or-other-animal",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r05-noise-from-helicopter",
+      "text": "Helicopters keep flying low over my building all day",
+      "expected": "noise-from-helicopter",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r06-noise-from-vehicle",
+      "text": "Guy keeps revving his car with a loud muffler outside my window",
+      "expected": "noise-from-vehicle",
+      "accept": [
+        "noise-from-street-or-sidewalk"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r07-heat-or-hot-water-complaint-in-a-residen",
+      "text": "No heat in my apartment since yesterday and it's freezing",
+      "expected": "heat-or-hot-water-complaint-in-a-residential-building",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r08-heat-or-hot-water-complaint-in-a-residen",
+      "text": "We have had no hot water for three days in our building",
+      "expected": "heat-or-hot-water-complaint-in-a-residential-building",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r09-water-leak-in-a-building",
+      "text": "Water is leaking through my ceiling from the apartment above",
+      "expected": "water-leak-in-a-building",
+      "accept": [
+        "apartment-maintenance-complaint"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r10-mold-complaint",
+      "text": "There's black mold all over my bathroom and the landlord won't fix it",
+      "expected": "mold-complaint",
+      "accept": [
+        "apartment-maintenance-complaint"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r11-illegal-parking",
+      "text": "Someone parked in the bike lane on my block again",
+      "expected": "illegal-parking",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r12-illegal-parking",
+      "text": "A car is double parked and blocking the whole lane",
+      "expected": "illegal-parking",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r13-illegal-parking",
+      "text": "A car is parked in front of the fire hydrant",
+      "expected": "illegal-parking",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r14-blocked-driveway",
+      "text": "Someone parked blocking my driveway and I can't get out",
+      "expected": "blocked-driveway",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r15-abandoned-vehicle",
+      "text": "This car with no plates has been sitting on our street for weeks",
+      "expected": "abandoned-vehicle",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r16-dead-tree",
+      "text": "There's a dead tree in front of my house that looks like it could fall",
+      "expected": "dead-tree",
+      "accept": [
+        "fallen-tree-or-branch"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r17-fallen-tree-or-branch",
+      "text": "A big branch fell off a tree and is lying across the sidewalk",
+      "expected": "fallen-tree-or-branch",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r18-tree-pruning",
+      "text": "The tree outside needs trimming, branches are hitting the windows",
+      "expected": "tree-pruning",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r19-rat-or-mouse-complaint",
+      "text": "I keep seeing rats running around the trash bags on my block",
+      "expected": "rat-or-mouse-complaint",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r20-graffiti",
+      "text": "Someone spray painted graffiti all over the side of my building",
+      "expected": "graffiti",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r21-subway-delay",
+      "text": "The A train sat at 14 St for 25 minutes this morning, downtown",
+      "expected": "subway-delay",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r22-subway-delay",
+      "text": "My L train was stuck in the tunnel for half an hour",
+      "expected": "subway-delay",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r23-long-island-rail-road",
+      "text": "The LIRR train to Ronkonkoma was 40 minutes late",
+      "expected": "long-island-rail-road",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r24-pothole-or-cave-in-on-street",
+      "text": "There's a huge pothole on my street that damaged my tire",
+      "expected": "pothole-or-cave-in-on-street",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r25-pothole-or-cave-in-on-highway",
+      "text": "Big pothole on the BQE in the right lane",
+      "expected": "pothole-or-cave-in-on-highway",
+      "accept": [
+        "pothole-or-cave-in-on-street"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r26-street-light-complaint",
+      "text": "The streetlight on my corner has been out for a week",
+      "expected": "street-light-complaint",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r27-missed-trash-recycling-or-compost-collec",
+      "text": "Sanitation skipped our garbage pickup this week",
+      "expected": "missed-trash-recycling-or-compost-collection",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r28-dirty-sidewalk",
+      "text": "The sidewalk in front of the deli is covered in trash and food",
+      "expected": "dirty-sidewalk",
+      "accept": [
+        "littering"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r29-broken-sidewalk",
+      "text": "The sidewalk is cracked and lifted, someone tripped on it",
+      "expected": "broken-sidewalk",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r30-catch-basin-complaint",
+      "text": "The storm drain on the corner is clogged and the street floods",
+      "expected": "catch-basin-complaint",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r31-street-sign-complaint",
+      "text": "A stop sign at the intersection got knocked down",
+      "expected": "street-sign-complaint",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r32-traffic-or-bicycle-signal-complaint-or-r",
+      "text": "The traffic light at my intersection is stuck on red",
+      "expected": "traffic-or-bicycle-signal-complaint-or-request",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r33-dead-animal-on-public-property",
+      "text": "There's a dead raccoon in the middle of the street",
+      "expected": "dead-animal-on-public-property",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r34-fireworks-complaint",
+      "text": "People keep setting off fireworks on my block every night",
+      "expected": "fireworks-complaint",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r35-illegal-dumping",
+      "text": "Someone dumped a mattress and old furniture on the corner",
+      "expected": "illegal-dumping",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r36-taxi-complaint",
+      "text": "My taxi driver refused to take a credit card and was rude",
+      "expected": "taxi-complaint",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r37-citi-bike",
+      "text": "The Citi Bike dock on my street is broken and won't release bikes",
+      "expected": "citi-bike",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r38-scaffold-or-sidewalk-shed-complaint",
+      "text": "The scaffolding on my building has been up for years and looks unsafe",
+      "expected": "scaffold-or-sidewalk-shed-complaint",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r39-elevator-or-escalator-complaint",
+      "text": "The elevator in my building has been broken for two weeks",
+      "expected": "elevator-or-escalator-complaint",
+      "accept": [
+        "apartment-maintenance-complaint"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r40-smoke-free-air-act-complaint",
+      "text": "My neighbor smokes in the hallway and it comes into my apartment",
+      "expected": "smoke-free-air-act-complaint",
+      "accept": [
+        "smoking-or-vaping-complaint"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r41-food-poisoning",
+      "text": "I got food poisoning after eating at a restaurant last night",
+      "expected": "food-poisoning",
+      "accept": [
+        "restaurant-complaint"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r42-idling-vehicle",
+      "text": "A delivery truck has been idling outside for an hour",
+      "expected": "idling-vehicle",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r43-water-leak-on-street-or-sidewalk",
+      "text": "Water has been slowly bubbling up from a crack in the street for a few days",
+      "expected": "water-leak-on-street-or-sidewalk",
+      "accept": [
+        "water-main-break"
+      ],
+      "clear": false
+    },
+    {
+      "id": "r44-snow-or-ice-on-sidewalk",
+      "text": "The sidewalk outside the store wasn't shoveled and is all ice",
+      "expected": "snow-or-ice-on-sidewalk",
+      "accept": [],
+      "clear": true
+    },
+    {
+      "id": "r45-bed-bug-complaint",
+      "text": "Bed bugs in my apartment and the landlord does nothing",
+      "expected": "bed-bug-complaint",
+      "accept": [
+        "apartment-maintenance-complaint"
+      ],
+      "clear": false
+    }
+  ]
+}
