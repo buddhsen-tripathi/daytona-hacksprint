@@ -1,0 +1,49 @@
+name = "my-telegram-bot"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Shared environment variables
+[vars]
+# Get from https://api.telegram.org/bot<TOKEN>/getMe
+BOT_INFO = """{ "id": 123456789, "is_bot": true, "first_name": "MyBot", "username": "my_bot" }"""
+
+# ============================================================
+# Development Environment (dev branch)
+# ============================================================
+[env.dev]
+name = "my-telegram-bot-dev"
+
+[env.dev.vars]
+BOT_INFO = """{ "id": 123456789, "is_bot": true, "first_name": "MyBotDev", "username": "my_bot_dev" }"""
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "telegram-bot-db-dev"
+database_id = "<YOUR_DEV_DATABASE_ID>"
+
+# ============================================================
+# Production Environment (main branch)
+# ============================================================
+[env.production]
+name = "my-telegram-bot"
+
+[env.production.vars]
+BOT_INFO = """{ "id": 987654321, "is_bot": true, "first_name": "MyBot", "username": "my_bot" }"""
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "telegram-bot-db"
+database_id = "<YOUR_PRODUCTION_DATABASE_ID>"
+
+# ============================================================
+# Local Development Configuration
+# ============================================================
+[[d1_databases]]
+binding = "DB"
+database_name = "telegram-bot-db-local"
+database_id = "<YOUR_LOCAL_DATABASE_ID>"
+
+[dev]
+port = 8787
+local_protocol = "http"

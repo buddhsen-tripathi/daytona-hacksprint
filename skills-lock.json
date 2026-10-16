@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "daytona": {
+      "source": "daytona/skills",
+      "sourceType": "github",
+      "skillPath": "skills/daytona/SKILL.md",
+      "computedHash": "d8dd2ff2edb38d2db403b9d342449753be6815e4d99f39a043634f997abdeb98"
+    },
+    "phoenix-tracing": {
+      "source": "arize-ai/phoenix",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/phoenix-tracing/SKILL.md",
+      "computedHash": "d4b54a7267ac970fcb3ec252d60d4c9e52985cf76c2817cc17167848519afe68"
+    },
+    "surrealql": {
+      "source": "surrealdb/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/surrealql/SKILL.md",
+      "computedHash": "9e8e63c25b72b69b323c6248ba1d710aed8a578df6252013d45fd8cbc4d3ca39"
+    },
+    "telegram-bot-grammy": {
+      "source": "pbnicad/telegram-bot-grammy-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "1c182a6ab41fb4f7246e43c5047fea3569f8007827ea2ee07e46f334aceeb2c1"
+    }
+  }
+}
