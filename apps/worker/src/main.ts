@@ -9,7 +9,6 @@ import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { openBrowser, type BrowserSession } from "./browser.js";
 import { Recorder } from "./evidence.js";
-import { createNycDotPotholeAdapter } from "./adapters/nyc-dot-pothole.js";
 import { createMtaSubwayDelayAdapter } from "./adapters/mta-subway-delay.js";
 import { payloadSummary } from "./adapters/common.js";
 import type { AdapterContext, FormAdapter, WorkerState } from "./adapters/types.js";
@@ -19,6 +18,7 @@ import {
   nowIso,
   sanitizeUrl,
   validatePayload,
+  type CategoryId,
   type FilingErrorCode,
   type FilingPayload,
   type FilingStatus,
@@ -28,7 +28,6 @@ import {
   type WorkerStep,
 } from "./protocol.js";
 
-const STREET_REPAIR_ARTICLE = "https://portal.311.nyc.gov/article/?kanumber=KA-01095";
 
 const [payloadPath, outDirArg] = process.argv.slice(2);
 if (!payloadPath || !outDirArg) {
@@ -80,7 +79,7 @@ function writeResult(status: FilingStatus, errorCode: FilingErrorCode | null, me
     finishedAt: nowIso(),
     message,
     target: "real",
-    category: payload?.category ?? "street-pothole",
+    category: payload?.category ?? "subway-delay",
   };
   const tmp = join(outDir, "result.json.tmp");
   writeFileSync(tmp, JSON.stringify(result, null, 2));
@@ -112,12 +111,16 @@ async function finalEvidence() {
   }
 }
 
-function pickAdapter(p: FilingPayload): FormAdapter | "real-street-repair" {
-  // Every category files against its official form. subway-delay drives the MTA wizard end to end (the final Submit is
-  // gated by payload.realSubmitAuthorized inside the adapter); street categories stop at the official CAPTCHA hand-off.
-  if (p.category === "subway-delay") return createMtaSubwayDelayAdapter();
-  if (p.category === "street-pothole") return createNycDotPotholeAdapter();
-  return "real-street-repair";
+/**
+ * Adapter registry: one official-form adapter per category. subway-delay drives the MTA wizard end to end (the final
+ * Submit is gated by payload.realSubmitAuthorized inside the adapter). Adding a category = one entry here.
+ */
+const ADAPTERS: Partial<Record<CategoryId, () => FormAdapter>> = {
+  "subway-delay": createMtaSubwayDelayAdapter,
+};
+
+function pickAdapter(p: FilingPayload): FormAdapter | null {
+  return ADAPTERS[p.category]?.() ?? null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -186,14 +189,8 @@ async function run() {
   rec.log("navigate", "info", "worker started", { attemptId, complaintId: payload.complaintId, approvedVersion: payload.approvedVersion, ...payloadSummary(payload) });
 
   const adapter = pickAdapter(payload);
-  if (adapter === "real-street-repair") {
-    state.finalUrl = STREET_REPAIR_ARTICLE;
-    return writeResult(
-      "HUMAN_ACTION_REQUIRED",
-      null,
-      `There is no automatable official route for Street Repair complaints (the NYC311 portal flow requires an interactive session). Please file it yourself here: ${STREET_REPAIR_ARTICLE}`,
-      { articleUrl: STREET_REPAIR_ARTICLE },
-    );
+  if (!adapter) {
+    return writeResult("FAILED", null, `No filing adapter for category "${String(payload.category)}". Nothing was opened or submitted.`, { category: payload.category });
   }
 
   try {

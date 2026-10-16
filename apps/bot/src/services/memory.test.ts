@@ -45,7 +45,7 @@ function draft(over: Partial<ComplaintDraft> & { id: string }): ComplaintDraft {
 
 const pin = (lat: number, lon: number) => ({ ...EMPTY_LOCATION, latitude: lat, longitude: lon, source: "pin" as const, userConfirmed: true, withinNyc: true });
 
-/** Fixture: the current draft + my earlier dry run + other riders on the A / C / long ago + nearby potholes. */
+/** Fixture: the current draft + my earlier dry run + other riders on the A / C / long ago + location-only reports nearby (geo path, for location categories). */
 async function seedRelated(store: Store) {
   const rows = [
     draft({ id: "cmp_now", createdAt: ago(0), status: "READY_FOR_APPROVAL" }),
@@ -56,10 +56,10 @@ async function seedRelated(store: Store) {
     draft({ id: "cmp_o_cancel", telegramChatId: "rider-4", residentId: "res_rider-4", createdAt: ago(10), status: "CANCELLED" }),
     draft({ id: "cmp_o_c_line", telegramChatId: "rider-5", residentId: "res_rider-5", createdAt: ago(10), transit: { ...EMPTY_TRANSIT, line: "C" } }),
     draft({ id: "cmp_o_old", telegramChatId: "rider-6", residentId: "res_rider-6", createdAt: ago(60 * 5) }),
-    // street: 14 m and ~300 m away
-    draft({ id: "cmp_pot_now", category: "street-pothole", transit: null, location: pin(40.7359, -73.9911), createdAt: ago(0) }),
-    draft({ id: "cmp_pot_near", category: "street-pothole", transit: null, location: pin(40.736, -73.9912), telegramChatId: "res-x", residentId: "res_x", createdAt: ago(30) }),
-    draft({ id: "cmp_pot_far", category: "street-pothole", transit: null, location: pin(40.7386, -73.9911), telegramChatId: "res-y", residentId: "res_y", createdAt: ago(30) }),
+    // location-based (no line): 14 m and ~300 m away
+    draft({ id: "cmp_pot_now", category: "subway-delay", transit: null, location: pin(40.7359, -73.9911), createdAt: ago(0) }),
+    draft({ id: "cmp_pot_near", category: "subway-delay", transit: null, location: pin(40.736, -73.9912), telegramChatId: "res-x", residentId: "res_x", createdAt: ago(30) }),
+    draft({ id: "cmp_pot_far", category: "subway-delay", transit: null, location: pin(40.7386, -73.9911), telegramChatId: "res-y", residentId: "res_y", createdAt: ago(30) }),
   ];
   for (const r of rows) await store.saveComplaint(r);
 }
@@ -90,10 +90,10 @@ describe("memory: remembered issues + learned questions (SurrealDB embedded)", (
     expectSubwayRelated(await store.findRelatedComplaints!(subwayQ));
   });
 
-  it("findRelatedComplaints (street): geo::distance within 100 m", async () => {
-    const r = await store.findRelatedComplaints!({ complaintId: "cmp_pot_now", chatId: "rider-1", category: "street-pothole", lat: 40.7359, lon: -73.9911 });
+  it("findRelatedComplaints (location): geo::distance within 100 m", async () => {
+    const r = await store.findRelatedComplaints!({ complaintId: "cmp_pot_now", chatId: "rider-1", category: "subway-delay", lat: 40.7359, lon: -73.9911 });
     expect(r.others.ids).toEqual(["cmp_pot_near"]);
-    expect(relatedCardLines({ category: "street-pothole" }, r)[0]).toBe("👥 1 other resident reported street potholes within 100 m in the last hour.");
+    expect(relatedCardLines({ category: "subway-delay" }, r)[0]).toMatch(/^👥 1 other resident reported .+ within 100 m in the last hour\.$/);
   });
 
   it("RELATEs complaint->similar_to->complaint for the dashboard graph", async () => {

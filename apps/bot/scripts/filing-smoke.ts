@@ -1,6 +1,7 @@
 /**
- * Filing smoke test: runs filing.executeFiling end-to-end on a fake APPROVED street-pothole complaint against the
- * official DOT form. The worker fills the fields and stops at the reCAPTCHA (HUMAN_ACTION_REQUIRED/CAPTCHA): read-only.
+ * Filing smoke test: runs filing.executeFiling end-to-end on a fake APPROVED subway-delay complaint against the
+ * official MTA Customer Feedback form. With ALLOW_REAL_SUBMIT unset the worker fills the form and stops before Submit
+ * (dry run): nothing is sent.
  *
  *   tsx scripts/filing-smoke.ts [--local]
  *
@@ -10,7 +11,8 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ComplaintDraft, Resident, SpanHelpers, Tracer } from "../src/core/contracts.js";
-import { EMPTY_LOCATION, nowIso, shortId } from "../src/core/contracts.js";
+import { EMPTY_LOCATION, EMPTY_TRANSIT, nowIso, shortId } from "../src/core/contracts.js";
+import { nycIso } from "../src/core/knowledge.js";
 import { REPO_ROOT } from "../src/integrations/env.js";
 
 const envFile = resolve(REPO_ROOT, ".env");
@@ -93,11 +95,12 @@ async function main() {
     telegramChatId: resident.telegramChatId,
     residentId: resident.id,
     status: "APPROVED",
-    category: "street-pothole",
+    category: "subway-delay",
     triage: "SUPPORTED",
-    description: "Pothole about 40 cm wide and 8 cm deep in the right lane, in front of the building entrance.",
-    userMessages: ["big pothole in front of 1515 Broadway"],
-    location: { ...EMPTY_LOCATION, latitude: 40.758, longitude: -73.9855, address: "1515 Broadway, Manhattan", borough: "Manhattan", rawInput: "1515 Broadway", source: "text", userConfirmed: true, withinNyc: true },
+    description: "The downtown A train was held at 14 St for about 25 minutes with no announcement.",
+    userMessages: ["A train held at 14 St downtown for 25 min"],
+    location: { ...EMPTY_LOCATION },
+    transit: { ...EMPTY_TRANSIT, line: "A", direction: "Downtown & Queens", station: "14 St", delayMinutes: 25, incidentTime: nycIso() },
     media: [],
     classification: null,
     missingFields: [],
@@ -139,7 +142,7 @@ async function main() {
   const after = await store.getComplaint(complaint.id);
   console.log(`\n== complaint status: ${after?.status} (reason ${after?.statusReason}, SR ${after?.officialRequestNumber})`);
   console.log("== transitions:", (store as unknown as { transitions: { from: string; to: string }[] }).transitions.map((t) => `${t.from}->${t.to}`).join(", "));
-  console.log("== workflow patterns:", (await store.getWorkflowPatterns({ target, category: "street-pothole" })).map((p) => p.kind).join(", "));
+  console.log("== workflow patterns:", (await store.getWorkflowPatterns({ target, category: "subway-delay" })).map((p) => p.kind).join(", "));
   console.log("== spans:", tracer.spans.map((s) => `${s.name}=${s.ms}ms`).join(" "));
 
   // Second call must refuse after SUBMISSION_UNKNOWN (never auto-retry).

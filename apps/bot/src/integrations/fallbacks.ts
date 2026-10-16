@@ -76,9 +76,10 @@ export function createNoopTracer(): Tracer {
 
 // ---- classifier (keyword heuristic) ----
 const EMERGENCY_RE = /\b(fire|smoke|injur|hurt|bleed|unconscious|fell in|car fell|collapsed?|sinkhole|gas leak|explosion|downed (power )?line|someone is trapped|open manhole|dangerous hole)\b/i;
-const REPAIR_RE = /\b(patch|trench|street cut|utility cut|repaired|restoration|plate|steel plate|sunk(en)? patch)\b/i;
-const POTHOLE_RE = /\b(pothole|pot hole|road|street|asphalt|crack|hole|broken|pavement|cave)\b/i;
-const OOS_RE = /\b(noise|dog|bark|music|parking|rat|garbage|trash|graffiti|heat|hot water|tree|light out|streetlight|sidewalk|neighbor)\b/i;
+const SUBWAY_RE = /\b(subway|train|[1-7ACEBDFMNQRWGLJZ] line)\b/i;
+const DELAY_RE = /\b(delay(ed)?|late|stuck|held|sat|stopped|waiting|no train|slow)\b/i;
+const OTHER_TRANSIT_RE = /\b(lirr|long island rail|metro-?north|path train|nj transit|amtrak|bus|ferry|access-a-ride)\b/i;
+const OOS_RE = /\b(pothole|pot hole|road|street|asphalt|sidewalk|noise|dog|bark|music|parking|rat|garbage|trash|graffiti|heat|hot water|tree|light out|streetlight|neighbor|broken)\b/i;
 
 export function createHeuristicClassifier(): Classifier {
   return {
@@ -93,14 +94,14 @@ export function createHeuristicClassifier(): Classifier {
       let result: ClassificationResult;
       if (EMERGENCY_RE.test(text)) {
         result = { ...base, triage: "EMERGENCY", category: null, confidence: 0.9, description: summarize(text), rationale: "Text mentions immediate danger.", safetyFlags: ["danger-keywords"] };
-      } else if (REPAIR_RE.test(text)) {
-        result = { ...base, triage: "SUPPORTED", category: "street-repair-defect", confidence: 0.75, description: summarize(text) || "Damage in a previously repaired section of the street.", rationale: "Mentions a patch/trench/street cut.", alternativeConsidered: "Pothole: rejected because damage is inside a repaired area." };
-      } else if (POTHOLE_RE.test(text) || (hasImage && !OOS_RE.test(text))) {
-        result = { ...base, triage: "SUPPORTED", category: "street-pothole", confidence: hasImage ? 0.8 : 0.7, description: summarize(text) || "Road surface has a visible pothole.", rationale: hasImage ? "Photo provided; text/photo suggest road surface damage." : "Text describes road surface damage.", alternativeConsidered: "Street repair defect: no sign of a patch or trench." };
+      } else if (OTHER_TRANSIT_RE.test(text)) {
+        result = { ...base, triage: "OUT_OF_SCOPE", category: null, confidence: 0.8, description: summarize(text), rationale: "Not a NYC subway delay (another transit service)." };
+      } else if (SUBWAY_RE.test(text) && DELAY_RE.test(text)) {
+        result = { ...base, triage: "SUPPORTED", category: "subway-delay", confidence: 0.8, description: summarize(text), rationale: "Text describes a delayed subway train.", transit: null };
       } else if (OOS_RE.test(text)) {
-        result = { ...base, triage: "OUT_OF_SCOPE", category: null, confidence: 0.8, description: summarize(text), rationale: "Not a street surface problem." };
+        result = { ...base, triage: "OUT_OF_SCOPE", category: null, confidence: 0.8, description: summarize(text), rationale: "Not a supported category." };
       } else {
-        result = { ...base, triage: "UNCLEAR", category: null, confidence: 0.3, description: summarize(text), rationale: "Not enough detail.", clarifyingQuestion: "What kind of problem is it? For example, a pothole in the road, or a damaged patch where the street was dug up?" };
+        result = { ...base, triage: "UNCLEAR", category: null, confidence: 0.3, description: summarize(text), rationale: hasImage ? "Photo without enough context." : "Not enough detail.", clarifyingQuestion: "What's the problem you ran into? For example, was a subway train delayed?" };
       }
       return { result, model: "heuristic-fallback", usage: { promptTokens: null, completionTokens: null } };
     },

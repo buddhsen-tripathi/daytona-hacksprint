@@ -1,6 +1,6 @@
 /**
  * StatusService (design doc §15): /status <SR>.
- *  - DOT / NYC311 SR numbers ⇒ NYC Open Data (erm2-nwe9, refreshed daily)
+ *  - NYC311 SR numbers ⇒ NYC Open Data (erm2-nwe9, refreshed daily)
  *  - MTA references are answered by the orchestrator from the stored OfficialRequest (no public status feed)
  * Never throws; unknown is a valid answer.
  */

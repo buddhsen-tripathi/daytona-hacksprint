@@ -71,7 +71,7 @@ function fromFeature(f: GeoFeature, rawInput: string): ComplaintLocation {
 function acceptable(f: GeoFeature, text: string): boolean {
   if (!withinNyc(f.latitude, f.longitude)) return false;
   if (f.confidence != null && f.confidence < 0.6) return false;
-  // Street-level / area centroids are too imprecise for a pothole report.
+  // Street-level / area centroids are too imprecise for a location-based report.
   if (f.layer && !["address", "venue", "intersection"].includes(f.layer)) return false;
   const num = text.match(/(?:^|\s)(\d{1,6}(?:-\d{1,4})?)[a-z]?\s+\S/i)?.[1] ?? null;
   // A house number the user never typed means GeoSearch guessed one.

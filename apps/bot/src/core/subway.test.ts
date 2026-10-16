@@ -27,19 +27,16 @@ describe("category-aware missingFields", () => {
     expect(missingFields({ ...draft, transit: T({ line: "A" }) })).toEqual(["transit"]);
     expect(missingFields({ ...draft, transit: T({ line: "A", direction: "downtown" }) })).toEqual([]);
   });
-  it("street categories still need location and never transit", () => {
-    expect(missingFields({ ...draft, category: "street-pothole" })).toEqual(["location"]);
-    expect(missingFields({ ...draft, category: null })).toEqual(["category", "location"]);
+  it("no category yet: only category is missing (location is asked only by categories that require it)", () => {
+    expect(missingFields({ ...draft, category: null })).toEqual(["category"]);
   });
   it("category flags", () => {
     expect(isRealOnly("subway-delay")).toBe(true);
-    expect(isRealOnly("street-pothole")).toBe(false);
+    expect(isRealOnly("removed-category")).toBe(false); // unknown category
     expect(isOpenDataBacked("subway-delay")).toBe(false);
     expect(effectiveTarget("subway-delay")).toBe("real");
-    expect(effectiveTarget("street-pothole")).toBe("real");
     expect(requiresContactName("subway-delay")).toBe(false);
-    expect(requiresContactName("street-pothole")).toBe(true);
-    expect(requiresContactName("street-repair-defect")).toBe(true);
+    expect(requiresContactName("removed-category")).toBe(false); // unknown category ⇒ no /name gate
   });
 });
 
@@ -67,7 +64,9 @@ describe("transit parsing + merging", () => {
   });
   it("sanitize drops invented / invalid values", () => {
     expect(sanitizeTransit(T({ line: "A train", incidentTime: "not a date", delayMinutes: -3 }))).toMatchObject({ line: "A", incidentTime: null, delayMinutes: null });
-    expect(postValidate({ ...base, triage: "SUPPORTED", category: "street-pothole", confidence: 0.9, description: "hole", transit: T({ line: "A" }) }).transit).toBeNull();
+    expect(postValidate({ ...base, triage: "OUT_OF_SCOPE", category: null, confidence: 0.9, description: "Pothole: hole", transit: T({ line: "A" }) }).transit).toBeNull();
+    // A category outside the allowlist (e.g. a removed category) is downgraded, never filed.
+    expect(postValidate({ ...base, triage: "SUPPORTED", category: "removed-category" as never, confidence: 0.9, description: "hole", transit: null })).toMatchObject({ triage: "UNCLEAR", category: null });
   });
 });
 

@@ -5,7 +5,6 @@
 import type {
   ComplaintDetail,
   ComplaintDraft,
-  DuplicateCandidate,
   Evidence,
   FilingAttempt,
   GraphResponse,
@@ -21,7 +20,7 @@ function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Fake portal screenshot rendered as SVG so mock mode needs no binary assets. */
+/** Fake form screenshot rendered as SVG so mock mode needs no binary assets. */
 function shot(opts: { step: string; title: string; fields?: [string, string][]; banner?: { tone: "ok" | "warn"; text: string; big?: string } }) {
   const { step, title, fields = [], banner } = opts;
   let y = 150;
@@ -41,12 +40,12 @@ ${banner.big ? `<text x="64" y="${y + 80}" font-size="26" font-weight="bold" fil
     : "";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="450" viewBox="0 0 640 450">
 <rect width="640" height="450" fill="#f6f7f9"/>
-<rect width="640" height="28" fill="#fbe9a6"/>
-<text x="16" y="18" font-size="11" fill="#5a4a00" font-family="Arial">NYC311 Demo Portal — not the official site</text>
-<rect y="28" width="640" height="54" fill="#12355b"/>
-<text x="24" y="62" font-size="20" font-weight="bold" fill="#fff" font-family="Arial">NYC311</text>
-<text x="104" y="62" font-size="13" fill="#c9d6e6" font-family="Arial">Report a Problem</text>
-<text x="48" y="118" font-size="18" font-weight="bold" fill="#12355b" font-family="Arial">${esc(title)}</text>
+<rect width="640" height="28" fill="#e9ecef"/>
+<text x="16" y="18" font-size="11" fill="#444" font-family="Arial">contact.mta.info/s/customer-feedback · mock screenshot</text>
+<rect y="28" width="640" height="54" fill="#0039a6"/>
+<text x="24" y="62" font-size="20" font-weight="bold" fill="#fff" font-family="Arial">MTA</text>
+<text x="84" y="62" font-size="13" fill="#d6e0f5" font-family="Arial">Customer Feedback</text>
+<text x="48" y="118" font-size="18" font-weight="bold" fill="#0039a6" font-family="Arial">${esc(title)}</text>
 ${rows}${bannerSvg}
 <rect x="500" y="414" width="128" height="24" rx="12" fill="#111" opacity="0.75"/>
 <text x="564" y="430" font-size="11" fill="#fff" text-anchor="middle" font-family="Courier New, monospace">${esc(step)}</text>
@@ -54,22 +53,25 @@ ${rows}${bannerSvg}
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-const SR = "DEMO-20261016-ABC123";
-const ADDRESS = "214 Nostrand Avenue, Brooklyn, NY 11205";
+const SR = "05583120";
+const FORM = "https://contact.mta.info/s/customer-feedback";
+const TELL_US_MORE =
+  "\"The A train sat at 14 St for 25 minutes this morning, downtown\" · Line A · Downtown & Queens · Nearest station 14 St · Delay 25 min";
+const TRANSIT_OK = { line: "A", direction: "downtown", station: "14 St", borough: "Manhattan", incidentTime: "2026-10-16T08:20:00-04:00", delayMinutes: 25 };
 
 const okFields: [string, string][] = [
-  ["Address *", ADDRESS],
-  ["Borough *", "Brooklyn"],
-  ["Description *", "Pothole roughly 40 cm wide in the northbound lane near the bus stop."],
+  ["Details", "A / Downtown & Queens / 14 St"],
+  ["When did this happen?", "10/16/2026 · 8:20 am"],
+  ["Tell us more (Required)", "\"The A train sat at 14 St for 25 minutes…\""],
 ];
 
 const evidenceOk: Evidence[] = [
-  { step: "navigate", title: "Pothole or Cave-In on Street", summary: "Opened allowlisted form /report/pothole", fields: [] },
-  { step: "inspect", title: "Pothole or Cave-In on Street", summary: "Found 3 required fields, 3 optional contact fields", fields: [["Address *", ""], ["Borough *", "Select…"], ["Description *", ""]] },
-  { step: "fill", title: "Pothole or Cave-In on Street", summary: "Filled address, borough, description; contact left blank", fields: okFields },
-  { step: "validate", title: "Pothole or Cave-In on Street", summary: "Re-read fields; values match approved draft v3", fields: okFields, banner: { tone: "ok" as const, text: "All required fields complete" } },
-  { step: "submit", title: "Pothole or Cave-In on Street", summary: "Clicked Submit Report once", fields: okFields.slice(0, 2), banner: { tone: "ok" as const, text: "Submitting…" } },
-  { step: "confirm", title: "Service Request Submitted", summary: `Parsed confirmation: ${SR}`, fields: [], banner: { tone: "ok" as const, text: "Your service request has been submitted.", big: SR } },
+  { step: "navigate", title: "Customer Feedback", summary: "Opened allowlisted form contact.mta.info/s/customer-feedback", fields: [] },
+  { step: "inspect", title: "Which service?", summary: "Subways › Complaint or issue › Service and schedule › Delay", fields: [["Service", "Subways"], ["I have a…", "Complaint or issue"], ["About…", "Delay"]] },
+  { step: "fill", title: "Tell us more", summary: "Line A, Downtown & Queens, 14 St; description and time filled; contact left blank", fields: okFields },
+  { step: "validate", title: "Contact details", summary: "Breadcrumb Details: A / Downtown & Queens / 14 St matches approved draft v3", fields: okFields, banner: { tone: "ok" as const, text: "All required fields complete" } },
+  { step: "submit", title: "Contact details", summary: "Clicked Submit your feedback once", fields: okFields.slice(0, 2), banner: { tone: "ok" as const, text: "Submitting…" } },
+  { step: "confirm", title: "Thank you for your feedback", summary: `Parsed confirmation: case number ${SR}`, fields: [], banner: { tone: "ok" as const, text: "We received your feedback. Case number:", big: SR } },
 ].map((e, i) => ({
   id: `ev_ok_${i + 1}`,
   attemptId: "att_ok7f2",
@@ -82,17 +84,17 @@ const evidenceOk: Evidence[] = [
   createdAt: t(300 + i * 6),
 }));
 
-const evidenceCaptcha: Evidence[] = [
-  { step: "navigate", summary: "Opened allowlisted form /report/street-repair", banner: undefined },
-  { step: "inspect", summary: "Detected div.g-recaptcha[data-sitekey] — stopping, no bypass attempted", banner: { tone: "warn" as const, text: "Verify you are human  [ reCAPTCHA ]" } },
+const evidenceHandoff: Evidence[] = [
+  { step: "navigate", summary: "Opened allowlisted form contact.mta.info/s/customer-feedback", banner: undefined },
+  { step: "inspect", summary: "Direction \"Brooklyn-bound\" matches neither A option; asked the rider, no answer in 180 s", banner: { tone: "warn" as const, text: "Which direction?  Uptown (Inwood-207 St) / Downtown & Queens" } },
 ].map((e, i) => ({
-  id: `ev_cap_${i + 1}`,
-  attemptId: "att_cap91",
-  complaintId: "mock-captcha",
+  id: `ev_ho_${i + 1}`,
+  attemptId: "att_ho91",
+  complaintId: "mock-handoff",
   type: "screenshot" as const,
   step: e.step as Evidence["step"],
   summary: e.summary,
-  storageReference: shot({ step: `0${i + 1}-${e.step}`, title: "Street Repair Complaint", fields: [["Address *", "W 47th St & 10th Ave, Manhattan"], ["Restoration type *", "Street cut"]], banner: e.banner }),
+  storageReference: shot({ step: `0${i + 1}-${e.step}`, title: "Which direction?", fields: [["Service", "Subways"], ["Line", "A Line"]], banner: e.banner }),
   mime: "image/svg+xml",
   createdAt: t(1300 + i * 5),
 }));
@@ -104,7 +106,7 @@ const attemptOk: FilingAttempt = {
   complaintId: "mock",
   approvedVersion: 3,
   target: "real",
-  category: "street-pothole",
+  category: "subway-delay",
   sandboxId: "dtn-5c1e9a42",
   sandboxProvider: "daytona",
   browserSessionId: "anc_8d03f1b7",
@@ -115,20 +117,21 @@ const attemptOk: FilingAttempt = {
   errorCode: null,
   officialRequestNumber: SR,
   verified: true,
-  verificationNotes: "SR matches DEMO-\\d{8}-[A-Z0-9]{6}; confirmation text present; confirmation screenshot 06-confirm.png present.",
+  verificationNotes: "Reference matches [A-Z0-9-]{5,}; confirmation text present; confirmation screenshot 06-confirm.png present.",
   evidence: evidenceOk,
   workerEvents: [
     ev(296, "navigate", "connectOverCDP ok (anchor)"),
-    ev(298, "navigate", "GET https://3311-dtn-5c1e9a42.proxy.daytona.works/report/pothole → 200"),
-    ev(300, "inspect", "required: address, borough, description · optional: contact_name, contact_email, contact_phone"),
-    ev(303, "inspect", "workflow memory: address-autocomplete-needs-enter applied", "info", { pattern: "wp_addr_enter" }),
-    ev(306, "fill", "address ← 214 Nostrand Avenue, Brooklyn, NY 11205"),
-    ev(307, "fill", "borough ← Brooklyn"),
-    ev(308, "fill", "description ← (84 chars)"),
-    ev(309, "fill", "contact_* left blank (not user-provided)", "warn"),
-    ev(312, "validate", "3/3 required fields match approved draft v3"),
-    ev(318, "submit", "click [data-testid=submit] (once)"),
-    ev(321, "confirm", `parsed [data-testid=sr-number] = ${SR}`),
+    ev(298, "navigate", `GET ${FORM} → 200`),
+    ev(300, "inspect", "Subways › Complaint or issue › Service and schedule › Delay"),
+    ev(303, "inspect", "workflow memory: continue-disabled-until-choice applied", "info", { pattern: "wp_continue_wait" }),
+    ev(306, "fill", "line ← A Line"),
+    ev(307, "fill", "direction ← A Train-Downtown & Queens (matched \"downtown\")"),
+    ev(308, "fill", "station ← 14 St (unique match)"),
+    ev(309, "fill", "tell us more ← (148 chars) · when ← 10/16/2026 8:20 am"),
+    ev(310, "fill", "contact fields left blank (not user-provided)", "warn"),
+    ev(312, "validate", "breadcrumb Details: A / Downtown & Queens / 14 St matches approved draft v3"),
+    ev(318, "submit", "click button[aria-label=\"Submit your feedback\"] (once)"),
+    ev(321, "confirm", `parsed case number = ${SR}`),
     ev(322, "confirm", "result.json written · 6 evidence files"),
   ],
   traceId: "6f1a0c2be81d4a7f",
@@ -138,12 +141,12 @@ const attemptOk: FilingAttempt = {
   finishedAt: t(325),
 };
 
-const attemptCaptcha: FilingAttempt = {
-  id: "att_cap91",
-  complaintId: "mock-captcha",
+const attemptHandoff: FilingAttempt = {
+  id: "att_ho91",
+  complaintId: "mock-handoff",
   approvedVersion: 2,
   target: "real",
-  category: "street-repair-defect",
+  category: "subway-delay",
   sandboxId: "dtn-a7730be0",
   sandboxProvider: "daytona",
   browserSessionId: "anc_1f9e22c4",
@@ -151,22 +154,24 @@ const attemptCaptcha: FilingAttempt = {
   liveViewUrl: "https://live.anchorbrowser.io/?sessionId=anc_1f9e22c4",
   recordingUrl: "https://storage.anchorbrowser.io/recordings/anc_1f9e22c4.mp4",
   outcome: "HUMAN_ACTION_REQUIRED",
-  errorCode: "CAPTCHA",
+  errorCode: "UNEXPECTED_REQUIRED_FIELD",
   officialRequestNumber: null,
   verified: true,
-  verificationNotes: "Worker stopped at CAPTCHA before submit; submitClicked=false. Nothing was filed.",
-  evidence: evidenceCaptcha,
+  verificationNotes: "Worker stopped at the direction step before submit; submitClicked=false. Nothing was filed.",
+  evidence: evidenceHandoff,
   workerEvents: [
     ev(1296, "navigate", "connectOverCDP ok (anchor)"),
-    ev(1298, "navigate", "GET /report/street-repair?mode=captcha → 200"),
-    ev(1301, "inspect", "found .g-recaptcha[data-sitekey] — human verification required", "warn"),
-    ev(1302, "inspect", "STOP: HUMAN_ACTION_REQUIRED / CAPTCHA (no bypass attempted)", "error"),
+    ev(1298, "navigate", `GET ${FORM} → 200`),
+    ev(1300, "fill", "line ← A Line"),
+    ev(1301, "inspect", "direction \"Brooklyn-bound\" matches neither \"Uptown (Inwood-207 St)\" nor \"Downtown & Queens\"", "warn"),
+    ev(1302, "inspect", "question sent to rider (direction); waiting up to 180 s", "info", { question: { id: "q_dir", field: "direction" } }),
+    ev(1482, "inspect", "STOP: HUMAN_ACTION_REQUIRED / UNEXPECTED_REQUIRED_FIELD (no answer)", "error"),
   ],
   traceId: "b29e44d0c3f7a118",
   traceUrl: "https://app.phoenix.arize.com/projects/311relay/traces/b29e44d0c3f7a118",
-  timing: { sandboxMs: 13110, browserMs: 1980, workerMs: 6120, totalMs: 22400 },
+  timing: { sandboxMs: 13110, browserMs: 1980, workerMs: 186120, totalMs: 202400 },
   createdAt: t(1280),
-  finishedAt: t(1303),
+  finishedAt: t(1483),
 };
 
 const attemptLive: FilingAttempt = {
@@ -183,7 +188,7 @@ const attemptLive: FilingAttempt = {
   verified: false,
   verificationNotes: null,
   evidence: [],
-  workerEvents: [ev(1810, "navigate", "connectOverCDP ok (anchor)"), ev(1812, "inspect", "required: address, borough, description")],
+  workerEvents: [ev(1810, "navigate", "connectOverCDP ok (anchor)"), ev(1812, "inspect", "Subways › Complaint or issue › Service and schedule › Delay")],
   traceId: null,
   traceUrl: null,
   timing: { sandboxMs: 12950, browserMs: 2050, workerMs: null, totalMs: null },
@@ -191,81 +196,37 @@ const attemptLive: FilingAttempt = {
   finishedAt: null,
 };
 
-const dups: DuplicateCandidate[] = [
-  {
-    uniqueKey: "63318872",
-    complaintType: "Street Condition",
-    descriptor: "Pothole",
-    status: "Closed",
-    createdDate: "2026-08-29T09:14:00.000",
-    closedDate: "2026-09-03T15:02:00.000",
-    resolutionDescription: "The Department of Transportation inspected this complaint and repaired the problem.",
-    incidentAddress: "210 NOSTRAND AVENUE",
-    latitude: 40.6931,
-    longitude: -73.9529,
-    distanceMeters: 18,
-    ageDays: 48,
-    matchScore: 0.71,
-    scoreBreakdown: { location: 0.92, category: 1, recency: 0.47 },
-  },
-  {
-    uniqueKey: "63540017",
-    complaintType: "Street Condition",
-    descriptor: "Rough, Pitted or Cracked Roads",
-    status: "Open",
-    createdDate: "2026-10-02T17:40:00.000",
-    closedDate: null,
-    resolutionDescription: null,
-    incidentAddress: "NOSTRAND AVENUE and MYRTLE AVENUE",
-    latitude: 40.6942,
-    longitude: -73.9531,
-    distanceMeters: 41,
-    ageDays: 14,
-    matchScore: 0.62,
-    scoreBreakdown: { location: 0.59, category: 0.6, recency: 0.84 },
-  },
-];
+const NO_LOCATION: ComplaintDraft["location"] = { latitude: null, longitude: null, address: null, borough: null, rawInput: null, source: "none", userConfirmed: false, withinNyc: null };
 
 const complaintOk: ComplaintDraft = {
   id: "mock",
   telegramChatId: "51829931",
   residentId: "res_maya",
   status: "SUBMITTED",
-  category: "street-pothole",
+  category: "subway-delay",
   triage: "SUPPORTED",
-  description: "Pothole roughly 40 cm wide in the northbound lane near the bus stop.",
+  description: TELL_US_MORE,
   userMessages: [
-    "[photo] there's a huge pothole by the B44 stop, cars keep swerving",
-    "[location pin] 40.69318, -73.95301",
-    "it's in the right lane going north, maybe 40cm across",
-    "[button] Continue with new report",
+    "The A train sat at 14 St for 25 minutes this morning, downtown",
     "[button] Approve and file",
   ],
-  location: {
-    latitude: 40.69318,
-    longitude: -73.95301,
-    address: ADDRESS,
-    borough: "Brooklyn",
-    rawInput: null,
-    source: "pin",
-    userConfirmed: true,
-    withinNyc: true,
-  },
-  media: [{ id: "med_p1", type: "photo", telegramFileId: "AgACAgEAAxkBAAIB", localPath: null, mime: "image/jpeg", createdAt: t(0) }],
+  location: NO_LOCATION,
+  media: [],
   classification: {
     triage: "SUPPORTED",
-    category: "street-pothole",
-    confidence: 0.91,
-    description: "Pothole roughly 40 cm wide in the northbound lane near the bus stop.",
-    rationale: "Photo shows a shallow, irregular hole in asphalt with loose aggregate, in an unpatched section of the travel lane.",
-    alternativeConsidered: "Street repair defect rejected: no square patch, trench or utility-cut outline around the hole.",
+    category: "subway-delay",
+    confidence: 0.94,
+    description: "Downtown A train held at 14 St for about 25 minutes this morning.",
+    rationale: "Rider describes a subway train held in a station for 25 minutes; line, direction and station are stated.",
+    alternativeConsidered: "Planned service change rejected: no mention of a posted change or reroute.",
     safetyFlags: [],
     clarifyingQuestion: null,
   },
+  transit: TRANSIT_OK,
   missingFields: [],
   needsEmergencyReferral: false,
-  confidence: 0.91,
-  duplicates: dups,
+  confidence: 0.94,
+  duplicates: [],
   duplicateReviewed: true,
   draftVersion: 3,
   approvedVersion: 3,
@@ -278,32 +239,30 @@ const complaintOk: ComplaintDraft = {
   updatedAt: t(326),
 };
 
-const complaintCaptcha: ComplaintDraft = {
+const complaintHandoff: ComplaintDraft = {
   ...complaintOk,
-  id: "mock-captcha",
+  id: "mock-handoff",
   residentId: "res_jon",
   telegramChatId: "77310245",
   status: "HUMAN_ACTION_REQUIRED",
-  category: "street-repair-defect",
-  description: "Sunken square patch from recent utility work, about 2 inches below the road surface.",
-  userMessages: ["[photo] this patch the gas company left is sinking again", "W 47th St & 10th Ave", "[button] Approve and file"],
-  location: { ...complaintOk.location, latitude: 40.7616, longitude: -73.9936, address: "W 47th St & 10th Ave, Manhattan, NY 10036", borough: "Manhattan", source: "text", rawInput: "W 47th St & 10th Ave" },
+  description: "\"A train stuck outside Jay St for 20 min, Brooklyn-bound\" · Line A · Direction Brooklyn-bound · Nearest station Jay St-MetroTech · Delay 20 min",
+  userMessages: ["A train stuck outside Jay St for 20 min, Brooklyn-bound", "[button] Approve and file"],
   classification: {
     ...complaintOk.classification!,
-    category: "street-repair-defect",
-    confidence: 0.84,
-    rationale: "Square, saw-cut patch outline visible; patch has sunk below surrounding asphalt.",
-    alternativeConsidered: "Pothole rejected: damage is inside a previously repaired area.",
+    confidence: 0.88,
+    description: "A train held outside Jay St-MetroTech for about 20 minutes.",
+    rationale: "Rider describes a train held between stations; line and station stated, direction given as \"Brooklyn-bound\".",
+    alternativeConsidered: "Rerouting rejected: the train stayed on its line.",
   },
-  duplicates: [],
+  transit: { line: "A", direction: "Brooklyn-bound", station: "Jay St-MetroTech", borough: "Brooklyn", incidentTime: null, delayMinutes: 20 },
   draftVersion: 2,
   approvedVersion: 2,
   approvedAt: t(1270),
-  activeAttemptId: "att_cap91",
+  activeAttemptId: "att_ho91",
   officialRequestNumber: null,
-  statusReason: "CAPTCHA",
+  statusReason: "UNEXPECTED_REQUIRED_FIELD",
   createdAt: t(1100),
-  updatedAt: t(1304),
+  updatedAt: t(1484),
 };
 
 const complaintLive: ComplaintDraft = {
@@ -311,10 +270,9 @@ const complaintLive: ComplaintDraft = {
   id: "mock-live",
   residentId: "res_maya",
   status: "FILING",
-  description: "Cave-in forming along the curb lane after rain.",
-  userMessages: ["[photo] road is collapsing near the curb", "[location pin]"],
-  location: { ...complaintOk.location, address: "1180 Grand Concourse, Bronx, NY 10456", borough: "Bronx" },
-  duplicates: [],
+  description: "\"7 train has been holding at Queensboro Plaza forever, Manhattan-bound\" · Line 7 · Direction Manhattan-bound · Nearest station Queensboro Plaza",
+  userMessages: ["7 train has been holding at Queensboro Plaza forever, Manhattan-bound", "[button] Approve and file"],
+  transit: { line: "7", direction: "Manhattan-bound", station: "Queensboro Plaza", borough: "Queens", incidentTime: null, delayMinutes: null },
   draftVersion: 1,
   approvedVersion: 1,
   approvedAt: t(1790),
@@ -329,12 +287,10 @@ const complaintNeeds: ComplaintDraft = {
   id: "mock-needs",
   residentId: "res_ade",
   status: "NEEDS_INFORMATION",
-  category: "street-pothole",
-  description: "Pothole reported; location not yet provided.",
-  userMessages: ["[photo]"],
-  location: { latitude: null, longitude: null, address: null, borough: null, rawInput: null, source: "none", userConfirmed: false, withinNyc: null },
-  missingFields: ["location"],
-  duplicates: [],
+  description: "Rider reports a subway delay; line not yet provided.",
+  userMessages: ["train's been stuck for 15 minutes again"],
+  transit: { line: null, direction: null, station: null, borough: null, incidentTime: null, delayMinutes: 15 },
+  missingFields: ["transit"],
   draftVersion: 1,
   approvedVersion: null,
   approvedAt: null,
@@ -351,67 +307,67 @@ const complaintEmergency: ComplaintDraft = {
   status: "EMERGENCY_REFERRAL",
   category: null,
   triage: "EMERGENCY",
-  description: "Open manhole with no cover in the crosswalk.",
+  description: "Person on the tracks at 59 St-Columbus Circle, downtown platform.",
+  userMessages: ["someone just jumped down onto the tracks at columbus circle"],
+  transit: null,
   needsEmergencyReferral: true,
   missingFields: [],
-  statusReason: "safety: uncovered opening",
+  statusReason: "safety: person on the tracks",
   createdAt: t(600),
   updatedAt: t(612),
 };
 
-const COMPLAINTS = [complaintNeeds, complaintLive, complaintCaptcha, complaintEmergency, complaintOk];
-const ATTEMPTS = [attemptLive, attemptCaptcha, attemptOk];
+const COMPLAINTS = [complaintNeeds, complaintLive, complaintHandoff, complaintEmergency, complaintOk];
+const ATTEMPTS = [attemptLive, attemptHandoff, attemptOk];
 
 const tr = (complaintId: string, from: Transition["from"], to: Transition["to"], sec: number, actor: Transition["actor"], reason: string): Transition => ({ complaintId, from, to, at: t(sec), actor, reason });
 
 const TRANSITIONS: Transition[] = [
-  tr("mock", "RECEIVED", "TRIAGING", 2, "system", "photo received"),
-  tr("mock", "TRIAGING", "NEEDS_INFORMATION", 9, "llm", "classified street-pothole (0.91); location missing"),
-  tr("mock", "NEEDS_INFORMATION", "DUPLICATE_REVIEW", 41, "system", "pin in NYC; 2 Open Data candidates ≥ 0.55"),
-  tr("mock", "DUPLICATE_REVIEW", "READY_FOR_APPROVAL", 118, "user", "Continue with new report"),
+  tr("mock", "RECEIVED", "TRIAGING", 2, "system", "message received"),
+  tr("mock", "TRIAGING", "READY_FOR_APPROVAL", 9, "llm", "classified subway-delay (0.94); line A, downtown, 14 St; live MTA alert checked"),
   tr("mock", "READY_FOR_APPROVAL", "APPROVED", 270, "user", "approve:mock:3"),
   tr("mock", "APPROVED", "FILING", 279, "system", "attempt att_ok7f2 created"),
   tr("mock", "FILING", "SUBMITTED", 325, "system", `receipt verified ${SR}`),
-  tr("mock-captcha", "RECEIVED", "TRIAGING", 1101, "system", "photo received"),
-  tr("mock-captcha", "TRIAGING", "READY_FOR_APPROVAL", 1140, "llm", "classified street-repair-defect (0.84)"),
-  tr("mock-captcha", "READY_FOR_APPROVAL", "APPROVED", 1270, "user", "approve:mock-captcha:2"),
-  tr("mock-captcha", "APPROVED", "FILING", 1279, "system", "attempt att_cap91 created"),
-  tr("mock-captcha", "FILING", "HUMAN_ACTION_REQUIRED", 1303, "system", "CAPTCHA detected; no bypass"),
+  tr("mock-handoff", "RECEIVED", "TRIAGING", 1101, "system", "message received"),
+  tr("mock-handoff", "TRIAGING", "READY_FOR_APPROVAL", 1140, "llm", "classified subway-delay (0.88)"),
+  tr("mock-handoff", "READY_FOR_APPROVAL", "APPROVED", 1270, "user", "approve:mock-handoff:2"),
+  tr("mock-handoff", "APPROVED", "FILING", 1279, "system", "attempt att_ho91 created"),
+  tr("mock-handoff", "FILING", "HUMAN_ACTION_REQUIRED", 1483, "system", "direction unresolved; rider did not answer; nothing filed"),
 ];
 
 const PATTERNS: WorkflowPattern[] = [
   {
-    id: "wp_addr_enter",
+    id: "wp_continue_wait",
     target: "real",
-    category: "street-pothole",
-    kind: "address-autocomplete-needs-enter",
-    description: "Address field opens an autocomplete list; press Enter after typing or the value is dropped.",
-    hint: { field: "address", after: "press:Enter" },
+    category: "subway-delay",
+    kind: "continue-disabled-until-choice",
+    description: "Continue stays disabled until a choice button is clicked; wait for it to enable before clicking.",
+    hint: { button: "Continue", wait: "enabled" },
     observedInAttemptId: "att_old01",
     outcome: "FAILED",
     createdAt: t(-3600),
   },
   {
-    id: "wp_confirm_sel",
+    id: "wp_confirm_ref",
     target: "real",
-    category: "street-pothole",
-    kind: "confirmation-selector",
-    description: "SR number is rendered in [data-testid=sr-number] on /confirmation/<sr>.",
-    hint: { selector: "[data-testid=sr-number]" },
+    category: "subway-delay",
+    kind: "confirmation-reference",
+    description: "Case number appears in the thank-you text after Submit your feedback; 8 digits, zero-padded.",
+    hint: { pattern: "case number [0-9]{8}" },
     observedInAttemptId: "att_ok7f2",
     outcome: "SUBMITTED",
     createdAt: t(325),
   },
   {
-    id: "wp_captcha",
+    id: "wp_direction_ask",
     target: "real",
-    category: "street-repair-defect",
-    kind: "captcha-on-form",
-    description: "Street repair form showed reCAPTCHA on load; hand off to the resident immediately.",
-    hint: { detect: ".g-recaptcha", action: "handoff" },
-    observedInAttemptId: "att_cap91",
+    category: "subway-delay",
+    kind: "ask-before-approval",
+    description: "Direction words like \"Brooklyn-bound\" can match neither A option; ask the rider before approval.",
+    hint: { field: "direction", action: "ask" },
+    observedInAttemptId: "att_ho91",
     outcome: "HUMAN_ACTION_REQUIRED",
-    createdAt: t(1303),
+    createdAt: t(1483),
   },
 ];
 
@@ -452,7 +408,7 @@ function graph(): GraphResponse {
     add({ id: p.id, kind: "workflow_pattern", label: p.kind });
     if (p.observedInAttemptId && nodes.some((n) => n.id === p.observedInAttemptId)) edges.push({ from: p.observedInAttemptId, to: p.id, rel: "learned" });
   }
-  edges.push({ from: "wp_addr_enter", to: "att_ok7f2", rel: "applied_in" });
+  edges.push({ from: "wp_continue_wait", to: "att_ok7f2", rel: "applied_in" });
   return { nodes, edges, patterns: PATTERNS };
 }
 
@@ -464,7 +420,7 @@ export function mockFetch(path: string): unknown {
       startedAt: t(-600),
       store: "surrealdb",
       telegram: true,
-      filingTarget: "demo",
+      filingTarget: "real",
       providers: { store: "surrealdb (surrealdb)", tracer: "phoenix (app.phoenix.arize.com)", classifier: "openrouter (anthropic/claude-sonnet-4.5)", sandbox: "daytona", browser: "anchor" },
     };
   if (p === "/api/complaints") return { complaints: COMPLAINTS };

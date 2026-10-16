@@ -32,6 +32,7 @@ import { decodeCallback, encodeCallback, nowIso, shortId } from "./contracts.js"
 import {
   NYC311_CHECK_STATUS_URL,
   NYC311_REPORT_URL,
+  allCategories,
   effectiveTarget,
   getCategory,
   isOpenDataBacked,
@@ -629,7 +630,9 @@ export function createOrchestrator(deps: OrchestratorDeps) {
     }
     const lacksLocation = !draft.location.userConfirmed || draft.location.withinNyc === false || draft.statusReason === "user requested edit";
     // Subway reports mention stations ("at 14 St") that look like addresses: they are transit details, not a 311 location.
-    const wantsLocation = draft.category ? requiredFieldsFor(draft.category).includes("location") : !looksLikeTransit(trimmed);
+    // Only categories whose requiredFields include "location" ask for one (none today; the code path stays for later).
+    const anyLocationCategory = allCategories().some((c) => c.requiredFields.includes("location"));
+    const wantsLocation = draft.category ? requiredFieldsFor(draft.category).includes("location") : anyLocationCategory && !looksLikeTransit(trimmed);
     if (wantsLocation && lacksLocation && looksLikeAddress(trimmed)) {
       const loc = await tracer.span("location.validate", { "location.source": "text" }, async (set) => {
         const l = await location.fromText(trimmed).catch(() => null);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ComplaintDraft } from "./contracts.js";
+import { EMPTY_TRANSIT } from "./contracts.js";
 import { createMemoryStore } from "../integrations/memory-store.js";
 import { createComplaintService } from "../services/complaints.js";
 import { IllegalTransitionError, applyTransition, bumpDraft, transition } from "./state-machine.js";
@@ -9,7 +10,7 @@ async function readyDraft() {
   const store = createMemoryStore();
   const svc = createComplaintService(store);
   let d = await svc.newDraft("chat1", "res1");
-  d = { ...d, category: "street-pothole", description: "Road surface has a visible pothole.", location: { latitude: 40.758, longitude: -73.9855, address: "Times Sq", borough: "Manhattan", rawInput: null, source: "pin", userConfirmed: true, withinNyc: true } };
+  d = { ...d, category: "subway-delay", description: "The A train was held at 14 St for 25 minutes.", transit: { ...EMPTY_TRANSIT, line: "A", direction: "Downtown & Queens", station: "14 St" } };
   d = await transition(store, d, "TRIAGING", { reason: "t", actor: "system" });
   d = await transition(store, d, "READY_FOR_APPROVAL", { reason: "t", actor: "system" });
   return { store, svc, d };
@@ -59,7 +60,7 @@ describe("state machine", () => {
 
   it("rejects approval for a stale version", async () => {
     const { svc, store, d } = await readyDraft();
-    const changed = await store.saveComplaint(svc.setDescription(d, "A different, larger pothole near the curb."));
+    const changed = await store.saveComplaint(svc.setDescription(d, "A different train: the C was held at Jay St for 15 minutes."));
     expect(changed.draftVersion).toBe(d.draftVersion + 1);
     const r = await svc.approve(changed, d.draftVersion, "user");
     expect(r.ok).toBe(false);
@@ -88,13 +89,14 @@ describe("knowledge", () => {
   it("material change rule", async () => {
     const { d } = await readyDraft();
     expect(isMaterialChange(d, { ...d, userMessages: ["hi"] })).toBe(false);
-    expect(isMaterialChange(d, { ...d, category: "street-repair-defect" })).toBe(true);
+    expect(isMaterialChange(d, { ...d, category: null })).toBe(true);
+    expect(isMaterialChange(d, { ...d, transit: { ...d.transit!, line: "C" } })).toBe(true);
     expect(isMaterialChange(d, { ...d, location: { ...d.location, latitude: 40.7 } })).toBe(true);
   });
   it("missing fields", async () => {
     const { d } = await readyDraft();
     expect(missingFields(d)).toEqual([]);
-    expect(missingFields({ ...d, location: { ...d.location, userConfirmed: false } })).toEqual(["location"]);
+    expect(missingFields({ ...d, transit: { ...d.transit!, direction: null } })).toEqual(["transit"]);
   });
 });
 
@@ -104,12 +106,12 @@ describe("classification application", () => {
     const svc = createComplaintService(store);
     const d = await svc.newDraft("c", "r");
     const base = { description: "hole", rationale: "", alternativeConsidered: null, safetyFlags: [], clarifyingQuestion: "Is it in the road?" };
-    expect(svc.applyClassification(d, { ...base, triage: "SUPPORTED", category: "street-pothole", confidence: 0.4 }).decision.kind).toBe("CLARIFY");
+    expect(svc.applyClassification(d, { ...base, triage: "SUPPORTED", category: "subway-delay", confidence: 0.4 }).decision.kind).toBe("CLARIFY");
     const bad = svc.applyClassification(d, { ...base, triage: "SUPPORTED", category: "noise" as never, confidence: 0.9 });
     expect(bad.decision.kind).toBe("CLARIFY");
     expect(bad.draft.category).toBeNull();
-    const good = svc.applyClassification(d, { ...base, triage: "SUPPORTED", category: "street-pothole", confidence: 0.9 });
+    const good = svc.applyClassification(d, { ...base, triage: "SUPPORTED", category: "subway-delay", confidence: 0.9 });
     expect(good.decision.kind).toBe("CONTINUE");
-    expect(good.draft.category).toBe("street-pothole");
+    expect(good.draft.category).toBe("subway-delay");
   });
 });

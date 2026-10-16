@@ -2,16 +2,16 @@
 
 **See something. Send it. Track it.**
 
-311Relay is a Telegram agent that turns a photo or message about a city problem into a reviewable, trackable NYC311 service request, or, for subway delays, an MTA complaint.
+311Relay is a Telegram agent for reporting problems where they actually have to be reported. Drop a photo or describe what's wrong; 311Relay works out where it must be filed, fills the official form in a real browser, and verifies the result with a session recording and the official reference.
 
-Categories: **street pothole** and **street repair defect** (official NYC DOT / NYC311 routes, CAPTCHA hand-off) and **subway delay** (the official MTA Customer Feedback form, `contact.mta.info`). There is no replica or demo portal: every filing targets the official form.
+**Categories today: subway delay (MTA). More coming.** A subway delay is filed on the official MTA Customer Feedback form (`contact.mta.info`). The category registry is data-driven, so new categories are one registry entry plus one worker adapter. There is no replica or demo portal: every filing targets the official form.
 
 1. Send a photo, a description, or a voice note to the bot.
-2. Share the location (pin or address).
-3. The agent classifies the issue against an allowlist of official NYC311 categories, asks only for what is missing, and checks NYC Open Data for a possible existing request nearby.
+2. The agent classifies the issue against an allowlist of supported categories and asks only for what is missing (for a subway delay: the line and the direction).
+3. It shows where the report will be filed and the exact text it will submit.
 4. You review the draft and **explicitly approve** filing.
-5. A disposable **Daytona** sandbox runs an isolated filing worker that drives a real **Anchor Browser** session through the reporting form, with screenshots as evidence.
-6. You get the official request number if the portal confirmed it, or an honest hand-off when a human has to finish (CAPTCHA, login, unexpected questions).
+5. A disposable **Daytona** sandbox runs an isolated filing worker that drives a real **Anchor Browser** session through the official form, with screenshots as evidence. If the form asks something the bot doesn't know, the question comes to you on Telegram mid-filing.
+6. You get the official reference if the form confirmed it, plus the session recording, or an honest hand-off when a human has to finish (CAPTCHA, login, unanswered questions).
 7. `/status` checks the request later.
 
 A prepared complaint is not an attempted filing, and an attempted filing is not a confirmed service request. The bot never invents request numbers and never retries after an uncertain submission.
@@ -27,7 +27,7 @@ Built for Daytona HackSprint NYC, Oct 16 2026. Design doc in `.context/attachmen
 | Execution | Daytona sandbox per filing attempt, hosting the isolated filing worker |
 | Browser | Anchor Browser session, Playwright over CDP from inside the sandbox |
 | Data | SurrealDB (Cloud or embedded `mem://`) with a graph of residents, complaints, locations, official requests |
-| Public records | NYC Open Data `erm2-nwe9` for duplicate detection and status |
+| Public records | Live MTA service alerts for the reported line; NYC Open Data `erm2-nwe9` duplicate checks for Open Data-backed categories (none today) |
 | Observability | Arize Phoenix via `@arizeai/phoenix-otel`, one session per chat, evaluations per scenario |
 
 ## Layout
@@ -54,16 +54,16 @@ Providers auto-select: Daytona and Anchor are used when their keys are present, 
 Without a Telegram token you can still drive the whole flow:
 
 ```bash
-pnpm demo -- --scenario happy        # photo → location → /name → duplicates → approve → real DOT form, stops at the CAPTCHA (hand-off, read-only)
-pnpm demo -- --scenario happy --no-filing   # same, stopping at the approval card
-pnpm --filter @311relay/bot evals    # the evaluation scenarios, results pushed to Phoenix
+pnpm demo -- --scenario subway --no-filing   # intake → transit → live MTA alert → draft card + payload preview
+pnpm demo -- --scenario subway               # dry run against the real MTA form (needs Daytona + Anchor)
+pnpm --filter @311relay/bot evals            # the evaluation scenarios, results pushed to Phoenix
 ```
 
 ## Real filing targets
 
-- **Street pothole → NYC DOT pothole form** (`a841-dotvweb01.nyc.gov/potholeform`). The form requires your first and last name, so the bot asks for `/name First Last` before it offers Approve (it never invents one). The form has reCAPTCHA on its first step and we do not bypass CAPTCHAs: the worker fills only the details you gave, stops at the CAPTCHA (`HUMAN_ACTION_REQUIRED` / `CAPTCHA`), and sends you the Anchor live-view link so you finish in the same browser. The Anchor session stays open for you.
-- **Street repair defect → NYC311 Street Repair route** (`portal.311.nyc.gov`). It needs an interactive session, so the bot prepares everything and hands you the official link.
 - **Subway delay → MTA Customer Feedback wizard** (`contact.mta.info`). Full automation, but a dry run unless `ALLOW_REAL_SUBMIT=1` (see below).
+
+A category with no registered worker adapter is never guessed at: the attempt ends `FAILED` with a clear message and nothing is filed.
 
 ## Subway delays: real filing, dry run by default
 
@@ -74,8 +74,7 @@ NYC311 doesn't take subway complaints; they go to the MTA. Tell the bot somethin
 - `/status <reference>` answers from the stored confirmation. The MTA replies by email and has no public status lookup.
 
 ```bash
-pnpm demo -- --scenario subway --no-filing   # intake → transit → live MTA alert → draft card + payload preview
-pnpm demo -- --scenario subway               # dry run against the real MTA form (needs Daytona + Anchor)
+pnpm demo -- --scenario subway-ambiguous     # the worker asks the direction live during filing
 ```
 
 After every filing attempt, the bot sends you the Anchor session recording on Telegram, so you can see exactly what the browser did for you.

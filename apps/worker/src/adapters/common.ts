@@ -74,15 +74,6 @@ export function parseAddress(address: string | null, borough: string | null): Pa
   return out;
 }
 
-/** Restoration type for the street-repair form, ONLY when the resident's description names it. */
-export function restorationTypeFrom(description: string): "Street cut" | "Trench" | "Patch" | null {
-  const d = description.toLowerCase();
-  if (/trench/.test(d)) return "Trench";
-  if (/street cut|utility cut|\bcut\b/.test(d)) return "Street cut";
-  if (/patch|repair|restor|filled|plate/.test(d)) return "Patch";
-  return null;
-}
-
 export function needField(message: string, data?: Record<string, unknown>): never {
   throw needFieldOutcome(message, data);
 }

@@ -88,11 +88,8 @@ export type FilingService = {
   drain(): Promise<void>;
 };
 
-/** Official hosts per category (navigation allowlist). */
-const STREET_HOSTS = ["a841-dotvweb01.nyc.gov", "portal.311.nyc.gov"];
+/** Official hosts per category (navigation allowlist). Adding a category = add its official hosts here. */
 const REAL_ALLOWED_HOSTS: Record<CategoryId, string[]> = {
-  "street-pothole": STREET_HOSTS,
-  "street-repair-defect": STREET_HOSTS,
   "subway-delay": ["contact.mta.info", "mta.info", "new.mta.info"],
 };
 
@@ -193,7 +190,7 @@ function patternFor(_target: FilingTarget, status: FilingStatus, code: FilingErr
     };
   switch (code) {
     case "CAPTCHA":
-      return { kind: "captcha-on-step1", description: "Official DOT form shows a CAPTCHA before step 1 can be submitted; hand off to the resident in the live view.", hint: { handoff: "live_view", detectBeforeClick: true } };
+      return { kind: "captcha-on-step1", description: "Official form shows a CAPTCHA; hand off to the resident in the live view.", hint: { handoff: "live_view", detectBeforeClick: true } };
     case "CONNECTION_LOST_AFTER_SUBMIT":
       return { kind: "flaky-submit", description: "Connection dropped after submit; outcome unknown. Never auto-retry; ask the resident to check the portal.", hint: { autoRetry: false } };
     case "FORM_REJECTED":
@@ -220,13 +217,12 @@ export function realSubmitAuthorizedFor(complaint: Pick<ComplaintDraft, "approve
 export function buildForm(complaint: ComplaintDraft, resident: Resident, _target?: FilingTarget): FilingPayload["form"] {
   const category = complaint.category;
   return {
-    // the worker picks the restoration type from the description (trench / cut / patch / repair)
-    description: category === "street-repair-defect" && !/trench|cut|patch|repair/i.test(complaint.description) ? `${complaint.description} (repaired patch)` : complaint.description,
+    description: complaint.description,
     address: complaint.location.address,
     borough: complaint.location.borough,
     latitude: complaint.location.latitude,
     longitude: complaint.location.longitude,
-    // Only ever user-provided (street categories are gated on /name before approval).
+    // Only ever user-provided (categories with requiresContactName are gated on /name before approval).
     contactName: resident.contactName ?? null,
     contactEmail: resident.contactEmail ?? null,
     contactPhone: null,
@@ -269,7 +265,7 @@ export function createFilingService(deps: FilingServiceDeps): FilingService {
 
   async function executeFiling(complaint: ComplaintDraft, opts: FilingOpts): Promise<FilingOutcome> {
     const t0 = Date.now();
-    // Every category files against its official site (street: DOT/NYC311 with CAPTCHA hand-off; subway: MTA wizard).
+    // Every category files against its official site (subway: the MTA wizard).
     const target: FilingTarget = "real";
     const progress = (text: string) => {
       try {

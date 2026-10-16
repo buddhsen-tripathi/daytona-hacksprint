@@ -53,13 +53,13 @@ describe("arize tracer", () => {
       oi.llm({
         provider: "openrouter",
         modelName: "anthropic/claude-sonnet-4.5",
-        inputMessages: [{ role: "user", content: "pothole on 5th ave, call me 212-555-1234" }],
+        inputMessages: [{ role: "user", content: "A train stuck at 14 St, call me 212-555-1234" }],
         outputMessages: [{ role: "assistant", content: '{"triage":"SUPPORTED"}' }],
         tokenCount: { prompt: 100, completion: 20, total: null },
         costUsd: 0.001,
       });
-      oi.input({ text: "pothole" });
-      oi.output({ category: "street-pothole" });
+      oi.input({ text: "A train stuck" });
+      oi.output({ category: "subway-delay" });
     });
     const s = cap.byName("routing.classify");
     expect(s.attributes["openinference.span.kind"]).toBe("LLM");

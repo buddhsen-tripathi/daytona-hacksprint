@@ -42,7 +42,7 @@ export function Footer() {
         <span className="font-wide font-extrabold uppercase tracking-wider text-ink">311Relay</span>
         <span className="inline-flex items-center gap-2">
           <span className="size-2 rounded-full bg-stop" aria-hidden />
-          Files against official NYC DOT and MTA forms. Final submission only after the resident approves.
+          Files on the official form for each category (today: MTA Customer Feedback). Final submission only after the resident approves.
         </span>
         <span className="ml-auto font-mono text-[11px] text-muted">read-only console · SR numbers are only ever parsed from a confirmation page</span>
       </div>

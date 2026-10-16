@@ -1,9 +1,8 @@
 /**
  * Seed SurrealDB with the 311Relay graph (design doc §11): categories, two
- * example residents + complaints (from fixtures/example-complaints.json),
- * nearby NYC Open Data requests as possible duplicates, filing attempts,
- * official requests and three workflow-memory patterns. Then prints a graph
- * summary and runs a location-aware SurrealQL query.
+ * example residents + subway-delay complaints, filing attempts, official
+ * requests and workflow-memory patterns. Then prints a graph summary and runs
+ * a graph-traversal SurrealQL query.
  *
  *   pnpm --filter @311relay/bot seed                 # SURREALDB_URL from .env (Cloud) or embedded if empty
  *   pnpm --filter @311relay/bot seed -- --embedded   # force embedded mem://
@@ -13,8 +12,8 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ComplaintDraft, DuplicateCandidate, FilingAttempt, OfficialRequest, WorkflowPattern } from "../src/core/contracts.js";
-import { CATEGORIES, haversineMeters } from "../src/core/contracts.js";
+import type { ComplaintDraft, FilingAttempt, OfficialRequest, WorkflowPattern } from "../src/core/contracts.js";
+import { CATEGORIES, EMPTY_LOCATION, EMPTY_TRANSIT } from "../src/core/contracts.js";
 import { REPO_ROOT } from "../src/integrations/env.js";
 import { createSurrealStore } from "../src/integrations/surrealdb.js";
 
@@ -29,18 +28,6 @@ type Fixture = {
   location: { latitude: number; longitude: number; address: string; borough: string } | null;
   expected: { category: string | null };
 };
-type OpenDataRow = {
-  unique_key: string;
-  created_date: string;
-  closed_date?: string;
-  complaint_type: string;
-  descriptor?: string;
-  status?: string;
-  incident_address?: string;
-  latitude?: string;
-  longitude?: string;
-  resolution_description?: string;
-};
 
 const readJson = <T>(rel: string, fallback: T): T => {
   const p = resolve(REPO_ROOT, rel);
@@ -48,64 +35,28 @@ const readJson = <T>(rel: string, fallback: T): T => {
 };
 
 const fixtures = readJson<Fixture[]>("fixtures/example-complaints.json", []);
-const openData = readJson<OpenDataRow[]>("fixtures/sample-311-records.json", []);
 const pick = (id: string, fallback: Fixture): Fixture => fixtures.find((f) => f.id === id) ?? fallback;
 
-const f1 = pick("clear-pothole-with-location", {
-  id: "clear-pothole-with-location",
-  scenario: "Clear pothole photo and location",
-  inputText: "Big pothole in the road here, cars keep swerving around it.",
-  location: { latitude: 40.7576, longitude: -73.9858, address: "1515 Broadway, Manhattan", borough: "Manhattan" },
-  expected: { category: "street-pothole" },
+const f1 = pick("subway-delay-a-train", {
+  id: "subway-delay-a-train",
+  scenario: "Clear subway delay (MTA)",
+  inputText: "A train delayed 25 min at 14 St downtown this morning",
+  location: null,
+  expected: { category: "subway-delay" },
 });
-const f2 = pick("pothole-in-repaired-patch", {
-  id: "pothole-in-repaired-patch",
-  scenario: "Pothole on repaired street patch",
-  inputText: "There's a hole in the road here and it keeps getting worse.",
-  location: { latitude: 40.6831, longitude: -73.9792, address: "32 4th Avenue, Brooklyn", borough: "Brooklyn" },
-  expected: { category: "street-repair-defect" },
+const f2 = pick("user-cancels", {
+  id: "user-cancels",
+  scenario: "7 train stuck",
+  inputText: "The 7 train has been stuck outside Queensboro Plaza for 20 minutes, Manhattan-bound.",
+  location: null,
+  expected: { category: "subway-delay" },
 });
 
 const NOW = new Date();
 const iso = (minutesAgo: number) => new Date(NOW.getTime() - minutesAgo * 60_000).toISOString();
 
-function candidatesNear(lat: number, lon: number, category: keyof typeof CATEGORIES): DuplicateCandidate[] {
-  const descriptors = CATEGORIES[category].openData.descriptors.map((d) => d.toLowerCase());
-  return openData
-    .filter((r) => r.latitude && r.longitude)
-    .map((r) => {
-      const la = Number(r.latitude);
-      const lo = Number(r.longitude);
-      const d = haversineMeters(lat, lon, la, lo);
-      const ageDays = Math.max(0, Math.round((NOW.getTime() - Date.parse(r.created_date)) / 86_400_000));
-      const location = Math.max(0, 1 - d / 150);
-      const cat = descriptors.includes((r.descriptor ?? "").toLowerCase()) ? 1 : 0.4;
-      const recency = Math.max(0, 1 - ageDays / 90);
-      return {
-        uniqueKey: r.unique_key,
-        complaintType: r.complaint_type,
-        descriptor: r.descriptor ?? null,
-        status: r.status ?? null,
-        createdDate: r.created_date,
-        closedDate: r.closed_date ?? null,
-        resolutionDescription: r.resolution_description ?? null,
-        incidentAddress: r.incident_address ?? null,
-        latitude: la,
-        longitude: lo,
-        distanceMeters: Math.round(d),
-        ageDays,
-        matchScore: Number((0.5 * location + 0.3 * cat + 0.2 * recency).toFixed(2)),
-        scoreBreakdown: { location: Number(location.toFixed(2)), category: cat, recency: Number(recency.toFixed(2)) },
-      } satisfies DuplicateCandidate;
-    })
-    .filter((c) => (c.distanceMeters ?? 1e9) <= 150)
-    .sort((a, b) => b.matchScore - a.matchScore)
-    .slice(0, 3);
-}
-
 function complaint(id: string, chatId: string, f: Fixture, over: Partial<ComplaintDraft>): ComplaintDraft {
-  const loc = f.location!;
-  const category = (f.expected.category ?? "street-pothole") as ComplaintDraft["category"];
+  const category = (f.expected.category ?? "subway-delay") as ComplaintDraft["category"];
   return {
     id,
     telegramChatId: chatId,
@@ -113,9 +64,9 @@ function complaint(id: string, chatId: string, f: Fixture, over: Partial<Complai
     status: "READY_FOR_APPROVAL",
     category,
     triage: "SUPPORTED",
-    description: f.inputText ?? "Road surface defect",
+    description: f.inputText ?? "Subway train delayed",
     userMessages: [f.inputText ?? ""].filter(Boolean),
-    location: { latitude: loc.latitude, longitude: loc.longitude, address: loc.address, borough: loc.borough, rawInput: null, source: "pin", userConfirmed: true, withinNyc: true },
+    location: { ...EMPTY_LOCATION },
     media: [],
     classification: null,
     missingFields: [],
@@ -181,70 +132,67 @@ const bob = await store.getOrCreateResident("seed-chat-2", "seed_bob");
 await store.updateResident(alice.id, { contactName: "Alice Seed" });
 await store.updateResident(bob.id, { contactName: "Bob Seed" });
 
-// complaint 1: filed on the official DOT form (resident finished the CAPTCHA in the live view), now tracking
-const c1 = complaint("cmp_seed_pothole", "seed-chat-1", f1, { residentId: alice.id, status: "TRACKING", officialRequestNumber: "311-26101601", activeAttemptId: "att_seed_1" });
-const d1 = candidatesNear(c1.location.latitude!, c1.location.longitude!, "street-pothole");
-await store.createComplaint({ ...c1, duplicates: d1 });
-await store.linkDuplicates(c1.id, d1);
-const a1 = attempt("att_seed_1", c1, { outcome: "SUBMITTED", officialRequestNumber: "311-26101601", verified: true, verificationNotes: "SR parsed from confirmation page" });
+// complaint 1: A train delay filed on the MTA Customer Feedback form, now tracking
+const c1 = complaint("cmp_seed_subway_a", "seed-chat-1", f1, {
+  residentId: alice.id,
+  status: "TRACKING",
+  officialRequestNumber: "MTA-26101601",
+  activeAttemptId: "att_seed_1",
+  transit: { ...EMPTY_TRANSIT, line: "A", direction: "Downtown & Queens", station: "14 St", delayMinutes: 25 },
+});
+await store.createComplaint(c1);
+const a1 = attempt("att_seed_1", c1, { outcome: "SUBMITTED", officialRequestNumber: "MTA-26101601", verified: true, verificationNotes: "Reference parsed from the MTA confirmation page" });
 await store.createAttempt(a1);
 const or1: OfficialRequest = {
   id: "or_seed_1",
   complaintId: c1.id,
-  officialRequestNumber: "311-26101601",
-  officialCategory: CATEGORIES["street-pothole"].officialLabel,
-  status: "Open",
+  officialRequestNumber: "MTA-26101601",
+  officialCategory: CATEGORIES["subway-delay"].officialLabel,
+  status: "Submitted",
   statusSource: "confirmation",
   lastCheckedAt: iso(5),
   receiptUrl: null,
 };
 await store.saveOfficialRequest(or1);
-for (const [from, to] of [["RECEIVED", "TRIAGING"], ["TRIAGING", "DUPLICATE_REVIEW"], ["DUPLICATE_REVIEW", "READY_FOR_APPROVAL"], ["READY_FOR_APPROVAL", "APPROVED"], ["APPROVED", "FILING"], ["FILING", "SUBMITTED"], ["SUBMITTED", "TRACKING"]] as const) {
-  await store.recordTransition(c1.id, from, to, "seed", from === "READY_FOR_APPROVAL" || from === "DUPLICATE_REVIEW" ? "user" : "system");
+for (const [from, to] of [["RECEIVED", "TRIAGING"], ["TRIAGING", "READY_FOR_APPROVAL"], ["READY_FOR_APPROVAL", "APPROVED"], ["APPROVED", "FILING"], ["FILING", "SUBMITTED"], ["SUBMITTED", "TRACKING"]] as const) {
+  await store.recordTransition(c1.id, from, to, "seed", from === "READY_FOR_APPROVAL" ? "user" : "system");
 }
 
-// complaint 2: street repair defect, first attempt hit a CAPTCHA → human action
-const c2 = complaint("cmp_seed_repair", "seed-chat-2", f2, { residentId: bob.id, status: "HUMAN_ACTION_REQUIRED", statusReason: "CAPTCHA", activeAttemptId: "att_seed_2" });
-const d2 = candidatesNear(c2.location.latitude!, c2.location.longitude!, "street-repair-defect");
-await store.createComplaint({ ...c2, duplicates: d2 });
-await store.linkDuplicates(c2.id, d2);
-const a2 = attempt("att_seed_2", c2, { outcome: "HUMAN_ACTION_REQUIRED", errorCode: "CAPTCHA", verificationNotes: "reCAPTCHA shown on submit; stopped without bypass" });
+// complaint 2: 7 train delay; the worker asked which direction mid-filing, got no answer → handed back
+const c2 = complaint("cmp_seed_subway_7", "seed-chat-2", f2, {
+  residentId: bob.id,
+  status: "HUMAN_ACTION_REQUIRED",
+  statusReason: "UNEXPECTED_REQUIRED_FIELD",
+  activeAttemptId: "att_seed_2",
+  transit: { ...EMPTY_TRANSIT, line: "7", direction: "Manhattan-bound", station: "Queensboro Plaza", delayMinutes: 20 },
+});
+await store.createComplaint(c2);
+const a2 = attempt("att_seed_2", c2, { outcome: "HUMAN_ACTION_REQUIRED", errorCode: "UNEXPECTED_REQUIRED_FIELD", verificationNotes: "direction question timed out; stopped before Submit" });
 await store.createAttempt(a2);
 
 // workflow memory (§11.3)
 const patterns: WorkflowPattern[] = [
   {
-    id: "wp_seed_borough_first",
+    id: "wp_seed_mta_direction",
     target: "real",
-    category: "street-pothole",
-    kind: "address-needs-borough-first",
-    description: "real-dot: the address field validates only after the borough select is set; choose borough first.",
-    hint: { fieldOrder: ["borough", "address", "description"] },
-    observedInAttemptId: "att_seed_1",
-    outcome: "SUBMITTED",
-    createdAt: iso(24),
-  },
-  {
-    id: "wp_seed_real_dot_name",
-    target: "real",
-    category: "street-pothole",
-    kind: "requires-contact-name",
-    description: "real-dot: step 1 of the DOT pothole form requires first + last name; ask the user before filing (never invent).",
-    hint: { requiredUserFields: ["contactName"] },
-    observedInAttemptId: null,
-    outcome: "HUMAN_ACTION_REQUIRED",
-    createdAt: iso(120),
-  },
-  {
-    id: "wp_seed_captcha_stop",
-    target: "real",
-    category: "street-repair-defect",
-    kind: "captcha-seen-on-submit",
-    description: "captcha-seen-on-submit → stop: hand the URL to the resident instead of retrying.",
-    hint: { onCaptcha: "stop", retry: false },
+    category: "subway-delay",
+    kind: "ask-before-approval",
+    description: "mta: the direction step lists the line's two terminals; ask the resident to pick one before approval.",
+    hint: { requiredUserFields: ["direction"] },
     observedInAttemptId: "att_seed_2",
     outcome: "HUMAN_ACTION_REQUIRED",
     createdAt: iso(23),
+  },
+  {
+    id: "wp_seed_mta_station_picker",
+    target: "real",
+    category: "subway-delay",
+    kind: "field-order",
+    description: "mta: the station picker only lists stations after the line and direction are set.",
+    hint: { fieldOrder: ["line", "direction", "station"] },
+    observedInAttemptId: "att_seed_1",
+    outcome: "SUBMITTED",
+    createdAt: iso(24),
   },
 ];
 for (const p of patterns) await store.recordWorkflowPattern(p);
@@ -260,24 +208,21 @@ console.log(`\n1-hop neighbourhood of ${c1.id}:`);
 const label = new Map(one.nodes.map((n) => [n.id, `${n.kind}:${n.label}`]));
 for (const e of one.edges) console.log(`  ${label.get(e.from)}  -[${e.rel}]->  ${label.get(e.to)}`);
 
-const memory = await store.getWorkflowPatterns({ target: "real", category: "street-repair-defect" });
-console.log(`\nWorkflow memory for real/street-repair-defect: ${memory.map((p) => p.kind).join(", ") || "(none)"}`);
+const memory = await store.getWorkflowPatterns({ target: "real", category: "subway-delay" });
+console.log(`\nWorkflow memory for real/subway-delay: ${memory.map((p) => p.kind).join(", ") || "(none)"}`);
 
 // The query a judge should see: location-aware + graph traversal in one statement.
-const SAMPLE = `-- Complaints within 100 m of Times Square, with their official requests and nearby 311 reports
-LET $here = (-73.9855, 40.7580);
+const SAMPLE = `-- Subway delay reports, with what they were filed as and what the filings taught us
 SELECT
   record::id(id)                                         AS complaint,
   category, status,
-  ->located_at->location.address                         AS address,
-  math::round(geo::distance((->located_at->location.point)[0], $here)) AS meters,
+  transit.line                                           AS line,
   ->resulted_in->official_request.officialRequestNumber AS filed_as,
-  ->possibly_duplicates->official_request.{ sr: officialRequestNumber, status, category: officialCategory } AS nearby_311,
   <-attempted<-filing_attempt.{ outcome, errorCode }     AS attempts,
   <-attempted<-filing_attempt->learned->workflow_pattern.kind AS learned
 FROM complaint
-WHERE geo::distance((->located_at->location.point)[0], $here) < 100
-ORDER BY meters;`;
+WHERE category = "subway-delay"
+ORDER BY complaint;`;
 console.log(`\nSample SurrealQL (paste into Surrealist, ns=${store.namespace} db=${store.database}):\n${SAMPLE}\n`);
 const res = await store.query<unknown[]>(SAMPLE.split("\n").filter((l) => !l.startsWith("--")).join("\n"));
 const rows = res[res.length - 1];

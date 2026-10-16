@@ -81,7 +81,7 @@ body {
   font-stretch: 75%;
 }
 
-/* Work-zone barrier stripe (DOT orange/white) */
+/* Hazard stripe (signal orange/white) */
 .hazard {
   background-image: repeating-linear-gradient(-45deg, var(--signal) 0 10px, var(--card) 10px 20px);
 }

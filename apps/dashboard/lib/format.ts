@@ -51,7 +51,7 @@ export const TONE_CLASSES: Record<Tone, string> = {
   signal: "bg-signal-wash text-signal-deep border-signal/50",
 };
 
-export const TONE_DOT: Record<Tone, string> = {
+export const TONE_SWATCH: Record<Tone, string> = {
   go: "bg-go",
   stop: "bg-stop",
   caution: "bg-caution",
@@ -153,9 +153,9 @@ export function providerState(v: string | null | undefined): "on" | "warn" | "un
 
 export const SAFETY_COPY = {
   SUBMITTED: (sr: string) =>
-    `Your NYC311 report was accepted.\n\nService request: ${sr}\n\nI'll keep this reference here so you can check its status later.`,
+    `Your report was accepted.\n\nReference: ${sr}\n\nI'll keep this reference here so you can check its status later.`,
   HUMAN_ACTION_REQUIRED:
-    "Your report is prepared, but I couldn't complete the official submission automatically.\n\nYou can finish it on NYC311. I haven't filed anything on your behalf.",
+    "Your report is prepared, but I couldn't complete the official submission automatically.\n\nYou can finish it on the official form. I haven't filed anything on your behalf.",
   SUBMISSION_UNKNOWN:
     "The filing attempt finished without a reliable confirmation.\n\nI'm not submitting again automatically because that could create a duplicate. Please check the official portal before retrying.",
   FAILED: "The filing attempt failed before anything was submitted. Nothing was filed on your behalf.",

@@ -6,7 +6,7 @@
  */
 /** Every filing targets the official form (the replica portal is gone). */
 export type FilingTarget = "real";
-export type CategoryId = "street-pothole" | "street-repair-defect" | "subway-delay";
+export type CategoryId = "subway-delay";
 
 /** Canonical subway lines (same order/spelling as the bot's SUBWAY_LINES). The MTA wizard labels them "<line> Line". */
 export const SUBWAY_LINES = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D", "F", "M", "N", "Q", "R", "W", "G", "L", "J", "Z", "S-42 Street Shuttle", "S-Franklin Av Shuttle", "S-Rockaway Park Shuttle", "Staten Island Railway"] as const;
@@ -151,7 +151,7 @@ export class Outcome extends Error {
 
 export const nowIso = () => new Date().toISOString();
 
-const CATEGORIES: CategoryId[] = ["street-pothole", "street-repair-defect", "subway-delay"];
+const CATEGORIES: CategoryId[] = ["subway-delay"];
 
 /** Hand-written shape check (no zod in the sandbox). Returns a list of problems; empty = valid. */
 export function validatePayload(p: unknown): string[] {

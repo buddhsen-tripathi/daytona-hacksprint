@@ -19,21 +19,19 @@ export function stripHtml(s: string): string {
 export const M = {
   start: () =>
     [
-      "Hey! 👋",
+      "Hey, I'm 311Relay 👋",
       "",
-      "I help you report problems around NYC.",
+      "Drop a photo or describe what's wrong — a stuck train, a broken something, whatever you ran into — and I'll figure out where it has to be reported and file it for you.",
       "",
-      "Send me a photo, describe the issue, or share a voice message.",
-      "",
-      "I'll figure out how to report it.",
+      "You review every report before it's sent.",
       "",
       "For emergencies, call 911.",
     ].join("\n"),
   help: () => esc(helpText()),
-  reportPrompt: () => "Okay, new report. 📸 Send a photo of the problem or describe what you see.",
+  reportPrompt: () => "Okay. Send a photo or describe the problem.",
   emergency: () => esc(emergencyText()),
   outOfScope: (triage: "OUT_OF_SCOPE" | "UNCLEAR", text: string | null) => esc(manualGuidance(triage, text)),
-  clarify: (question: string | null) => esc(question ?? "Could you tell me a bit more about what you're seeing? For example, is it a hole in the road or a damaged patch from street work?"),
+  clarify: (question: string | null) => esc(question ?? "Could you tell me a bit more about what happened?"),
   needDescription: () => "What's the problem? A photo or a short description works.",
   analyzing: () => "Got it, taking a look… 🔎",
   classified: (label: string) => `Looks like a possible ${esc(label.toLowerCase())}.`,
@@ -41,12 +39,12 @@ export const M = {
   askLocation: () => "Can you share the location or nearest intersection?\n\nTap <b>📍 Share location</b> below, or type an address like “W 42nd St & 7th Ave, Manhattan”.",
   locationGot: () => "Got it. I'll use the location you shared.\n\nBefore reporting, I'm checking whether a similar issue may already have been reported nearby.",
   locationNotFound: () => "I couldn't find that address in NYC. Could you share a 📍 pin, or type a street address with the borough?",
-  outsideNyc: () => "That location looks like it's outside New York City. NYC311 only handles problems inside the five boroughs, so I can't file this one.\n\nIf it's in NYC, share the pin again or type the address.",
+  outsideNyc: () => "That location looks like it's outside New York City, so I can't file this one.\n\nIf it's in NYC, share the pin again or type the address.",
   openDataDown: () => "I couldn't check NYC Open Data for similar reports right now, so I'm continuing without the duplicate check.",
   duplicate: (cands: DuplicateCandidate[], dataAsOf: string | null, categoryLabel: string) => {
     const c = cands[0]!;
     const lines = [
-      `I found a potentially related street-damage complaint near this location.`,
+      `I found a possibly related report near this location.`,
       "",
       `<b>Type:</b> ${esc(c.complaintType)}${c.descriptor ? ` (${esc(c.descriptor)})` : ""}`,
       c.incidentAddress ? `<b>Near:</b> ${esc(c.incidentAddress)}${c.distanceMeters != null ? ` (~${Math.round(c.distanceMeters)} m away)` : ""}` : null,
@@ -62,7 +60,7 @@ export const M = {
   },
   draftChanged: () => "The draft changed since you saw it. Here's the latest:",
   needName: () =>
-    "The official DOT form requires your first and last name. Send <code>/name First Last</code> to continue.",
+    "The official form needs your first and last name. Send <code>/name First Last</code> to continue.",
   nameSaved: (name: string) => `Thanks, I'll use <b>${esc(name)}</b> as the contact name on official forms.`,
   filingNow: () => "Filing now… I'll send updates. ⏳",
   progress: (t: string) => `⚙️ ${esc(t)}`,
@@ -112,7 +110,7 @@ export const M = {
 
   submitted: (o: FilingOutcome) =>
     [
-      "✅ Your NYC311 report was accepted.",
+      "✅ Your report was accepted.",
       "",
       `Service request: <b>${esc(o.officialRequestNumber)}</b>`,
       "",
@@ -122,7 +120,7 @@ export const M = {
     [
       "Your report is prepared, but I couldn't complete the official submission automatically.",
       "",
-      "You can finish it on NYC311. I haven't filed anything on your behalf.",
+      "You can finish it on the official site. I haven't filed anything on your behalf.",
       o.errorCode ? `\n<i>${esc(filingReason(o.errorCode))}</i>` : null,
       `\n${esc(finishUrl)}`,
     ]
@@ -144,10 +142,10 @@ export const M = {
       const cat = getCategory(d.category)?.label ?? "Uncategorized";
       const where = d.transit?.line
         ? `${/^[0-9A-Z]$/.test(d.transit.line) ? `${d.transit.line} train` : d.transit.line}${d.transit.direction ? `, ${d.transit.direction}` : ""}`
-        : (d.location.address ?? (d.location.latitude != null ? `${d.location.latitude.toFixed(4)}, ${d.location.longitude?.toFixed(4)}` : "no location"));
+        : (d.location.address ?? (d.location.latitude != null ? `${d.location.latitude.toFixed(4)}, ${d.location.longitude?.toFixed(4)}` : null));
       const sr = d.officialRequestNumber ? ` · SR <code>${esc(d.officialRequestNumber)}</code>` : "";
       const dryRun = d.status === "HUMAN_ACTION_REQUIRED" && /dry-run/i.test(d.statusReason ?? "") ? "dry run, nothing sent" : null;
-      lines.push(`• ${esc(cat)} · ${esc(where)} · <i>${esc(dryRun ?? humanStatus(d.status))}</i>${sr} · ${esc(fmtWhen(d.createdAt))}`);
+      lines.push(`• ${esc(cat)}${where ? ` · ${esc(where)}` : ""} · <i>${esc(dryRun ?? humanStatus(d.status))}</i>${sr} · ${esc(fmtWhen(d.createdAt))}`);
     }
     const unlisted = requests.filter((r) => !drafts.some((d) => d.officialRequestNumber === r.officialRequestNumber));
     for (const r of unlisted) lines.push(`• SR <code>${esc(r.officialRequestNumber)}</code> · ${esc(r.status ?? "status unknown")}`);
@@ -167,7 +165,7 @@ const FILING_REASONS: Record<string, string> = {
   LOGIN_REQUIRED: "The form asks you to sign in. I don't log in on your behalf.",
   UNEXPECTED_REQUIRED_FIELD: "The form asked for information I don't have from you.",
   OFF_ALLOWLIST_NAVIGATION: "The form tried to leave the official site allowlist, so I stopped.",
-  FORM_REJECTED: "the portal rejected the report details (it could not locate the street)",
+  FORM_REJECTED: "the official form rejected the report details",
   NO_CONFIRMATION: "no official confirmation number was shown",
   CONNECTION_LOST_AFTER_SUBMIT: "the connection dropped right after submitting",
   NAVIGATION_FAILED: "the official form could not be opened",

@@ -1,4 +1,4 @@
-import { TONE_DOT, humanState, stateTone } from "@/lib/format";
+import { TONE_SWATCH, humanState, stateTone } from "@/lib/format";
 import type { ComplaintState } from "@/lib/types";
 
 /** §8.3 state machine drawn as a transit line: trunk stops + branch spurs. */
@@ -34,7 +34,7 @@ export function StateLine({ counts, highlight }: { counts: Partial<Record<string
                 {!last && <span className="absolute top-1/2 left-[9px] h-full w-[3px] bg-ink" aria-hidden />}
                 {i > 0 && <span className="absolute top-0 left-[9px] h-1/2 w-[3px] bg-ink" aria-hidden />}
                 <span
-                  className={`absolute left-[3px] grid size-[15px] place-items-center rounded-full border-[3px] border-ink ${n ? TONE_DOT[tone] : "bg-card"}`}
+                  className={`absolute left-[3px] grid size-[15px] place-items-center rounded-full border-[3px] border-ink ${n ? TONE_SWATCH[tone] : "bg-card"}`}
                   aria-hidden
                 />
                 <span className={`font-mono text-[11px] tracking-wide ${n ? "font-semibold text-ink" : "text-muted"}`}>{humanState(s)}</span>
@@ -48,7 +48,7 @@ export function StateLine({ counts, highlight }: { counts: Partial<Record<string
                     <span className="absolute top-1/2 left-[9px] h-full w-[3px] bg-ink" aria-hidden />
                     <span className="absolute top-0 left-[9px] h-1/2 w-[3px] bg-ink" aria-hidden />
                     <span className="absolute top-1/2 left-[12px] h-[2px] w-[26px] -translate-y-1/2 bg-ink/50" aria-hidden />
-                    <span className={`absolute left-[36px] size-[10px] rounded-[2px] border-2 border-ink/70 ${bn ? TONE_DOT[bt] : "bg-card"}`} aria-hidden />
+                    <span className={`absolute left-[36px] size-[10px] rounded-[2px] border-2 border-ink/70 ${bn ? TONE_SWATCH[bt] : "bg-card"}`} aria-hidden />
                     <span className={`font-mono text-[10.5px] ${bn ? "font-semibold text-ink" : "text-muted"}`}>{humanState(b)}</span>
                     <Count n={bn} />
                   </div>

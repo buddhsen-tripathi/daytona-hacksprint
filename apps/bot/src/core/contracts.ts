@@ -10,10 +10,10 @@ import { z } from "zod";
 
 // ---------------------------------------------------------------------------
 // Categories (allowlist). The classifier may only pick from these ids.
+// The registry is data-driven: adding a category = one entry here + one worker
+// adapter. Street categories were removed for now (git history keeps them).
 // ---------------------------------------------------------------------------
 export const CategoryId = z.enum([
-  "street-pothole", // Pothole or Cave-In on Street (KA-01093) → DOT pothole form
-  "street-repair-defect", // Street Repair Complaint (KA-01095): failed restoration / utility cut
   "subway-delay", // Buses and Subways (KA-01014) → MTA customer feedback wizard (contact.mta.info), fully automatable
 ]);
 export type CategoryId = z.infer<typeof CategoryId>;
@@ -42,36 +42,14 @@ export const CategoryDefinition = z.object({
   requiredFields: z.array(z.enum(["location", "description", "transit"])),
   /** Whether NYC Open Data has records for this category (duplicate check + status). */
   openDataBacked: z.boolean().default(true),
+  /** Whether the official form needs the resident's first + last name before approval (/name gate). */
+  requiresContactName: z.boolean().default(false),
   /** Short guidance used in prompts + /help. */
   guidance: z.string(),
 });
 export type CategoryDefinition = z.infer<typeof CategoryDefinition>;
 
 export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
-  "street-pothole": {
-    id: "street-pothole",
-    label: "Street pothole",
-    officialLabel: "Pothole or Cave-In on Street",
-    articleUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01093",
-    officialFormUrl: "https://a841-dotvweb01.nyc.gov/potholeform",
-    openData: { complaintType: "Street Condition", descriptors: ["Pothole", "Cave-in", "Rough, Pitted or Cracked Roads"] },
-    requiredFields: ["location", "description"],
-    openDataBacked: true,
-    guidance:
-      "A shallow hole or crack in the street surface, NOT inside a previously repaired patch and NOT next to a catch basin. Deep cave-ins or unprotected openings are a safety hazard: refer to 911.",
-  },
-  "street-repair-defect": {
-    id: "street-repair-defect",
-    label: "Street repair defect",
-    officialLabel: "Street Repair Complaint",
-    articleUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01095",
-    officialFormUrl: "https://portal.311.nyc.gov/article/?kanumber=KA-01095",
-    openData: { complaintType: "Street Condition", descriptors: ["Failed Street Repair", "Pothole"] },
-    requiredFields: ["location", "description"],
-    openDataBacked: true,
-    guidance:
-      "Damage inside a filled/repaired area left by street work: a street cut, trench or square patch that is heaped above street level, sunk an inch or more, or has developed a pothole or depression.",
-  },
   "subway-delay": {
     id: "subway-delay",
     label: "Subway delay",
@@ -81,6 +59,7 @@ export const CATEGORIES: Record<CategoryId, CategoryDefinition> = {
     openData: { complaintType: "", descriptors: [] },
     requiredFields: ["transit", "description"],
     openDataBacked: false,
+    requiresContactName: false,
     guidance:
       "A subway train or line that was delayed, held, or significantly late. NYC311 does not take these; they go to the MTA's customer feedback form. Needs the line (e.g. A, 7, L), the direction (uptown/downtown or terminal), optionally the nearest station, and when it happened.",
   },
@@ -214,7 +193,7 @@ export const ClassificationResult = z.object({
   description: z.string(),
   /** What the photo/text shows that supports the category (for the user + traces). */
   rationale: z.string(),
-  /** Why the alternative category was rejected, when relevant (pothole vs repair defect). */
+  /** Why the alternative category was rejected, when relevant (e.g. one category vs a similar one, or vs OUT_OF_SCOPE). */
   alternativeConsidered: z.string().nullable(),
   /** Signals of danger that justify EMERGENCY. */
   safetyFlags: z.array(z.string()),
@@ -302,7 +281,7 @@ export const Resident = z.object({
   telegramChatId: z.string(),
   telegramUsername: z.string().nullable(),
   preferredLanguage: z.string().nullable(),
-  /** Conversation memory for real filings: the official DOT form requires first + last name. Only ever user-provided. */
+  /** Conversation memory for real filings: some official forms require first + last name (CategoryDefinition.requiresContactName). Only ever user-provided. */
   contactName: z.string().nullable().default(null),
   contactEmail: z.string().nullable().default(null),
   createdAt: z.string(),
@@ -312,7 +291,7 @@ export type Resident = z.infer<typeof Resident>;
 // ---------------------------------------------------------------------------
 // Filing: payload handed to the isolated worker, and what it returns
 // ---------------------------------------------------------------------------
-/** Every filing targets the official form (DOT/NYC311 for street categories, the MTA wizard for subway delays). */
+/** Every filing targets the official form (today: the MTA Customer Feedback wizard for subway delays). */
 export const FilingTarget = z.literal("real");
 export type FilingTarget = z.infer<typeof FilingTarget>;
 
@@ -617,7 +596,7 @@ export interface LocationService {
 
 export interface DuplicateService {
   findPotentialDuplicates(args: { category: CategoryId; latitude: number; longitude: number }): Promise<{ candidates: DuplicateCandidate[]; dataAsOf: string | null; source: "open-data" | "unavailable" }>;
-  /** Status lookup by official SR number via Open Data (DOT/NYC311 SRs; MTA references return null). */
+  /** Status lookup by official SR number via Open Data (NYC311 SRs; MTA references return null). */
   lookupStatus(uniqueKey: string): Promise<DuplicateCandidate | null>;
 }
 

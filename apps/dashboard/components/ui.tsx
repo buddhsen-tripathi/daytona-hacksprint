@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowUpRight, PlugZap } from "lucide-react";
-import { TONE_CLASSES, TONE_DOT, humanState, stateTone } from "@/lib/format";
+import { TONE_CLASSES, TONE_SWATCH, humanState, stateTone } from "@/lib/format";
 
 export function StatePill({ state, size = "sm" }: { state: string | null | undefined; size?: "sm" | "md" | "lg" }) {
   const s = state ?? "RUNNING";
@@ -8,7 +8,7 @@ export function StatePill({ state, size = "sm" }: { state: string | null | undef
   const pad = size === "lg" ? "px-3 py-1.5 text-[13px]" : size === "md" ? "px-2.5 py-1 text-[11.5px]" : "px-2 py-[3px] text-[10.5px]";
   return (
     <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-[3px] border font-mono font-semibold uppercase tracking-wide ${pad} ${TONE_CLASSES[tone]}`}>
-      <span className={`size-1.5 shrink-0 rounded-full ${TONE_DOT[tone]} ${tone === "live" ? "pulse-dot" : ""}`} aria-hidden />
+      <span className={`size-1.5 shrink-0 rounded-full ${TONE_SWATCH[tone]} ${tone === "live" ? "pulse-dot" : ""}`} aria-hidden />
       {humanState(s)}
     </span>
   );

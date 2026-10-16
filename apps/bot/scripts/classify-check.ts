@@ -1,7 +1,7 @@
 /**
  * Runs the real OpenRouter classifier over fixtures/example-complaints.json
  * and prints expected vs actual. Exits non-zero if any `clear` case
- * mismatches (design doc §24 target: 5/5).
+ * mismatches (target: 5/5 — subway delay, repaired patch ⇒ OUT_OF_SCOPE, bare photo, emergency, LIRR).
  *
  *   pnpm --filter @311relay/bot exec tsx scripts/classify-check.ts [--only id1,id2] [--dups]
  */
@@ -25,6 +25,8 @@ type Case = {
   location: { latitude: number; longitude: number; address: string } | null;
   expected: {
     triage: string;
+    /** Any of these triage values passes (e.g. a bare photo may be UNCLEAR or OUT_OF_SCOPE). */
+    acceptTriage?: string[];
     category: string | null;
     asksForLocation?: boolean;
     emergency?: boolean;
@@ -57,7 +59,9 @@ await Promise.all(
       });
       const exp = c.expected;
       let pass: boolean;
-      if (exp.triage === "UNCLEAR") {
+      if (exp.acceptTriage?.length) {
+        pass = exp.acceptTriage.includes(result.triage) && result.category == null;
+      } else if (exp.triage === "UNCLEAR") {
         // Ambiguous: UNCLEAR, or anything with low confidence (orchestrator will clarify), or EMERGENCY escalation.
         pass = result.triage === "UNCLEAR" || result.triage === "EMERGENCY" || result.confidence < CLASSIFY_CONFIDENCE_THRESHOLD;
       } else {

@@ -672,7 +672,7 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       const subway = !!args.line;
       const geo = !subway && args.lat != null && args.lon != null;
       if (!subway && !geo) return { mine: [], others: { reports: 0, residents: 0, latestAt: null, oldestAt: null, ids: [] } };
-      // Same line (subway) or within $radius metres (street categories, GeoJSON point (lon, lat)).
+      // Same line (subway) or within $radius metres (location categories, GeoJSON point (lon, lat)).
       const scope = subway
         ? "doc.transit.line = $line"
         : "type::is_number(latitude) AND type::is_number(longitude) AND geo::distance(type::point([longitude, latitude]), $pt) <= $radius";

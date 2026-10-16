@@ -172,9 +172,7 @@ export function createComplaintService(store: Store) {
       if (opts.contextLines?.length) lines.push("", ...opts.contextLines);
       lines.push(
         "",
-        draft.category === "street-repair-defect"
-          ? "Filing target: <b>official NYC311 Street Repair route</b>. It needs an interactive session, so I'll hand you the official link to finish."
-          : "Filing target: <b>official NYC DOT form</b>. It ends in a CAPTCHA: I fill everything, then you finish in the live browser.",
+        `Filing target: <b>${esc(cat?.officialFormUrl ?? "the official form")}</b>. If it asks you to prove you're human, I'll hand you the live browser to finish.`,
       );
       lines.push("", `<i>Draft v${draft.draftVersion}. Nothing is filed until you tap Approve.</i>`);
       return lines.join("\n");

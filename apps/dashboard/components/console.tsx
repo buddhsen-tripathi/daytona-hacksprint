@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { asList, usePoll, withMock } from "@/lib/api";
 import { fmtAgo, fmtMs, fmtTime, normalizeHealth, providerState, evidenceSrc } from "@/lib/format";
 import type { ComplaintDraft, FilingAttempt } from "@/lib/types";
-import { CATEGORY_LABEL } from "@/lib/categories";
+import { categoryLabel } from "@/lib/categories";
 import { ApiDownBanner, Card, Empty, ExtLink, LiveTick, Mono, Section, SkeletonRows, StatePill } from "./ui";
 import { StateLine } from "./state-line";
 
@@ -67,7 +67,7 @@ export function Console({ mock }: { mock: boolean }) {
       {/* Masthead */}
       <div className="rise mb-6 grid grid-cols-12 items-end gap-6">
         <div className="col-span-12 lg:col-span-5">
-          <div className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-signal-deep">NYC street conditions · Telegram → NYC311</div>
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-signal-deep">What people reported → where it was filed</div>
           <h1 className="font-wide mt-1 text-[40px] leading-[0.95] font-black tracking-tight">Operations console</h1>
           <p className="mt-2 max-w-md text-[13px] text-ink2">
             Every complaint, every filing attempt, every receipt. A prepared complaint is not a filing; a filing is not a confirmed service request.
@@ -87,7 +87,7 @@ export function Console({ mock }: { mock: boolean }) {
             {cq.loading && !cq.data ? (
               <SkeletonRows rows={5} />
             ) : complaints.length === 0 ? (
-              <Empty title="No complaints yet" hint="Send a pothole photo to the Telegram bot, or run the demo script. New complaints appear here within 2 seconds." />
+              <Empty title="No complaints yet" hint="Send a photo or describe a problem to the Telegram bot, or run the demo script. New complaints appear here within 2 seconds." />
             ) : (
               <Card className="overflow-x-auto">
                 <table className="w-full border-collapse text-left">
@@ -121,7 +121,7 @@ export function Console({ mock }: { mock: boolean }) {
                           <td className="px-3 py-2.5">
                             <StatePill state={c.status} />
                           </td>
-                          <td className="w-[110px] px-3 py-2.5 text-[12px] leading-tight">{c.category ? CATEGORY_LABEL[c.category] ?? c.category : <span className="text-muted">{c.triage ?? "—"}</span>}</td>
+                          <td className="w-[110px] px-3 py-2.5 text-[12px] leading-tight">{c.category ? categoryLabel(c.category) : <span className="text-muted">{c.triage ?? "—"}</span>}</td>
                           <td className="max-w-[190px] truncate px-3 py-2.5 text-[12.5px]" title={c.location.address ?? undefined}>
                             {c.location.address ?? <span className="text-muted italic">awaiting location</span>}
                           </td>
