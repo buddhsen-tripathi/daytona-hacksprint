@@ -71,6 +71,8 @@ export type SurrealStore = Store & {
   backend: "surrealdb-embedded" | "surrealdb";
   /** Whether the HNSW memory index was accepted by the engine (known after init()). */
   readonly vectorIndex: boolean;
+  /** Whether recall uses KNN over that index (probed at init(); false ⇒ exact cosine scan). */
+  readonly knnRecall: boolean;
   namespace: string;
   database: string;
   /** Delete every 311Relay record (and re-seed categories). Tests/seed only. */
@@ -122,14 +124,23 @@ const GRAPH_EDGE_TABLES = ["reported", "located_at", "categorized_as", "resulted
 const KIND: Record<string, string> = { complaint_category: "category" };
 
 /**
- * Optional ANN index for OpenRouter embeddings (text-embedding-3-small = 1536 dims). HNSW needs one fixed
- * dimension, while the memory stream can also hold 256-dim fallback vectors, so the index lives on a
- * dedicated field that is only set for 1536-dim vectors. Recall itself uses exact
- * vector::similarity::cosine with the structural filters (works on every engine); the index is there for
- * KNN (`embedding_1536 <|k,ef|> $q`) once the stream grows. Defined best-effort: engines without HNSW skip it.
+ * ANN index for OpenRouter embeddings (text-embedding-3-small = 1536 dims). HNSW needs one fixed dimension,
+ * while the memory stream can also hold 256-dim fallback vectors, so the index lives on a dedicated field that
+ * is only set for 1536-dim vectors (`annIndexed = true` marks those rows; indexed for the complement query).
+ *
+ * Recall (#22) with a 1536-dim query on an engine where HNSW + KNN work:
+ *   A. nearest neighbours: `embedding_1536 <|K,EF|> $q` over the whole stream (HNSW, a few ms), then the
+ *      structural filters + model guard on that candidate set;
+ *   B. the complement the index cannot see (fallback-embedded / unembedded rows, `annIndexed = false`),
+ *      newest first, so they are never crowded out of the pool (relevance = keyword overlap).
+ * Both are detected once at init(); otherwise, and for non-1536 queries, recall is the exact
+ * vector::similarity::cosine scan with the same filters (works on every engine).
  */
 export const HNSW_DIM = 1536;
 const HNSW_SQL = `DEFINE INDEX IF NOT EXISTS memory_embedding ON memory FIELDS embedding_${HNSW_DIM} HNSW DIMENSION ${HNSW_DIM} DIST COSINE TYPE F32;`;
+/** KNN candidate pool: K nearest across all residents/kinds, filtered afterwards (filtered HNSW search is slow when filters are selective). */
+export const KNN_MIN_K = 256;
+export const KNN_MAX_K = 1000;
 
 function schemaSql(): string {
   const lines: string[] = [];
@@ -147,6 +158,8 @@ function schemaSql(): string {
     "DEFINE INDEX IF NOT EXISTS memory_kind_category ON memory FIELDS kind, category;",
     "DEFINE INDEX IF NOT EXISTS memory_chat ON memory FIELDS chatId;",
     "DEFINE INDEX IF NOT EXISTS memory_source ON memory FIELDS source;",
+    "DEFINE INDEX IF NOT EXISTS memory_ann ON memory FIELDS annIndexed;",
+    "DEFINE INDEX IF NOT EXISTS memory_embed_model ON memory FIELDS embedModel;",
   );
   return lines.join("\n");
 }
@@ -248,6 +261,8 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
   let db: Surreal | null = null;
   let ready: Promise<void> | null = null;
   let hnsw = false;
+  /** KNN operator over the HNSW index answered at init() (probe query). */
+  let knn = false;
 
   async function connect(): Promise<void> {
     let instance: Surreal;
@@ -275,11 +290,24 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     await instance.use({ namespace, database });
     await instance.query(schemaSql()).collect();
     try {
-      await instance.query(HNSW_SQL).collect();
+      await withTimeout(instance.query(HNSW_SQL).collect(), connectTimeoutMs, "define hnsw");
       hnsw = true;
     } catch (err) {
       hnsw = false;
       console.warn(`[surrealdb] HNSW index unavailable (exact cosine recall still works): ${(err as Error).message}`);
+    }
+    knn = false;
+    if (hnsw) {
+      try {
+        const probe = new Array<number>(HNSW_DIM).fill(0);
+        probe[0] = 1;
+        await withTimeout(instance.query(`SELECT id FROM memory WHERE embedding_${HNSW_DIM} <|1,8|> $q LIMIT 1`, { q: probe }).collect(), connectTimeoutMs, "knn probe");
+        // rows written before #22 have no annIndexed flag yet
+        await withTimeout(instance.query(`UPDATE memory SET annIndexed = type::is_array(embedding_${HNSW_DIM}) WHERE annIndexed = NONE RETURN NONE`).collect(), connectTimeoutMs, "annIndexed backfill");
+        knn = true;
+      } catch (err) {
+        console.warn(`[surrealdb] KNN recall unavailable (exact cosine scan instead): ${(err as Error).message}`);
+      }
     }
     db = instance;
     await seedCategories();
@@ -526,6 +554,7 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
         text: m.text,
         embedding: m.embedding,
         ...(hnsw && m.embedding?.length === HNSW_DIM ? { [`embedding_${HNSW_DIM}`]: m.embedding } : {}),
+        annIndexed: hnsw && m.embedding?.length === HNSW_DIM,
         embedModel: m.embedModel,
         embedDim: m.embedding?.length ?? null,
         importance: m.importance,
@@ -541,18 +570,57 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     await run(b);
   }
 
+  /** cosine only between vectors of the same model and length (vector::similarity::cosine errors on mismatched dims) */
+  const exactCosine = (b: Batch, model: string, vec: number[]) =>
+    `(IF embedModel = ${b.bind(model)} AND type::is_array(embedding) AND array::len(embedding) = ${b.bind(vec.length)} THEN vector::similarity::cosine(embedding, ${b.bind(vec)}) ELSE NONE END)`;
+
+  const toHit = (r: MemRow): MemoryHit => ({ ...toMemory(r), similarity: typeof r.similarity === "number" ? r.similarity : null });
+
+  /** A + B (see HNSW_DIM): nearest neighbours via the index, plus the rows the index cannot see. */
+  async function searchMemoryKnn(q: MemorySearch, vec: number[]): Promise<MemoryHit[]> {
+    const b = new Batch();
+    const where = memoryWhere(b, q);
+    const and = where ? `${where} AND` : "WHERE";
+    const k = Math.min(KNN_MAX_K, Math.max(KNN_MIN_K, q.limit * 4));
+    const knnOp = `embedding_${HNSW_DIM} <|${k},${k}|> ${b.bind(vec)}`; // K/EF are integers we computed (the operator takes literals)
+    b.add(
+      `SELECT * FROM (SELECT ${MEMORY_COLS}, createdMs, vector::similarity::cosine(embedding_${HNSW_DIM}, ${b.bind(vec)}) AS similarity FROM memory WHERE ${knnOp}) ` +
+        `${and} embedModel = ${b.bind(q.embedModel)} ORDER BY similarity DESC LIMIT ${b.bind(q.limit)}`,
+    );
+    b.add(`SELECT ${MEMORY_COLS}, createdMs, NONE AS similarity FROM memory ${and} annIndexed = false ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    // C. resident-scoped recall: their own newest rows with exact cosine, so other residents' near-duplicates
+    //    can never push a resident's own items out of the global top-K (the chatId index keeps this small)
+    if (q.chatId != null) {
+      const own = memoryWhere(b, { ...q, chatId: null });
+      b.add(`SELECT ${MEMORY_COLS}, createdMs, ${exactCosine(b, q.embedModel!, vec)} AS similarity FROM memory ${own ? `${own} AND` : "WHERE"} chatId = ${b.bind(q.chatId)} ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    }
+    const [near, rest, own] = (await run(b)) as [MemRow[], MemRow[], MemRow[] | undefined];
+    const hits = new Map<string, MemoryHit>();
+    for (const r of near ?? []) hits.set(plainId(r.id), toHit(r));
+    for (const r of [...(own ?? []), ...(rest ?? [])]) if (!hits.has(plainId(r.id))) hits.set(plainId(r.id), toHit(r));
+    // same order as the scan: most similar first (rows without a comparable vector last), then newest
+    return [...hits.values()].sort((x, y) => (y.similarity ?? -2) - (x.similarity ?? -2) || y.createdAt.localeCompare(x.createdAt)).slice(0, q.limit);
+  }
+
   async function searchMemoryImpl(q: MemorySearch): Promise<MemoryHit[]> {
+    const vecQ = q.embedding?.length && q.embedModel ? q.embedding : null;
+    if (knn && vecQ?.length === HNSW_DIM) {
+      try {
+        return await searchMemoryKnn(q, vecQ);
+      } catch (err) {
+        knn = false;
+        console.warn(`[surrealdb] KNN recall failed, using the exact scan from now on: ${(err as Error).message}`);
+      }
+    }
     const b = new Batch();
     const where = memoryWhere(b, q);
     const vec = q.embedding?.length && q.embedModel ? q.embedding : null;
     // cosine only between vectors of the same model and length (vector::similarity::cosine errors on mismatched dims)
-    const sim = vec
-      ? `(IF embedModel = ${b.bind(q.embedModel)} AND type::is_array(embedding) AND array::len(embedding) = ${b.bind(vec.length)} THEN vector::similarity::cosine(embedding, ${b.bind(vec)}) ELSE NONE END)`
-      : "NONE";
+    const sim = vec ? exactCosine(b, q.embedModel!, vec) : "NONE";
     const order = vec ? "ORDER BY similarity DESC, createdMs DESC" : "ORDER BY createdMs DESC";
     b.add(`SELECT ${MEMORY_COLS}, createdMs, ${sim} AS similarity FROM memory ${where} ${order} LIMIT ${b.bind(q.limit)}`);
     const [rows] = (await run(b)) as [MemRow[]];
-    return (rows ?? []).map((r) => ({ ...toMemory(r), similarity: typeof r.similarity === "number" ? r.similarity : null }));
+    return (rows ?? []).map(toHit);
   }
 
   // ---------------------------------------------------------------------------
@@ -560,6 +628,9 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     backend: embedded ? "surrealdb-embedded" : "surrealdb",
     get vectorIndex() {
       return hnsw;
+    },
+    get knnRecall() {
+      return knn;
     },
     namespace,
     database,
