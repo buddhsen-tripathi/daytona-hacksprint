@@ -81,7 +81,7 @@ describe("postmortem job + store + apply (#13)", () => {
     const r = await runPostmortem({ store, memory, diagnoser: stub(crossStreet2) }, crossStreet2Attempt.id);
     expect(r?.askUpFront).toEqual(["Cross Street 2"]);
     expect(r?.proposal).toMatchObject({ status: "approved", decidedBy: "auto", applied: ["Cross Street 2"] });
-    expect(await store.getRepairProposal(r!.proposal.id)).toMatchObject({ status: "approved" });
+    expect(await store.getRepairProposal!(r!.proposal.id)).toMatchObject({ status: "approved" });
     await memory.flush();
     const cur = await readCurrentSchema(store, "subway-delay");
     expect(cur?.requiredFields).toContain("Cross Street 2");
@@ -98,7 +98,7 @@ describe("postmortem job + store + apply (#13)", () => {
     expect(r?.askUpFront).toEqual([]);
     expect(r?.proposal.status).toBe("pending");
     expect(await readCurrentSchema(store, "subway-delay")).toBeNull();
-    expect(await store.listRepairProposals({ status: "pending" })).toHaveLength(1);
+    expect(await store.listRepairProposals!({ status: "pending" })).toHaveLength(1);
 
     const now = new Date("2026-10-16T14:00:00Z");
     const approved = await decideAndApply({ store, memory }, r!.proposal, "approved", now);
