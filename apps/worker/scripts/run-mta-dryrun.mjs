@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Dry run of the MTA subway-delay adapter against the REAL contact.mta.info wizard. Never submits
 // (realSubmitAuthorized: false) — must end HUMAN_ACTION_REQUIRED with the filled final page screenshot.
-//   node scripts/run-mta-dryrun.mjs [--direction "toward Inwood"] [--line A] [--station "14 St"] [--borough Manhattan] [--no-station] [--no-time] [--name "Ada Lovelace"] [--email a@b.c]
-// Requires `pnpm --filter @311relay/worker build` first. Uses local Chrome (cdpUrl null); HEADLESS=0 to watch.
+//   node scripts/run-mta-dryrun.mjs [--recipe] [--direction "toward Inwood"] [--line A] [--station "14 St"] [--borough Manhattan] [--no-station] [--no-time] [--name "Ada Lovelace"] [--email a@b.c]
+// --recipe runs fixtures/recipes/subway-delay.json through the recipe adapter (automation "adapter:recipe") instead of
+// the hand-written adapter. Requires `pnpm --filter @311relay/worker build` first. Uses local Chrome (cdpUrl null); HEADLESS=0 to watch.
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -16,6 +17,7 @@ const flag = (n, d) => {
   return i >= 0 ? args[i + 1] : d;
 };
 
+const useRecipe = args.includes("--recipe");
 const runId = `mta_dryrun_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const workDir = resolve(workerDir, "../../.runs", runId);
 const outDir = join(workDir, "out");
@@ -32,6 +34,7 @@ const payload = {
   cdpUrl: null,
   liveViewUrl: null,
   realSubmitAuthorized: false,
+  ...(useRecipe ? { automation: "adapter:recipe", recipe: JSON.parse(readFileSync(resolve(workerDir, "../../fixtures/recipes/subway-delay.json"), "utf8")) } : {}),
   form: {
     description: "A train held at 14 St for about 25 minutes around 8:30 this morning with no announcements.",
     address: null,
@@ -56,7 +59,7 @@ const payload = {
 const payloadPath = join(workDir, "payload.json");
 writeFileSync(payloadPath, JSON.stringify(payload, null, 2));
 
-console.log(`[mta-dryrun] ${runId}: line=${payload.form.transit.line} direction="${payload.form.transit.direction}" station=${payload.form.transit.station} realSubmitAuthorized=false`);
+console.log(`[mta-dryrun] ${runId}: ${useRecipe ? "RECIPE" : "hand-written"} line=${payload.form.transit.line} direction="${payload.form.transit.direction}" station=${payload.form.transit.station} realSubmitAuthorized=false`);
 const t0 = Date.now();
 const child = spawn(process.execPath, [join(workerDir, "dist/main.js"), payloadPath, outDir], { stdio: ["ignore", "pipe", "inherit"] });
 let buf = "";

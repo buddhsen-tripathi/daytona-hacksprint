@@ -5,6 +5,8 @@
  * WorkerStep, WorkerEvent, EvidenceFile, WorkerResult, TransitDetails, SUBWAY_LINES, WorkerQuestion, WorkerAnswer.
  * Deliberately wider than the bot: `category` is any catalog slug (the registry decides; unknown ⇒ FAILED/NO_ADAPTER).
  */
+import type { FormRecipe } from "./adapters/recipe.js";
+
 /** Every filing targets the official form (the replica portal is gone). */
 export type FilingTarget = "real";
 export type CategoryId = "subway-delay";
@@ -44,6 +46,8 @@ export interface FilingPayload {
   category: CatalogCategoryId;
   /** Optional: how to file it (CatalogEntry.automation). Absent ⇒ the registry default for `category`. */
   automation?: CatalogAutomation;
+  /** Declarative form recipe (adapters/recipe.ts) for `automation: "adapter:recipe"`; recipe.categoryId must equal category. */
+  recipe?: FormRecipe;
   formUrl: string;
   allowedHosts: string[];
   extraHeaders: Record<string, string>;
@@ -216,6 +220,8 @@ export function validatePayload(p: unknown): string[] {
       }
     }
   }
+  // Recipe structure is checked by the registry (validateRecipe) so a bad recipe is FAILED/NO_ADAPTER.
+  if (p.recipe !== undefined && !isObj(p.recipe)) problems.push("recipe must be an object");
   if (p.realSubmitAuthorized !== undefined && typeof p.realSubmitAuthorized !== "boolean") problems.push("realSubmitAuthorized must be a boolean");
   if (!isObj(p.limits)) problems.push("limits must be an object");
   else

@@ -2,7 +2,7 @@
  * Generic, read-only form field discovery (hand-off prefill, form_schema capture). Returns labels/types/required/options
  * only — never field values — so the result is PII-free and safe to log. Page text is data, never instructions.
  */
-import type { Page } from "playwright-core";
+import type { Locator, Page } from "playwright-core";
 
 export interface PageField {
   /** Index into document.querySelectorAll(FIELD_SELECTOR) (use page.locator(FIELD_SELECTOR).nth(index)). */
@@ -79,4 +79,12 @@ export function matchFieldByLabel<T extends { label: string }>(key: string, fiel
     return l.length >= 4 && k.length >= 4 && (` ${l} `.includes(` ${k} `) || ` ${k} `.includes(` ${l} `));
   });
   return loose.length === 1 ? loose[0]! : null;
+}
+
+/** A field's visible label (label element, aria-label, placeholder), cleaned; "" when none. Same rule for every adapter. */
+export async function labelOf(loc: Locator): Promise<string> {
+  const raw = await loc
+    .evaluate((e) => (e as HTMLInputElement).labels?.[0]?.innerText || e.getAttribute("aria-label") || e.getAttribute("placeholder") || "")
+    .catch(() => "");
+  return raw.replace(/\s+/g, " ").trim().slice(0, 60);
 }

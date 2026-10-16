@@ -6,6 +6,7 @@
  *   1. payload.automation, when present (CatalogEntry.automation, sent by the bot):
  *        "none"            ⇒ no adapter (phone / info only)
  *        "handoff"         ⇒ adapters/handoff.ts for any category (opens formUrl, prefills, NEVER submits)
+ *        "adapter:recipe"  ⇒ adapters/recipe.ts running payload.recipe (valid, and recipe.categoryId === payload.category)
  *        "adapter:<id>"    ⇒ ADAPTERS[id], only if that adapter is bound to payload.category (ADAPTER_CATEGORIES)
  *   2. otherwise the category's default (CATEGORY_DEFAULTS), e.g. subway-delay → adapter:mta-subway-delay
  *   3. otherwise ⇒ no adapter.
@@ -14,6 +15,7 @@
 import type { FilingPayload } from "../protocol.js";
 import { createHandoffAdapter } from "./handoff.js";
 import { createMtaSubwayDelayAdapter } from "./mta-subway-delay.js";
+import { createRecipeAdapter, validateRecipe } from "./recipe.js";
 import type { FormAdapter } from "./types.js";
 
 export type AdapterFactory = (p: FilingPayload) => FormAdapter;
@@ -43,6 +45,14 @@ export function resolveAdapter(p: FilingPayload): Resolution {
   const m = automation.match(/^adapter:([a-z0-9-]+)$/);
   if (m) {
     const id = m[1]!;
+    if (id === "recipe") {
+      if (!p.recipe) return { ok: false, automation, reason: `Automation "adapter:recipe" for category "${p.category}" needs payload.recipe.` };
+      const problems = validateRecipe(p.recipe);
+      if (problems.length) return { ok: false, automation, reason: `Invalid recipe for category "${p.category}": ${problems.slice(0, 5).join("; ")}.` };
+      if (p.recipe.categoryId !== p.category) return { ok: false, automation, reason: `Recipe "${p.recipe.id}" is for category "${p.recipe.categoryId}", not "${p.category}".` };
+      const recipe = p.recipe;
+      return { ok: true, adapterId: `recipe:${recipe.id}`, automation, create: () => createRecipeAdapter(recipe) };
+    }
     const factory = ADAPTERS[id];
     if (!factory) return { ok: false, automation, reason: `Unknown adapter "${id}" for category "${p.category}".` };
     if (!(ADAPTER_CATEGORIES[id] ?? []).includes(p.category)) return { ok: false, automation, reason: `Adapter "${id}" is not registered for category "${p.category}".` };

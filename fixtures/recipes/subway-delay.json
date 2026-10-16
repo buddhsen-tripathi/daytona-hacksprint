@@ -1,0 +1,63 @@
+{
+  "id": "subway-delay",
+  "categoryId": "subway-delay",
+  "version": 1,
+  "description": "MTA Customer Feedback wizard (contact.mta.info): Subways > Complaint or issue > Service and schedule > Delay, then line, direction, nearest station (optional), car number (skipped), Tell us more, contact (only what the resident gave). Reference implementation: apps/worker/src/adapters/mta-subway-delay.ts. Not covered by this recipe: the optional date/time picker and the borough filter for duplicate station names (both left as the form's default).",
+  "steps": [
+    { "open": { "waitFor": "button:has-text(\"Get started\")", "settleMs": 1500 } },
+    { "click": { "role": "button", "name": "Get started" } },
+    { "choose": { "from": "role=button", "value": "Subways" } },
+    { "continue": { "what": "Subways" } },
+    { "choose": { "from": "role=button", "value": "Complaint or issue" } },
+    { "continue": { "what": "Complaint or issue" } },
+    { "choose": { "from": "role=button", "value": "Service and schedule" } },
+    { "continue": { "what": "Service and schedule" } },
+    { "choose": { "from": "role=button", "value": "Delay" } },
+    { "continue": { "what": "Delay" } },
+    { "inspect": { "expectButtons": { "nameRegex": " Line$", "min": 5 } } },
+    { "choose": { "from": "role=button", "value": "{{transit.lineLabel}}", "field": "transit.line" } },
+    { "continue": { "what": "line" } },
+    {
+      "choose": {
+        "from": "role=button",
+        "value": "{{transit.direction}}",
+        "match": "tokens",
+        "optionsRegex": "Train-|Shuttle-|Railway-",
+        "stripPrefix": "^{{transit.line}}( Train)?\\s*-\\s*",
+        "field": "transit.direction",
+        "ask": { "id": "direction", "field": "direction", "prompt": "Which way was the {{transit.line}} train going? Pick one of the MTA form's options:" }
+      }
+    },
+    { "continue": { "what": "direction" } },
+    {
+      "when": {
+        "text": "Which station was nearest",
+        "steps": [
+          {
+            "pick": {
+              "value": "{{transit.station}}",
+              "field": "station",
+              "settleMs": 1500,
+              "ask": { "id": "station", "field": "station", "prompt": "\"{{value}}\" doesn't match exactly one station on the MTA's list for the {{transit.line}}. Which one? (or tap Skip)" }
+            }
+          },
+          { "continue": { "what": "station" } }
+        ]
+      }
+    },
+    { "when": { "text": "Additional Information|Car number", "steps": [{ "continue": { "what": "additional information" } }] } },
+    { "fill": { "label": "tell us more", "selector": "textarea", "value": "{{description}}", "maxLength": 4000, "required": true } },
+    { "continue": { "what": "details" } },
+    { "fill": { "label": "^first name", "value": "{{contact.firstName}}", "ask": { "id": "contact_name", "field": "contact_name", "prompt": "The MTA form now requires your name. What first and last name should go on the complaint?" } } },
+    { "fill": { "label": "^last name", "value": "{{contact.lastName}}" } },
+    { "fill": { "label": "^email", "value": "{{contact.email}}", "ask": { "id": "contact_email", "field": "contact_email", "prompt": "The MTA form now requires an email address so they can reply. Which email should I use?" } } },
+    { "fill": { "label": "^phone", "value": "{{contact.phone}}" } },
+    { "submitIf": "realSubmitAuthorized", "button": "Submit your feedback" },
+    {
+      "confirm": {
+        "doneRegex": "thank you|thanks for|we('| ha)ve received|has been (received|submitted)|case (number|#)|reference (number|#)|confirmation (number|#)",
+        "textRegex": "(case|reference|confirmation)\\s*(number|#|no\\.?)?\\s*(is)?\\s*[:#]?\\s*([A-Z0-9][A-Z0-9-]{4,})"
+      }
+    }
+  ]
+}

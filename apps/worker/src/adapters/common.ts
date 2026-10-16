@@ -146,3 +146,67 @@ export function payloadSummary(p: FilingPayload) {
     borough: p.form.borough,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Option matching shared by the hand-written MTA adapter and the recipe interpreter (identical behaviour).
+// ---------------------------------------------------------------------------
+const STOP = new Set(["the", "to", "toward", "towards", "train", "trains", "line", "bound", "going", "heading", "headed", "direction", "in", "on", "at", "st", "av", "ave", "avs", "street", "avenue", "and", "of", "from", "into", "a", "an", "way", "side", "service", "-", "&"]);
+const SYN: Record<string, string> = { northbound: "uptown", north: "uptown", up: "uptown", southbound: "downtown", south: "downtown", down: "downtown", center: "ctr", centre: "ctr", square: "sq", wtc: "ctr", bx: "bronx", bk: "brooklyn", bklyn: "brooklyn", city: "manhattan" };
+
+export function tokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/-bound\b/g, " ")
+    .replace(/(\d+)(st|nd|rd|th)\b/g, "$1")
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t && !STOP.has(t))
+    .map((t) => SYN[t] ?? t);
+}
+
+/**
+ * Pick the option whose (core) label best overlaps what the resident said, token-wise (synonyms: northbound→uptown, …).
+ * Unique best overlap wins; zero overlap or a tie ⇒ null (ask, never guess).
+ */
+export function matchByTokens(said: string | null | undefined, options: string[], core: (label: string) => string = (l) => l): string | null {
+  const want = new Set(tokens(said ?? ""));
+  if (!want.size || !options.length) return null;
+  const scored = options.map((o) => {
+    const have = new Set(tokens(core(o)));
+    let score = 0;
+    for (const t of want) if (have.has(t)) score++;
+    return { o, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  if (scored[0]!.score === 0) return null;
+  if (scored.length > 1 && scored[1]!.score === scored[0]!.score) return null;
+  return scored[0]!.o;
+}
+
+export function normName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\bstreet\b/g, "st")
+    .replace(/\bavenue\b/g, "av")
+    .replace(/\bave\b/g, "av")
+    .replace(/\bavenues\b|\bavs\b/g, "avs")
+    .replace(/\bsquare\b/g, "sq")
+    .replace(/\bcenter\b/g, "ctr")
+    .replace(/\bparkway\b/g, "pkwy")
+    .replace(/\bboulevard\b/g, "blvd")
+    .replace(/\bwest\b/g, "w")
+    .replace(/\beast\b/g, "e")
+    .replace(/(\d+)(st|nd|rd|th)\b/g, "$1")
+    .replace(/\bstation\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Options for what the resident said: exact (normalized: street→st, 14th→14, …) matches, else whole-word contains matches. */
+export function nameCandidates(said: string | null | undefined, options: string[]): string[] {
+  const w = normName(said ?? "");
+  if (!w) return [];
+  const exact = options.filter((o) => normName(o) === w);
+  if (exact.length) return exact;
+  const re = new RegExp(`(^| )${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
+  return options.filter((o) => re.test(normName(o)));
+}
