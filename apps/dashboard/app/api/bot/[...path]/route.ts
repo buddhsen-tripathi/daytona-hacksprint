@@ -8,6 +8,22 @@ const TOKEN = process.env.OPERATOR_API_TOKEN ?? "";
 
 const PASS_HEADERS = ["content-type", "content-length", "cache-control", "content-disposition"];
 
+/**
+ * Headers safe to copy from the bot's response. `fetch` transparently decompresses gzip/br bodies (Render's edge
+ * compresses JSON) but leaves the upstream `content-length` header in place, so forwarding it would announce the
+ * compressed size for a decompressed body and the browser would cut the JSON short ("Unterminated string in JSON").
+ */
+function passHeaders(res: Response): Headers {
+  const headers = new Headers();
+  const encoded = !!res.headers.get("content-encoding");
+  for (const h of PASS_HEADERS) {
+    if (h === "content-length" && encoded) continue;
+    const v = res.headers.get(h);
+    if (v) headers.set(h, v);
+  }
+  return headers;
+}
+
 async function forward(target: string, init: RequestInit): Promise<Response> {
   try {
     const res = await fetch(target, {
@@ -16,12 +32,7 @@ async function forward(target: string, init: RequestInit): Promise<Response> {
       signal: AbortSignal.timeout(8000),
       headers: { ...(init.headers as Record<string, string> | undefined), ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}) },
     });
-    const headers = new Headers();
-    for (const h of PASS_HEADERS) {
-      const v = res.headers.get(h);
-      if (v) headers.set(h, v);
-    }
-    return new Response(res.body, { status: res.status, headers });
+    return new Response(res.body, { status: res.status, headers: passHeaders(res) });
   } catch (err) {
     return Response.json(
       { error: "BOT_API_UNREACHABLE", message: `Could not reach ${BOT}: ${(err as Error).message}` },
