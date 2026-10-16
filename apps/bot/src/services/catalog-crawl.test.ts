@@ -6,11 +6,13 @@ import {
   agencyFromUrl,
   assignUniqueIds,
   buildCatalogEntry,
+  carryForwardIds,
   channelForUrl,
   extractPhone,
   fileableCatalogEntries,
   filingScore,
   isEmergencyArticle,
+  isExtractionFailed,
   isGenericNav,
   mergeCatalog,
   parseServiceRequestCall,
@@ -248,5 +250,43 @@ describe("emergency (Call 911) articles (#28)", () => {
   it("emergency defaults to false for rows written before #28", () => {
     const { emergency: _e, ...old } = buildCatalogEntry(srArticle("NYPD"), ctx);
     expect(CatalogEntry.parse(old).emergency).toBe(false);
+  });
+});
+
+describe("carryForwardIds (#28)", () => {
+  const ctx = { topic: null, summary: null, probe: null, now: NOW };
+  const entry = (ka: string, title: string) => buildCatalogEntry({ kaNumber: ka, title, cards: [] }, ctx);
+
+  it("keeps the previous id for a retitled KA", () => {
+    const out = carryForwardIds([entry("KA-00010", "Street Light Out (Renamed)"), entry("KA-00011", "Other")], [
+      { id: "street-light-out", kaNumber: "KA-00010" },
+    ]);
+    expect(out.map((e) => e.id)).toEqual(["street-light-out", "other"]);
+  });
+
+  it("suffixes a new slug that collides with a carried id", () => {
+    const out = carryForwardIds([entry("KA-00020", "Noise"), entry("KA-00010", "Noise Renamed")], [{ id: "noise", kaNumber: "KA-00010" }]);
+    expect(out.map((e) => e.id)).toEqual(["noise-ka-00020", "noise"]);
+  });
+
+  it("is a no-op with no previous snapshot", () => {
+    const es = [entry("KA-00010", "A"), entry("KA-00011", "B")];
+    expect(carryForwardIds(es, [])).toEqual(es);
+  });
+});
+
+describe("isExtractionFailed (#28)", () => {
+  it("flags empty pages without a 911 banner, explicit flags and missing titles", () => {
+    expect(isExtractionFailed({ kaNumber: "KA-01591", title: "Noise", cards: [{ title: null, text: "", links: [] }] })).toBe(true);
+    expect(isExtractionFailed({ kaNumber: "KA-1", title: "X", cards: [] })).toBe(true);
+    expect(isExtractionFailed({ ...srArticle("NYPD"), extractionFailed: true })).toBe(true);
+    expect(isExtractionFailed({ ...srArticle("NYPD"), title: "" })).toBe(true);
+  });
+
+  it("accepts real articles and bare Call 911 pages", () => {
+    expect(isExtractionFailed(srArticle("NYPD"))).toBe(false);
+    expect(isExtractionFailed({ kaNumber: "KA-02048", title: "Gas Leak", cards: [{ title: null, text: "", links: [] }], emergencyBanner: true })).toBe(
+      false,
+    );
   });
 });

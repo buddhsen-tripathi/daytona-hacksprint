@@ -1,7 +1,7 @@
 /**
  * Crawl the NYC311 "Report Problems" directory into a category catalog (#7).
  *
- *   pnpm --filter @311relay/bot exec tsx scripts/crawl-311-catalog.ts [--limit 20] [--delay 600] [--refresh] [--no-probe] [--headed] [--no-db] [--embedded] [--cache DIR]
+ *   pnpm --filter @311relay/bot exec tsx scripts/crawl-311-catalog.ts [--limit 20] [--delay 600] [--refresh] [--no-probe] [--headed] [--no-db | --db] [--embedded] [--cache DIR]
  *
  * 1. /report-problems/: the "All A–Z" list (every article) and the "All by category" tree.
  * 2. Each subcategory page: topic + one-line summary per article.
@@ -13,8 +13,12 @@
  * sequential, `--delay` ms between loads, images/fonts/media blocked. Everything is cached under
  * .runs/catalog-cache/ and reused, so an interrupted run resumes; --refresh ignores the cache.
  * Outputs: fixtures/nyc311-catalog.json (committed snapshot, sorted by id; only on a full run, never with
- * --limit) and complaint_category rows in SurrealDB (UPSERT … MERGE by id; --no-db skips, --embedded uses
- * mem://). The CATEGORIES entries (subway-delay) are added with their worker adapter as `automation`.
+ * --limit) and complaint_category rows in SurrealDB (UPSERT … MERGE by id; full runs only unless --db,
+ * --no-db skips, --embedded uses mem://). A --limit run only reads category pages already cached.
+ * Ids are carried forward by KA number from the previous snapshot. Articles whose extraction failed
+ * (isExtractionFailed) and failed probes (null) are re-fetched on the next run; a failed article keeps
+ * its previous snapshot row if it had one, else it is left out.
+ * The CATEGORIES entries (subway-delay) are added with their worker adapter as `automation`.
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -25,7 +29,9 @@ import { createSurrealStore } from "../src/integrations/surrealdb.js";
 import {
   assignUniqueIds,
   buildCatalogEntry,
+  carryForwardIds,
   fileableCatalogEntries,
+  isExtractionFailed,
   mergeCatalog,
   PORTAL,
   probeTarget,
@@ -45,7 +51,9 @@ const DELAY_MS = opt("--delay", 600);
 const REFRESH = flag("--refresh");
 const PROBE = !flag("--no-probe");
 const HEADED = flag("--headed");
-const DB = !flag("--no-db");
+const FULL = LIMIT === Infinity;
+// A --limit run is a smoke test: it must not touch the shared DB unless asked to.
+const DB = flag("--db") || (FULL && !flag("--no-db"));
 const EMBEDDED = flag("--embedded");
 const SNAPSHOT = resolve(REPO_ROOT, "fixtures/nyc311-catalog.json");
 
@@ -121,7 +129,7 @@ async function crawlIndex(page: Page): Promise<Index> {
 }
 
 // -- 2. topics + summaries ------------------------------------------------------
-async function crawlTopics(page: Page, index: Index) {
+async function crawlTopics(page: Page, index: Index, fetchMissing: boolean) {
   const topic = new Map<string, string>();
   const summary = new Map<string, string>();
   const note = (ka: string, t: string, s: string | null) => {
@@ -133,6 +141,7 @@ async function crawlTopics(page: Page, index: Index) {
     for (const sub of g.subcategories) {
       const id = new URL(sub.url).searchParams.get("id") ?? sub.name;
       let list = readCache<IndexArticle[]>(`categories/${id}.json`);
+      if (!list && !fetchMissing) continue;
       if (!list) {
         await load(page, sub.url);
         list = (
@@ -155,9 +164,14 @@ async function crawlTopics(page: Page, index: Index) {
 // -- 3. articles ----------------------------------------------------------------
 async function crawlArticle(page: Page, kaNumber: string): Promise<RawArticle> {
   const cached = readCache<RawArticle>(`articles/${kaNumber}.json`);
-  if (cached) return cached;
-  await load(page, `${PORTAL}/article/?kanumber=${kaNumber}`);
-  await page.waitForSelector(".ka-content", { timeout: 15_000 }).catch(() => {});
+  if (cached && !isExtractionFailed(cached)) return cached;
+  try {
+    await load(page, `${PORTAL}/article/?kanumber=${kaNumber}`);
+  } catch (err) {
+    console.warn(`  article failed ${kaNumber}: ${(err as Error).message.split("\n")[0]}`);
+    return { kaNumber, title: "", cards: [], extractionFailed: true };
+  }
+  const rendered = await page.waitForSelector(".ka-content", { timeout: 15_000 }).then(() => true, () => false);
   const extracted = await page.evaluate(() => {
     const emergencyBanner = Array.from(document.querySelectorAll(".ka-content .divTable")).some((t) => /call 911/i.test(t.textContent ?? ""));
     const cards = Array.from(document.querySelectorAll(".ka-content .accordion > .card")).map((c) => {
@@ -183,6 +197,7 @@ async function crawlArticle(page: Page, kaNumber: string): Promise<RawArticle> {
     return { title: document.title.replace(/\s*·\s*NYC311\s*$/, "").trim(), cards, emergencyBanner };
   });
   const raw: RawArticle = { kaNumber, title: extracted.title, cards: extracted.cards as RawCard[], emergencyBanner: extracted.emergencyBanner };
+  if (!rendered || isExtractionFailed(raw)) raw.extractionFailed = true;
   writeCache(`articles/${kaNumber}.json`, raw);
   return raw;
 }
@@ -217,7 +232,8 @@ try {
   const index = await crawlIndex(page);
   console.log(`index: ${index.az.length} articles A–Z, ${index.groups.length} groups, ${index.groups.reduce((n, g) => n + g.subcategories.length, 0)} subcategories`);
 
-  const { topic, summary } = await crawlTopics(page, index);
+  // A --limit run uses only cached category pages (a cold cache would otherwise load ~80 of them).
+  const { topic, summary } = await crawlTopics(page, index, FULL);
   console.log(`topics: ${topic.size} articles placed in the category tree`);
 
   const articles = index.az.slice(0, LIMIT);
@@ -229,7 +245,7 @@ try {
 
   const probes = readCache<Record<string, LandingProbe | null>>("probes.json") ?? {};
   if (PROBE) {
-    const targets = [...new Set(raws.map(probeTarget).filter((u): u is string => !!u))].filter((u) => !(u in probes));
+    const targets = [...new Set(raws.map(probeTarget).filter((u): u is string => !!u))].filter((u) => !probes[u]); // unseen or failed (null) last time
     for (const [i, url] of targets.entries()) {
       probes[url] = await probe(page, url);
       if ((i + 1) % 25 === 0 || i + 1 === targets.length) {
@@ -239,24 +255,35 @@ try {
     }
   }
 
+  const failed = raws.filter(isExtractionFailed);
+  if (failed.length) console.warn(`extraction failed (excluded, retried next run): ${failed.map((r) => r.kaNumber).join(", ")}`);
+  const previous: CatalogEntry[] = existsSync(SNAPSHOT) ? JSON.parse(readFileSync(SNAPSHOT, "utf8")) : [];
+  const failedKas = new Set(failed.map((r) => r.kaNumber));
+  // A failed article keeps its last good row rather than vanishing from the snapshot.
+  const keptRows = previous.filter((e) => failedKas.has(e.kaNumber));
+
   const now = new Date().toISOString();
-  const crawled = assignUniqueIds(
-    raws.map((raw) => {
+  const built = assignUniqueIds(
+    raws.filter((raw) => !failedKas.has(raw.kaNumber)).map((raw) => {
       const target = probeTarget(raw);
       // lastVerifiedAt = when the article was fetched (its cache file), so rebuilding from cache doesn't churn the snapshot.
       const fetched = statSync(resolve(CACHE, `articles/${raw.kaNumber}.json`)).mtime.toISOString();
       return buildCatalogEntry(raw, { topic: topic.get(raw.kaNumber) ?? null, summary: summary.get(raw.kaNumber) ?? null, probe: target ? (probes[target] ?? null) : null, now: fetched });
     }),
   );
-  const fileable = fileableCatalogEntries(now);
+  const crawled = carryForwardIds([...built, ...keptRows], previous);
+  // Fileable rows are static facts from code: keep their previous lastVerifiedAt so rebuilds don't churn it.
+  const prevVerified = new Map(previous.map((e) => [e.id, e.lastVerifiedAt]));
+  const fileable = fileableCatalogEntries(now).map((e) => ({ ...e, lastVerifiedAt: prevVerified.get(e.id) ?? e.lastVerifiedAt }));
   const entries: CatalogEntry[] = mergeCatalog(fileable, crawled);
 
   writeCache("catalog.draft.json", entries);
-  if (LIMIT === Infinity) {
+  if (FULL) {
     writeFileSync(SNAPSHOT, `${JSON.stringify(entries, null, 2)}\n`);
     console.log(`snapshot: ${entries.length} entries → ${SNAPSHOT}`);
   } else console.log("snapshot: skipped (--limit run)");
 
+  if (!DB) console.log(`surrealdb: skipped (${FULL ? "--no-db" : "--limit run; pass --db to write"})`);
   if (DB) {
     const store = createSurrealStore(EMBEDDED ? { url: "mem://" } : {});
     try {
