@@ -28,6 +28,7 @@ When your PR merges, tick your issue in the parent epic's task list and comment 
 ```bash
 pnpm install && pnpm --filter @311relay/worker build
 pnpm -r typecheck && pnpm --filter @311relay/bot exec vitest run
+pnpm run ci                                     # exactly what CI runs (plain `pnpm ci` is pnpm's clean install)
 pnpm demo -- --scenario subway --no-filing      # intake → card, no browser
 pnpm demo -- --scenario subway                  # dry run on Daytona + Anchor (keys in .env)
 pnpm dev                                        # bot + API on :3312 (Telegram polling if TELEGRAM_BOT_TOKEN is set)
