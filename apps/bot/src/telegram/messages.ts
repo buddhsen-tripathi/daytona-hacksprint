@@ -1,0 +1,185 @@
+/**
+ * All user-facing copy (design doc §6). Messages use Telegram HTML parse mode;
+ * every interpolated user/LLM/public-data string goes through esc().
+ */
+import type { ComplaintDraft, DuplicateCandidate, FilingOutcome, OfficialRequest } from "../core/contracts.js";
+import { NYC311_CHECK_STATUS_URL, NYC311_REPORT_URL, emergencyText, getCategory, helpText, manualGuidance } from "../core/knowledge.js";
+
+export function esc(s: string | null | undefined): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export function stripHtml(s: string): string {
+  return s.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+export const M = {
+  start: () =>
+    [
+      "Hey! 👋",
+      "",
+      "I help you report problems around NYC.",
+      "",
+      "Send me a photo, describe the issue, or share a voice message.",
+      "",
+      "I'll figure out how to report it.",
+      "",
+      "For emergencies, call 911.",
+    ].join("\n"),
+  help: () => esc(helpText()),
+  reportPrompt: () => "Okay, new report. 📸 Send a photo of the problem or describe what you see.",
+  emergency: () => esc(emergencyText()),
+  outOfScope: (triage: "OUT_OF_SCOPE" | "UNCLEAR", text: string | null) => esc(manualGuidance(triage, text)),
+  clarify: (question: string | null) => esc(question ?? "Could you tell me a bit more about what you're seeing? For example, is it a hole in the road or a damaged patch from street work?"),
+  needDescription: () => "What's the problem? A photo or a short description works.",
+  analyzing: () => "Got it, taking a look… 🔎",
+  classified: (label: string) => `Looks like a possible ${esc(label.toLowerCase())}.`,
+  noted: () => "Thanks, I've added that to the report.",
+  askLocation: () => "Can you share the location or nearest intersection?\n\nTap <b>📍 Share location</b> below, or type an address like “W 42nd St & 7th Ave, Manhattan”.",
+  locationGot: () => "Got it. I'll use the location you shared.\n\nBefore reporting, I'm checking whether a similar issue may already have been reported nearby.",
+  locationNotFound: () => "I couldn't find that address in NYC. Could you share a 📍 pin, or type a street address with the borough?",
+  outsideNyc: () => "That location looks like it's outside New York City. NYC311 only handles problems inside the five boroughs, so I can't file this one.\n\nIf it's in NYC, share the pin again or type the address.",
+  openDataDown: () => "I couldn't check NYC Open Data for similar reports right now, so I'm continuing without the duplicate check.",
+  duplicate: (cands: DuplicateCandidate[], dataAsOf: string | null, categoryLabel: string) => {
+    const c = cands[0]!;
+    const lines = [
+      `I found a potentially related street-damage complaint near this location.`,
+      "",
+      `<b>Type:</b> ${esc(c.complaintType)}${c.descriptor ? ` (${esc(c.descriptor)})` : ""}`,
+      c.incidentAddress ? `<b>Near:</b> ${esc(c.incidentAddress)}${c.distanceMeters != null ? ` (~${Math.round(c.distanceMeters)} m away)` : ""}` : null,
+      `<b>Status:</b> ${esc(c.status ?? "Unknown")}`,
+      `<b>Reported:</b> ${ago(c.ageDays)}`,
+      cands.length > 1 ? `\n…and ${cands.length - 1} more nearby.` : null,
+      "",
+      `<i>This might not be the same problem. Public data as of ${esc(fmtDate(dataAsOf) ?? "recently")}; it can be delayed or incomplete.</i>`,
+      "",
+      "Would you like to review the existing request or continue preparing a new report?",
+    ];
+    return lines.filter((l) => l !== null).join("\n");
+  },
+  draftChanged: () => "The draft changed since you saw it. Here's the latest:",
+  needName: () =>
+    "The official form asks for your first and last name. Send <code>/name First Last</code> and I'll add it. I never make one up.",
+  nameSaved: (name: string) => `Thanks, I'll use <b>${esc(name)}</b> as the contact name on official forms.`,
+  filingNow: () => "Filing now… I'll send updates. ⏳",
+  progress: (t: string) => `⚙️ ${esc(t)}`,
+  cancelled: () => "Okay, I cancelled that draft. Nothing was filed.\n\nSend a photo or description anytime to start a new report.",
+  nothingToCancel: () => "There's no active draft to cancel.",
+  editPrompt: () => "Sure. What should I change? Tell me the correct details (description or location), or send a new photo.",
+  dupReview: () => "You can look up the existing request on NYC311. If it's the same problem, there's no need to file again. Tap <b>Continue with new report</b> if it's different.",
+  modeSet: (mode: string) => `Demo portal mode set to <b>${esc(mode)}</b>. Your next filing will use it.`,
+  modeUsage: () => "Usage: <code>/mode normal|captcha|flaky|reject</code>",
+  statusUsage: () => "Send <code>/status &lt;service request number&gt;</code>, or tap <b>Check status</b> on a filed report.",
+  error: () => "Something went wrong on my side; nothing was filed.",
+  voiceUnsupported: () => "I can't understand voice messages yet. Could you type a short description instead?",
+  invalidImage: () => "I couldn't read that image. Could you describe the problem in a few words?",
+  busy: () => "I'm already working on this report. Hang tight. ⏳",
+  noActive: () => "There's no active draft right now. Send a photo or description to start one.",
+
+  submitted: (o: FilingOutcome) =>
+    [
+      "✅ Your NYC311 report was accepted.",
+      "",
+      `Service request: <b>${esc(o.officialRequestNumber)}</b>`,
+      "",
+      "I'll keep this reference here so you can check its status later.",
+    ].join("\n"),
+  humanAction: (o: FilingOutcome, finishUrl: string) =>
+    [
+      "Your report is prepared, but I couldn't complete the official submission automatically.",
+      "",
+      "You can finish it on NYC311. I haven't filed anything on your behalf.",
+      o.errorCode ? `\n<i>${esc(filingReason(o.errorCode))}</i>` : null,
+      `\n${esc(finishUrl)}`,
+    ]
+      .filter((l) => l !== null)
+      .join("\n"),
+  liveView: () => "You can also take over the same browser session for a few minutes using the button below.",
+  unknown: (_o: FilingOutcome) =>
+    [
+      "The filing attempt finished without a reliable confirmation.",
+      "",
+      "I'm not submitting again automatically because that could create a duplicate. Please check the official portal before retrying.",
+    ].join("\n"),
+  failed: (o: FilingOutcome) => `I couldn't complete the filing: ${esc(filingReason(o.errorCode).replace(/\.$/, ""))}. Nothing was submitted. You can try again from the draft.`,
+
+  myReports: (drafts: ComplaintDraft[], requests: OfficialRequest[]) => {
+    if (!drafts.length && !requests.length) return "You don't have any reports yet. Send a photo or description to start one.";
+    const lines = ["<b>Your reports</b>", ""];
+    for (const d of drafts.slice(0, 10)) {
+      const cat = getCategory(d.category)?.label ?? "Uncategorized";
+      const where = d.location.address ?? (d.location.latitude != null ? `${d.location.latitude.toFixed(4)}, ${d.location.longitude?.toFixed(4)}` : "no location");
+      const sr = d.officialRequestNumber ? ` · SR <code>${esc(d.officialRequestNumber)}</code>` : "";
+      lines.push(`• ${esc(cat)} · ${esc(where)} · <i>${esc(humanStatus(d.status))}</i>${sr}`);
+    }
+    const unlisted = requests.filter((r) => !drafts.some((d) => d.officialRequestNumber === r.officialRequestNumber));
+    for (const r of unlisted) lines.push(`• SR <code>${esc(r.officialRequestNumber)}</code> · ${esc(r.status ?? "status unknown")}`);
+    lines.push("", "Use /status &lt;number&gt; to check a request.");
+    return lines.join("\n");
+  },
+  status: (sr: string, s: { status: string | null; detail?: string | null; source?: string | null; found: boolean }) =>
+    s.found
+      ? [`<b>Service request ${esc(sr)}</b>`, `Status: <b>${esc(s.status ?? "Unknown")}</b>`, s.detail ? esc(s.detail) : null, s.source && SOURCE_LABEL[s.source] !== "" ? `<i>Source: ${esc(SOURCE_LABEL[s.source] ?? s.source)}</i>` : null]
+          .filter(Boolean)
+          .join("\n")
+      : `I couldn't find status for <code>${esc(sr)}</code> yet. New requests can take a while to appear in public data. You can also check ${NYC311_CHECK_STATUS_URL}`,
+};
+
+const FILING_REASONS: Record<string, string> = {
+  CAPTCHA: "The form asks you to prove you're human (CAPTCHA). I never bypass those.",
+  LOGIN_REQUIRED: "The form asks you to sign in. I don't log in on your behalf.",
+  UNEXPECTED_REQUIRED_FIELD: "The form asked for information I don't have from you.",
+  OFF_ALLOWLIST_NAVIGATION: "The form tried to leave the official site allowlist, so I stopped.",
+  FORM_REJECTED: "the portal rejected the report details (it could not locate the street)",
+  NO_CONFIRMATION: "no official confirmation number was shown",
+  CONNECTION_LOST_AFTER_SUBMIT: "the connection dropped right after submitting",
+  NAVIGATION_FAILED: "the official form could not be opened",
+  TIMEOUT: "the filing took too long and was stopped",
+  BROWSER_ERROR: "the cloud browser could not be started",
+  WORKER_CRASH: "the isolated filing worker stopped unexpectedly",
+  SANDBOX_ERROR: "the isolated filing environment could not be started",
+};
+export function filingReason(code: string | null | undefined): string {
+  return (code && FILING_REASONS[code]) || "an unexpected error";
+}
+
+export function fmtDate(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "America/New_York" }) : s;
+}
+
+const SOURCE_LABEL: Record<string, string> = { "open-data": "NYC Open Data (311 Service Requests)", "demo-portal": "NYC311 Demo Portal", unknown: "" };
+
+export function ago(days: number): string {
+  const d = Math.max(0, Math.round(days));
+  if (d === 0) return "today";
+  if (d === 1) return "1 day ago";
+  return `${d} days ago`;
+}
+
+export function humanStatus(s: ComplaintDraft["status"]): string {
+  const map: Record<ComplaintDraft["status"], string> = {
+    RECEIVED: "received",
+    TRIAGING: "reviewing",
+    OUT_OF_SCOPE: "not supported",
+    EMERGENCY_REFERRAL: "emergency referral",
+    NEEDS_INFORMATION: "needs info",
+    DUPLICATE_REVIEW: "checking duplicates",
+    READY_FOR_APPROVAL: "waiting for your approval",
+    APPROVED: "approved",
+    FILING: "filing",
+    HUMAN_ACTION_REQUIRED: "needs you to finish",
+    SUBMISSION_UNKNOWN: "result unknown",
+    FAILED: "filing failed",
+    SUBMITTED: "submitted",
+    TRACKING: "submitted · tracking",
+    CANCELLED: "cancelled",
+  };
+  return map[s];
+}
+
+export { NYC311_REPORT_URL, NYC311_CHECK_STATUS_URL };
