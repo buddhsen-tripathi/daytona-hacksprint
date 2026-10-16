@@ -42,6 +42,7 @@ import type {
 } from "../core/contracts.js";
 import { CATEGORIES, nowIso } from "../core/contracts.js";
 import { NOT_REPORTED, NOT_REPORTED_OTHERS, RELATED_DEFAULTS } from "../services/memory.js";
+import { mergeMemoryPool } from "../services/agent-memory.js";
 import { env } from "./env.js";
 
 export class StoreError extends Error {
@@ -595,11 +596,8 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
       b.add(`SELECT ${MEMORY_COLS}, createdMs, ${exactCosine(b, q.embedModel!, vec)} AS similarity FROM memory ${own ? `${own} AND` : "WHERE"} chatId = ${b.bind(q.chatId)} ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
     }
     const [near, rest, own] = (await run(b)) as [MemRow[], MemRow[], MemRow[] | undefined];
-    const hits = new Map<string, MemoryHit>();
-    for (const r of near ?? []) hits.set(plainId(r.id), toHit(r));
-    for (const r of [...(own ?? []), ...(rest ?? [])]) if (!hits.has(plainId(r.id))) hits.set(plainId(r.id), toHit(r));
-    // same order as the scan: most similar first (rows without a comparable vector last), then newest
-    return [...hits.values()].sort((x, y) => (y.similarity ?? -2) - (x.similarity ?? -2) || y.createdAt.localeCompare(x.createdAt)).slice(0, q.limit);
+    // most similar first, with ⌈limit/4⌉ slots kept for rows without a comparable vector (mergeMemoryPool)
+    return mergeMemoryPool([...(near ?? []), ...(own ?? [])].map(toHit), (rest ?? []).map(toHit), q.limit);
   }
 
   async function searchMemoryImpl(q: MemorySearch): Promise<MemoryHit[]> {
@@ -616,11 +614,34 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     const where = memoryWhere(b, q);
     const vec = q.embedding?.length && q.embedModel ? q.embedding : null;
     // cosine only between vectors of the same model and length (vector::similarity::cosine errors on mismatched dims)
-    const sim = vec ? exactCosine(b, q.embedModel!, vec) : "NONE";
-    const order = vec ? "ORDER BY similarity DESC, createdMs DESC" : "ORDER BY createdMs DESC";
-    b.add(`SELECT ${MEMORY_COLS}, createdMs, ${sim} AS similarity FROM memory ${where} ${order} LIMIT ${b.bind(q.limit)}`);
-    const [rows] = (await run(b)) as [MemRow[]];
-    return (rows ?? []).map(toHit);
+    if (!vec) {
+      b.add(`SELECT ${MEMORY_COLS}, createdMs, NONE AS similarity FROM memory ${where} ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+      const [rows] = (await run(b)) as [MemRow[]];
+      return (rows ?? []).map(toHit);
+    }
+    // exact scan: comparable rows by cosine + the newest rows without a comparable vector (never crowded out)
+    const and = where ? `${where} AND` : "WHERE";
+    b.add(`SELECT ${MEMORY_COLS}, createdMs, ${exactCosine(b, q.embedModel!, vec)} AS similarity FROM memory ${where} ORDER BY similarity DESC, createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    b.add(`SELECT ${MEMORY_COLS}, createdMs, NONE AS similarity FROM memory ${and} (embedModel != ${b.bind(q.embedModel)} OR array::len(embedding ?? []) != ${b.bind(vec.length)}) ORDER BY createdMs DESC LIMIT ${b.bind(q.limit)}`);
+    const [rows, other] = (await run(b)) as [MemRow[], MemRow[]];
+    return mergeMemoryPool((rows ?? []).map(toHit), (other ?? []).map(toHit), q.limit);
+  }
+
+  async function listNeedingEmbedding({ model, limit }: { model: string; limit: number }) {
+    const b = new Batch();
+    b.add(`SELECT id, text, embedModel, createdMs FROM memory WHERE embedModel != ${b.bind(model)} ORDER BY createdMs ASC LIMIT ${b.bind(limit)}`);
+    const [rows] = (await run(b)) as [{ id: unknown; text: string; embedModel?: string | null }[]];
+    return (rows ?? []).map((r) => ({ id: plainId(r.id), text: String(r.text ?? ""), embedModel: r.embedModel ?? null }));
+  }
+
+  async function setEmbedding(id: string, embedding: number[], embedModel: string): Promise<void> {
+    const b = new Batch();
+    const ann = hnsw && embedding.length === HNSW_DIM;
+    b.add(
+      `UPDATE ${b.bind(rid("memory", id))} SET embedding = ${b.bind(embedding)}, embedModel = ${b.bind(embedModel)}, embedDim = ${b.bind(embedding.length)}, ` +
+        `annIndexed = ${b.bind(ann)}, embedding_${HNSW_DIM} = ${ann ? b.bind(embedding) : "NONE"} RETURN NONE`,
+    );
+    await run(b);
   }
 
   // ---------------------------------------------------------------------------
@@ -924,6 +945,8 @@ export function createSurrealStore(opts: SurrealStoreOptions = {}): SurrealStore
     // -- agent memory (#4) -------------------------------------------------------
     insertMemory: guard("insertMemory", writeMemory),
     searchMemory: guard("searchMemory", searchMemoryImpl),
+    listMemoryNeedingEmbedding: guard("listMemoryNeedingEmbedding", listNeedingEmbedding),
+    setMemoryEmbedding: guard("setMemoryEmbedding", setEmbedding),
     listMemory: guard("listMemory", async (args?: { kind?: MemoryKind; category?: string; chatId?: string; source?: string; about?: MemoryAboutRef; limit?: number }) => {
       const b = new Batch();
       const where = memoryWhere(b, { kind: args?.kind, category: args?.category, chatId: args?.chatId, source: args?.source, about: args?.about });

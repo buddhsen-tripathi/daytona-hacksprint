@@ -87,7 +87,10 @@ export const getAgentMemory = once(async (): Promise<AgentMemoryService> => {
   const embedder = createEmbedder();
   const memory = createAgentMemory({ store: await getStore(), embedder, tracer: await getTracer() });
   report.memory = `agent memory (${embedder.model})`;
-  void seedCategoryMemory(memory).catch((err) => console.warn("[providers] category memory seed failed:", (err as Error).message));
+  void seedCategoryMemory(memory)
+    .catch((err) => console.warn("[providers] category memory seed failed:", (err as Error).message))
+    // #22: rows embedded with the fallback (outage / no key at the time) get real vectors once OpenRouter answers
+    .then(() => memory.reembedFallbackItems());
   return memory;
 });
 
