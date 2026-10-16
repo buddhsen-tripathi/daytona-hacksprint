@@ -3,6 +3,7 @@
  * scripted runner, and as the fallback when SurrealDB can't initialize.
  */
 import type {
+  CatalogEntry,
   CategoryId,
   ComplaintDraft,
   ComplaintLocation,
@@ -29,6 +30,9 @@ const clone = <T>(v: T): T => structuredClone(v);
 export type MemoryStore = Store & {
   transitions: TransitionRecord[];
   listTransitions(complaintId: string): Promise<TransitionRecord[]>;
+  /** Same contract as SurrealStore's (#7/#28): upsert by id (merge), list everything. */
+  upsertCatalog(entries: CatalogEntry[]): Promise<number>;
+  listCatalog(): Promise<CatalogEntry[]>;
 };
 
 export function createMemoryStore(): MemoryStore {
@@ -50,6 +54,7 @@ export function createMemoryStore(): MemoryStore {
   const notSame = new Map<string, Set<string>>();
   const joinedTo = (originalId: string) => [...sameIssue.entries()].filter(([, o]) => o === originalId).map(([s]) => s);
   const memories = new Map<string, MemoryRecord>();
+  const catalog = new Map<string, CatalogEntry>();
 
   const store: MemoryStore = {
     backend: "memory",
@@ -58,6 +63,13 @@ export function createMemoryStore(): MemoryStore {
       return clone(transitions.filter((t) => t.complaintId === complaintId));
     },
     async init() {},
+    async upsertCatalog(entries) {
+      for (const e of entries) catalog.set(e.id, { ...(catalog.get(e.id) ?? {}), ...clone(e) });
+      return entries.length;
+    },
+    async listCatalog() {
+      return clone([...catalog.values()].sort((a, b) => a.id.localeCompare(b.id)));
+    },
 
     async getOrCreateResident(chatId, username) {
       const existing = residentByChat.get(chatId);

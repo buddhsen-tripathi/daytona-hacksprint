@@ -2,6 +2,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ComplaintDraft, DuplicateCandidate, FilingAttempt } from "../core/contracts.js";
 import { CATEGORIES, EMPTY_LOCATION, nowIso } from "../core/contracts.js";
 import { StoreError, createSurrealStore, type SurrealStore } from "./surrealdb.js";
+import { createMemoryStore } from "./memory-store.js";
+import { fileableCatalogEntries } from "../services/catalog-crawl.js";
+
+describe("memory store catalog (#28)", () => {
+  it("upserts by id and lists sorted", async () => {
+    const m = createMemoryStore();
+    const [e] = fileableCatalogEntries("2026-10-16T00:00:00.000Z");
+    await m.upsertCatalog([{ ...e, id: "zz" }, e]);
+    await m.upsertCatalog([{ ...e, title: "renamed" }]);
+    expect((await m.listCatalog()).map((r) => [r.id, r.title])).toEqual([
+      [e.id, "renamed"],
+      ["zz", e.title],
+    ]);
+  });
+});
 
 function draft(over: Partial<ComplaintDraft> = {}): ComplaintDraft {
   const t = nowIso();
@@ -181,6 +196,16 @@ describe("SurrealStore (embedded mem://)", () => {
 
   it("throws a typed StoreError on DB failure", async () => {
     await expect(store.query("THROW 'boom'")).rejects.toBeInstanceOf(StoreError);
+  });
+
+  it("upserts and lists catalog rows; reset keeps them (#28)", async () => {
+    const [e] = fileableCatalogEntries("2026-10-16T00:00:00.000Z");
+    const row = { ...e, id: "gas-leak", kaNumber: "KA-02048", automation: "none", officialUrl: null, emergency: true };
+    expect(await store.upsertCatalog([row])).toBe(1);
+    expect((await store.listCatalog()).find((r) => r.id === "gas-leak")).toMatchObject({ emergency: true, kaNumber: "KA-02048" });
+    await store.reset();
+    expect((await store.listCatalog()).map((r) => r.id)).toContain("gas-leak");
+    await store.query("DELETE complaint_category WHERE catalog = true");
   });
 
   it("reset clears data but keeps categories", async () => {
