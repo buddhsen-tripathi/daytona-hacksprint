@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One group per PR (or per pushed ref). Superseded PR runs are cancelled; runs on main are not,
+# so every merge commit gets a result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: typecheck, worker build, bot tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Tests must pass with no secrets and no .env: keep the LLM key explicitly empty.
+      OPENROUTER_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # pnpm version comes from the root package.json `packageManager` field.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Build worker
+        run: pnpm --filter @311relay/worker build
+
+      - name: Bot tests
+        run: pnpm --filter @311relay/bot exec vitest run
+
+      - name: Upload worker dist
+        uses: actions/upload-artifact@v7
+        with:
+          name: worker-dist
+          path: apps/worker/dist
+          if-no-files-found: error
+          retention-days: 7
