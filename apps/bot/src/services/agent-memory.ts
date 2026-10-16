@@ -431,3 +431,13 @@ export async function seedCategoryMemory(memory: Pick<AgentMemory, "remember">, 
   for (const c of categories) await memory.remember(categorySeedItem(c));
   return categories.length;
 }
+
+/**
+ * What the agent recalls for one complaint (dashboard `GET /api/memory?complaintId=`, demo): the complaint's own
+ * memory text as the query, scoped to its resident (own items + world facts) and category.
+ */
+export async function recallForComplaint(memory: AgentMemory, d: ComplaintDraft, limit = 10): Promise<{ query: string; items: ScoredMemory[] }> {
+  const query = readyForApprovalItem(d).text;
+  const items = await memory.recall({ text: query, scope: { chatId: d.telegramChatId, category: d.category }, limit });
+  return { query, items };
+}
