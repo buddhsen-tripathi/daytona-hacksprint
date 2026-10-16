@@ -55,6 +55,7 @@ export function createMemoryStore(): MemoryStore {
   const joinedTo = (originalId: string) => [...sameIssue.entries()].filter(([, o]) => o === originalId).map(([s]) => s);
   const memories = new Map<string, MemoryRecord>();
   const catalog = new Map<string, CatalogEntry>();
+  const learnedSchemas = new Map<string, Pick<CatalogEntry, "requiredFields" | "formSchema">>();
 
   const store: MemoryStore = {
     backend: "memory",
@@ -63,13 +64,6 @@ export function createMemoryStore(): MemoryStore {
       return clone(transitions.filter((t) => t.complaintId === complaintId));
     },
     async init() {},
-    async upsertCatalog(entries) {
-      for (const e of entries) catalog.set(e.id, { ...(catalog.get(e.id) ?? {}), ...clone(e) });
-      return entries.length;
-    },
-    async listCatalog() {
-      return clone([...catalog.values()].sort((a, b) => a.id.localeCompare(b.id)));
-    },
 
     async getOrCreateResident(chatId, username) {
       const existing = residentByChat.get(chatId);
@@ -216,6 +210,25 @@ export function createMemoryStore(): MemoryStore {
     },
     async getWorkflowPatterns(args: { target: FilingTarget; category: CategoryId }) {
       return clone(patterns.filter((p) => p.target === args.target && p.category === args.category));
+    },
+
+    // -- NYC311 catalog (#7) + learned form schemas (#11): same semantics as surrealdb.ts
+    async upsertCatalog(entries) {
+      for (const e of entries) {
+        const prev = catalog.get(e.id);
+        const learned = learnedSchemas.get(e.id);
+        // a learned requiredFields list (from filing runs) survives a re-crawl
+        catalog.set(e.id, clone({ ...prev, ...e, ...(learned ? { requiredFields: learned.requiredFields, formSchema: learned.formSchema } : {}) }));
+      }
+      return entries.length;
+    },
+    async listCatalog() {
+      return clone([...catalog.values()].sort((a, b) => a.id.localeCompare(b.id)));
+    },
+    async updateCategorySchema(id, learned) {
+      learnedSchemas.set(id, clone({ requiredFields: learned.requiredFields, formSchema: learned.formSchema }));
+      const row = catalog.get(id);
+      if (row) catalog.set(id, clone({ ...row, ...learned }));
     },
 
     // -- agent memory (#4): same semantics as the SurrealQL in surrealdb.ts (shared helpers in services/agent-memory.ts)

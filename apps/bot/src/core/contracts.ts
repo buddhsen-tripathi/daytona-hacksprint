@@ -107,6 +107,8 @@ export const CatalogEntry = z.object({
   lastVerifiedAt: z.string(),
   /** A "Call 911" article (gas leak, fire, overdose, …): route to the 911 referral, never to a form. */
   emergency: z.boolean().default(false),
+  /** Merged form structure learned from filing runs (#11, structure only); absent until a run reported one. */
+  formSchema: z.lazy(() => FormSchema).nullable().optional(),
 });
 export type CatalogEntry = z.infer<typeof CatalogEntry>;
 
@@ -904,6 +906,12 @@ export interface Store {
   /** NYC311 category catalog (#7): upsert complaint_category rows by id; returns the count written. */
   upsertCatalog?(entries: CatalogEntry[]): Promise<number>;
   listCatalog?(): Promise<CatalogEntry[]>;
+  /**
+   * #11: write the form structure learned from filing runs onto `complaint_category:<id>` (requiredFields = union of
+   * the form's required labels, merged formSchema, lastVerifiedAt). Later catalog upserts / boot seeds keep a learned
+   * requiredFields list.
+   */
+  updateCategorySchema?(id: string, learned: { requiredFields: string[]; formSchema: FormSchema; lastVerifiedAt: string }): Promise<void>;
   /** #5: RELATE supporter->same_issue_as->original and refresh `supporters` on the original. Returns the new count. */
   linkSameIssue?(supporterId: string, originalId: string): Promise<number>;
   /** #5: RELATE complaint->not_same_as->other (the resident said it's a different issue). */
@@ -963,7 +971,8 @@ export interface BrowserProvider {
 
 export type SpanMessage = { role: string; content?: string };
 export interface SpanHelpers {
-  set(k: string, v: string | number | boolean): void;
+  /** string[] for list attributes (e.g. `form.required_fields`, #11). */
+  set(k: string, v: string | number | boolean | string[]): void;
   input(value: unknown): void;
   output(value: unknown): void;
   llm(opts: {
