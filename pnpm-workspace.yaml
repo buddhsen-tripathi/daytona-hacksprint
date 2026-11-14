@@ -3,3 +3,7 @@ packages:
 allowBuilds:
   esbuild: true
   protobufjs: true
+overrides:
+  tinypool: 2.1.2
+  follow-redirects: 1.16.2
+  "@vitest/mocker": 4.1.12
